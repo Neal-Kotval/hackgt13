@@ -188,6 +188,7 @@
   --radius-lg: var(--radius-none);
   --radius-full: 999rem;
   --border-width: 1px;
+  --visually-hidden-size: 1px;
   --border-style: solid;
   --focus-width: 2px;
   --focus-offset: 3px;

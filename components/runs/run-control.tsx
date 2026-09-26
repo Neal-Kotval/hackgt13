@@ -164,7 +164,7 @@ export function RunControl({ project }: { project: Project }) {
               <h2 id="activity-heading">Run activity</h2>
             </div>
             <label className={styles.filterLabel}>
-              Identity
+              <span className="visually-hidden">Identity</span>
               <Select value={selectedAgent} onChange={(event) => setSelectedAgent(event.target.value)}>
                 <option value="all">All identities</option>
                 <option value="human">Local administrator</option>
