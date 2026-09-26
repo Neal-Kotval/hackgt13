@@ -2181,7 +2181,6 @@ select {
   background: var(--color-surface);
   color: var(--color-secondary);
 }
-.control-nav a::after { content: "↗"; color: var(--color-subtle); }
 .control-nav a:hover {
   background: var(--color-selected);
   border-color: var(--color-border-strong);
@@ -2192,7 +2191,6 @@ select {
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
-.control-nav a.active::after { color: var(--color-accent); }
 .header-right a.button,
 .organization-header-actions a.button {
   border: var(--border-width) solid var(--color-border);
