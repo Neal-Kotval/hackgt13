@@ -18,8 +18,42 @@ import { LoopbackApiClient, LoopbackApiError } from "./api-client.ts";
 import { ChatStore, ChatStoreError } from "./chat-store.ts";
 import { SessionStore } from "./session-store.ts";
 import type { AssistantStreamEvent } from "../src/lib/types.ts";
+import {
+  findDeepLinkUrl,
+  parseAgentCloudDeepLink,
+  type DeepLinkParseResult,
+} from "../src/lib/deep-link.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const PROTOCOL = "agentcloud";
+let pendingDeepLink: DeepLinkParseResult | null = null;
+
+function focusMainWindow(): BrowserWindow | null {
+  const existing = BrowserWindow.getAllWindows()[0] ?? null;
+  if (!existing || existing.isDestroyed()) return null;
+  if (existing.isMinimized()) existing.restore();
+  existing.show();
+  existing.focus();
+  return existing;
+}
+
+function publishDeepLink(result: DeepLinkParseResult): void {
+  pendingDeepLink = result;
+  const win = focusMainWindow();
+  if (win && !win.webContents.isLoading()) {
+    win.webContents.send("deep-link", result);
+  } else if (win) {
+    win.webContents.once("did-finish-load", () => {
+      if (!win.isDestroyed()) win.webContents.send("deep-link", result);
+    });
+  }
+}
+
+function ingestDeepLinkUrl(raw: string | null | undefined): void {
+  if (!raw) return;
+  publishDeepLink(parseAgentCloudDeepLink(raw));
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -27,14 +61,27 @@ if (!gotLock) {
   process.exit(0);
 }
 
-app.on("second-instance", () => {
-  const existing = BrowserWindow.getAllWindows()[0];
-  if (existing) {
-    if (existing.isMinimized()) existing.restore();
-    existing.show();
-    existing.focus();
-  }
+app.on("second-instance", (_event, argv) => {
+  ingestDeepLinkUrl(findDeepLinkUrl(argv));
+  focusMainWindow();
 });
+
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+}
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  ingestDeepLinkUrl(url);
+});
+
+ingestDeepLinkUrl(findDeepLinkUrl(process.argv));
 
 function loadEnvFile(filePath: string): void {
   if (!existsSync(filePath)) return;
@@ -417,6 +464,11 @@ app.whenReady().then(async () => {
     "api:postAction",
     async (_event, body: Record<string, unknown>) => apiClient.postAction(body),
   );
+  wrapIpc("deepLink:takePending", async () => {
+    const next = pendingDeepLink;
+    pendingDeepLink = null;
+    return next;
+  });
 
   wrapIpc("chat:list", async () => store.listThreads());
   wrapIpc("chat:create", async () => store.createThread());

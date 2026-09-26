@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { TaskComposer } from "./TaskComposer";
+import type { DeepLinkParseResult } from "../lib/deep-link";
 import { getState } from "../lib/server-api";
 import type { AgentCloudStateSummary, ProjectSnapshot } from "../lib/types";
 
 type ProjectPickerProps = {
   webBaseUrl: string;
+  deepLink?: DeepLinkParseResult | null;
+  onDeepLinkHandled?: () => void;
 };
 
 type LoadState =
@@ -16,9 +19,17 @@ function hasVerifiedResource(project: ProjectSnapshot): boolean {
   return project.resources.some((resource) => resource.status === "verified");
 }
 
-export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
+export function ProjectPicker({
+  webBaseUrl,
+  deepLink = null,
+  onDeepLinkHandled,
+}: ProjectPickerProps) {
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [preferredEnvironmentId, setPreferredEnvironmentId] = useState<
+    string | undefined
+  >();
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoad({ kind: "loading" });
@@ -45,6 +56,54 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!deepLink || load.kind !== "ok") return;
+    if (!deepLink.ok) {
+      setDeepLinkError(deepLink.error);
+      setPreferredEnvironmentId(undefined);
+      onDeepLinkHandled?.();
+      return;
+    }
+    const project = load.state.projects.find(
+      (row) => row.id === deepLink.target.projectId,
+    );
+    if (!project) {
+      setDeepLinkError(
+        `Deep link project ${deepLink.target.projectId} was not found. Create or join it on the web, then retry.`,
+      );
+      setPreferredEnvironmentId(undefined);
+      onDeepLinkHandled?.();
+      return;
+    }
+    if (deepLink.target.environmentId) {
+      const resource = project.resources.find(
+        (row) => row.id === deepLink.target.environmentId,
+      );
+      if (!resource) {
+        setDeepLinkError(
+          `Deep link environment ${deepLink.target.environmentId} was not found on project ${project.name}.`,
+        );
+        setPreferredEnvironmentId(undefined);
+        onDeepLinkHandled?.();
+        return;
+      }
+      if (resource.status !== "verified") {
+        setDeepLinkError(
+          `Environment “${resource.name}” is ${resource.status}, not verified. Verify it on the web before continuing in desktop.`,
+        );
+        setPreferredEnvironmentId(undefined);
+        onDeepLinkHandled?.();
+        return;
+      }
+      setPreferredEnvironmentId(resource.id);
+    } else {
+      setPreferredEnvironmentId(undefined);
+    }
+    setDeepLinkError(null);
+    setSelectedId(project.id);
+    onDeepLinkHandled?.();
+  }, [deepLink, load, onDeepLinkHandled]);
 
   const selected =
     load.kind === "ok"
@@ -73,6 +132,12 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
           {load.kind === "loading" ? "Refreshing…" : "Refresh"}
         </button>
       </div>
+
+      {deepLinkError ? (
+        <p className="error-banner" role="alert">
+          {deepLinkError}
+        </p>
+      ) : null}
 
       {load.kind === "error" ? (
         <div className="app-error" role="alert">
@@ -133,9 +198,10 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
             <>
               <ProjectDetail project={selected} webBaseUrl={webBaseUrl} />
               <TaskComposer
-                key={selected.id}
+                key={`${selected.id}:${preferredEnvironmentId ?? ""}`}
                 project={selected}
                 webBaseUrl={webBaseUrl}
+                preferredEnvironmentId={preferredEnvironmentId}
                 onCreated={() => refresh()}
               />
             </>

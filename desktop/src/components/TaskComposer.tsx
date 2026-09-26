@@ -7,27 +7,31 @@ import type { ProjectSnapshot } from "../lib/types";
 type TaskComposerProps = {
   project: ProjectSnapshot;
   webBaseUrl: string;
+  preferredEnvironmentId?: string;
   onCreated: () => void | Promise<void>;
 };
 
 export function TaskComposer({
   project,
   webBaseUrl,
+  preferredEnvironmentId,
   onCreated,
 }: TaskComposerProps) {
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [agentId, setAgentId] = useState(project.agents[0]?.id ?? "");
   const [environmentId, setEnvironmentId] = useState(
-    project.resources.find((resource) => resource.status === "verified")?.id ??
-      project.resources[0]?.id ??
+    preferredEnvironmentId ||
+      project.resources.find((resource) => resource.status === "verified")?.id ||
+      project.resources[0]?.id ||
       "",
   );
   const [startTaskId, setStartTaskId] = useState(
     project.tasks.at(-1)?.id ?? "",
   );
   const [startEnvironmentId, setStartEnvironmentId] = useState(
-    project.resources.find((resource) => resource.status === "verified")?.id ??
+    preferredEnvironmentId ||
+      project.resources.find((resource) => resource.status === "verified")?.id ||
       "",
   );
   const [pending, setPending] = useState(false);

@@ -110,6 +110,16 @@ On **Tasks**, pick a project, then use **Create task** (title, instructions, age
 
 The Tasks panel includes a **Start agent** control that selects a created task + verified environment. It stays **disabled** with an explicit reason: “Agent start requires remote runner — not implemented.” Desktop does not call Local chat / OpenAI as a substitute, and it never marks a task running without server evidence. When a start endpoint lands, wire it here with `taskId` + `environmentId` + agent owner and surface the server decision only.
 
+## Deep links (HAC-54)
+
+Desktop registers the `agentcloud://` URL scheme (dev + packaged). Open Tasks with:
+
+```text
+agentcloud://open?projectId=<id>&environmentId=<verified-resource-id>
+```
+
+`environmentId` is optional. On cold start or a second-instance handoff, the existing window is focused (no duplicate shell). Valid IDs switch to **Tasks** and preselect the project/environment. Missing projects, unknown resources, or unverified environments show an honest error — desktop never invents a ready box. Website “Open in desktop” UI is a separate ticket.
+
 ## Persistence
 
 Threads live under the Electron `userData` chat directory (shown indirectly via the main process; path is available through the desktop bridge `dataDir`). Storage is a single `threads.json` file. Corrupt or missing storage surfaces an error screen instead of crashing in a loop.
