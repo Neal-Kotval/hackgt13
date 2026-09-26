@@ -16,7 +16,7 @@ doppler run --project hackgt --config dev_personal -- bash -c '
   set -euo pipefail
   [[ "${#BETTER_AUTH_SECRET}" -ge 32 ]] || { echo "Doppler BETTER_AUTH_SECRET is missing or too short." >&2; exit 1; }
   printf %s "$BETTER_AUTH_SECRET" | aws --region "$STAGING_REGION" secretsmanager put-secret-value \
-    --secret-id "$STAGING_SECRET" --secret-string fileb:///dev/stdin \
+    --secret-id "$STAGING_SECRET" --secret-string file:///dev/stdin \
     --query VersionId --output text >/dev/null
 '
 echo 'Copied the stable Doppler auth secret into AWS Secrets Manager.'
