@@ -16,8 +16,10 @@ if (!process.env.BETTER_AUTH_SECRET) {
 const { getMigrations } = await import("better-auth/db/migration");
 const { authOptions, migrateMemberships, getDatabase } =
   await import("../lib/auth.mjs");
+const { migrateRunBoxJobs } = await import("../lib/run-box-jobs.mjs");
 await (await getMigrations(authOptions())).runMigrations();
 migrateMemberships();
+migrateRunBoxJobs(getDatabase());
 getDatabase().close();
 console.log(
   "SQLite authentication and organization schema is ready. Create an account at /sign-up.",
