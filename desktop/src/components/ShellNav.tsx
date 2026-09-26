@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type AppSection = "tasks" | "local-chat";
+export type AppSection = "tasks" | "environments" | "local-chat";
 
 type ShellNavProps = {
   section: AppSection;
@@ -37,6 +37,15 @@ export function ShellNav({
             onClick={() => onSectionChange("tasks")}
           >
             Tasks
+          </button>
+          <button
+            type="button"
+            className="section-tab"
+            data-active={section === "environments" ? "true" : "false"}
+            aria-current={section === "environments" ? "page" : undefined}
+            onClick={() => onSectionChange("environments")}
+          >
+            Environments
           </button>
           <button
             type="button"

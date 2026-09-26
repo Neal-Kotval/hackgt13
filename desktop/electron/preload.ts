@@ -8,6 +8,9 @@ import type {
   ChatThreadSummary,
   CredentialStatus,
   DesktopApi,
+  DeviceKeyStatus,
+  RunBoxSummary,
+  TerminalEvent,
   EmployeeIdentity,
   MessageRole,
   MessageStatus,
@@ -87,6 +90,32 @@ const api: DesktopApi = {
     ipcRenderer.on("deep-link", listener);
     return () => {
       ipcRenderer.removeListener("deep-link", listener);
+    };
+  },
+  listRunBoxes: (projectId) =>
+    ipcRenderer.invoke("api:listRunBoxes", projectId) as Promise<RunBoxSummary[]>,
+  deviceKeyStatus: () =>
+    ipcRenderer.invoke("deviceKey:status") as Promise<DeviceKeyStatus>,
+  terminalOpen: (sessionId, runBoxId, size) =>
+    ipcRenderer.invoke("terminal:open", sessionId, runBoxId, {
+      cols: size.cols,
+      rows: size.rows,
+    }) as Promise<{ sessionId: string; username: string; host: string; port: number }>,
+  terminalWrite: (sessionId, data) => {
+    ipcRenderer.send("terminal:write", sessionId, data);
+  },
+  terminalResize: (sessionId, cols, rows) => {
+    ipcRenderer.send("terminal:resize", sessionId, cols, rows);
+  },
+  terminalClose: (sessionId) =>
+    ipcRenderer.invoke("terminal:close", sessionId) as Promise<void>,
+  onTerminalEvent: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: TerminalEvent) => {
+      handler(payload);
+    };
+    ipcRenderer.on("terminal:event", listener);
+    return () => {
+      ipcRenderer.removeListener("terminal:event", listener);
     };
   },
 };

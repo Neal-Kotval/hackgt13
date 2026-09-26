@@ -22,4 +22,34 @@ export const runpodGpuProfile = {
   label: "Runpod Secure Cloud · RTX 4090",
 } as const;
 
+// Short smoke tests: the worker takes the cheapest in-stock GPU from a fixed list
+// (RTX 2000 Ada, RTX A5000, RTX 4000 Ada) under the ceiling; the GPU proof confirms it.
+export const runpodBudgetGpuProfile = {
+  id: "runpod-budget-gpu",
+  provider: "runpod",
+  gpuId: "NVIDIA RTX 2000 Ada Generation",
+  image: "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
+  cloud: "SECURE",
+  diskGb: 50,
+  maxHourlyUsd: 0.5,
+  label: "Runpod Secure Cloud · budget GPU",
+} as const;
+
+export const runpodGpuProfiles = [runpodBudgetGpuProfile, runpodGpuProfile] as const;
+export function findRunpodProfile(id: unknown) {
+  return runpodGpuProfiles.find((profile) => profile.id === id) ?? null;
+}
+
+// CPU-only Linux container on the machine running the docker-local worker.
+// Never present it as GPU capacity.
+export const localDockerSandboxProfile = {
+  id: "local-docker-sandbox",
+  provider: "docker-local",
+  label: "Local Docker sandbox · CPU only",
+  description:
+    "CPU-only Linux container on the machine running the worker. No GPU. Costs nothing. SSH access is trusted shell access, not a filesystem or command sandbox.",
+  gpu: null,
+  hourlyComputeUsd: 0,
+} as const;
+
 export const demoGpuDurations = [1, 2] as const;

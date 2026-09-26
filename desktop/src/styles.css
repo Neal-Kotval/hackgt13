@@ -958,3 +958,133 @@ select.control-select:hover:not(:disabled),
     overflow-x: visible;
   }
 }
+
+/* Environments + in-app terminal (HAC-90) */
+.section-host {
+  height: 100%;
+  min-height: 0;
+}
+
+.section-host[hidden] {
+  display: none;
+}
+
+.environments-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.environments-layout > .picker-select {
+  max-width: var(--content-narrow);
+}
+
+.device-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.device-key-detail {
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.environment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.environment-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-none);
+  background: var(--color-surface-raised);
+}
+
+.environment-row[data-active="true"] {
+  border-color: var(--color-accent);
+}
+
+.environment-row .detail-secondary {
+  overflow-wrap: anywhere;
+}
+
+.environment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.terminal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-none);
+  background: var(--color-surface);
+}
+
+.terminal-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.terminal-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.terminal-heading h2 {
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+}
+
+.terminal-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.terminal-status {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.terminal-status[data-tone="connected"] {
+  color: var(--color-success);
+}
+
+.terminal-status[data-tone="error"] {
+  color: var(--color-danger);
+}
+
+.terminal-surface {
+  height: calc(var(--terminal-min-height) * 2);
+  min-height: var(--terminal-min-height);
+  padding: var(--space-2);
+  border: var(--border-width) solid var(--color-border-subtle);
+  background: var(--color-bg);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  overflow: hidden;
+}

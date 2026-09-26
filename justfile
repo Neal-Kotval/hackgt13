@@ -105,6 +105,14 @@ sim-check:
 dev-docker:
     npm run dev:docker
 
+# Build the local Docker sandbox image used by the docker-local worker.
+sandbox-image:
+    docker build --tag agentcloud-sandbox:dev infra/sandbox
+
+# Run the docker-local run-box worker against the same local database as `just dev`.
+worker-docker:
+    node --env-file-if-exists=.env.local scripts/run-box-worker.mjs --loop docker-local
+
 # Validate Terraform without connecting to a remote state backend or applying.
 terraform-validate:
     terraform -chdir=infra/local init -backend=false
