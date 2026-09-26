@@ -204,3 +204,5 @@ Add transactional run/decision records and server-side resource policy, attach o
 ### Dropdown interaction verification
 
 After `npm run build`, run `npm run test:select:browser` to exercise themed dropdown keyboard navigation, form values, required validation, dialog menus, navigation states, and responsive bounds in headless Chrome. It uses temporary accounts/data and port 3162, then removes its test data. The shared dropdown also has an interactive specimen at `/design-system#components`.
+
+On **People & organizations**, choose **New organization** to open the creation dialog. Cancel or Escape closes it without creating an organization; successful creation refreshes the organization list.
