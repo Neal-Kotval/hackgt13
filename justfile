@@ -50,6 +50,10 @@ desktop-setup:
 desktop:
     npm --prefix desktop run dev
 
+# Launch desktop against the shared AGENTCLOUD_URL in Doppler dev.
+desktop-doppler:
+    doppler run -- npm --prefix desktop run dev
+
 # Launch desktop with docked DevTools (AGENTCLOUD_DESKTOP_DEVTOOLS=1).
 desktop-devtools:
     AGENTCLOUD_DESKTOP_DEVTOOLS=1 npm --prefix desktop run dev
