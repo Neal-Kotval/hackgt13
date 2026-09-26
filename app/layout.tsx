@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./tokens.css";
 import "./globals.css";
+import { SiteMotion } from "@/components/site-motion";
 import { WebsiteShell } from "@/components/site-shell";
 export const metadata: Metadata = {
   title: "AgentCloud — a workspace for your agent team",
@@ -14,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body><WebsiteShell>{children}</WebsiteShell></body>
+      <body><SiteMotion><WebsiteShell>{children}</WebsiteShell></SiteMotion></body>
     </html>
   );
 }

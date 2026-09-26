@@ -16,13 +16,15 @@
     "test:aws-auth:smoke": "node tests/aws-auth-smoke.mjs",
     "aws:gpu:preflight": "node scripts/aws-gpu-preflight.mjs",
     "dev:aws": "node scripts/dev-aws.mjs",
-    "dev:docker": "node scripts/dev-docker.mjs"
+    "dev:docker": "node scripts/dev-docker.mjs",
+    "test:motion:browser": "node tests/motion.browser.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
     "@radix-ui/react-select": "^2.3.7",
     "better-auth": "^1.7.6",
     "better-sqlite3": "^13.0.3",
+    "motion": "^13.4.4",
     "next": "^16.0.0",
     "nodemailer": "^10.0.10",
     "react": "^19.2.0",
