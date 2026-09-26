@@ -80,3 +80,20 @@ desktop-verify: desktop-check desktop-tokens desktop-test desktop-build
 # Enforce design tokens on desktop CSS/TSX (same contract as web).
 desktop-tokens:
     npm run tokens:check
+
+# Run the isolated backend simulation (no cloud credentials or resources).
+sim-up:
+    docker compose up --build --detach --wait
+
+# Stop containers while retaining local accounts and project data.
+sim-down:
+    docker compose down
+
+# Local frontend on port 3001, connected only to the Docker backend.
+dev-docker:
+    npm run dev:docker
+
+# Validate Terraform without connecting to a remote state backend or applying.
+terraform-validate:
+    terraform -chdir=infra/local init -backend=false
+    terraform -chdir=infra/local validate
