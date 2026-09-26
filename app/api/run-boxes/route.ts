@@ -4,6 +4,7 @@ import { body, failure, sameOrigin } from "../../../lib/http";
 import { InputError, getState } from "../../../lib/store";
 import { demoGpuProfile, runpodGpuProfile } from "../../../lib/resource-profiles";
 import { listRunBoxJobs, migrateRunBoxJobs, saveRunBoxDecision } from "../../../lib/run-box-jobs.mjs";
+import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../../../lib/run-box-ssh.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,8 +75,24 @@ export async function GET(request: Request) {
     const employee = await requireEmployee(request);
     const projectId = identifier(new URL(request.url).searchParams.get("projectId"), "project ID");
     requireMembership(employee, projectId);
-    migrateRunBoxJobs(getDatabase());
-    return Response.json({ jobs: listRunBoxJobs(getDatabase(), projectId) });
+    const db = getDatabase();
+    migrateRunBoxJobs(db);
+    migrateRunBoxSsh(db);
+    const jobs = (listRunBoxJobs(db, projectId) as { id: string; state: string; profile_id: string | null }[])
+      .map((job) => {
+        const ready = job.state === "ready";
+        const endpoint = ready ? getRunBoxSshEndpoint(db, job.id) : null;
+        return {
+          ...job,
+          profileId: job.profile_id,
+          ssh: endpoint ? { host: endpoint.host, port: endpoint.port, username: endpoint.username } : null,
+          desktopUrl: ready
+            ? `agentcloud://open?${new URLSearchParams({ projectId, runBoxId: job.id })}`
+            : null,
+          access: "trusted-shell",
+        };
+      });
+    return Response.json({ jobs });
   } catch (error) {
     return failure(error);
   }
