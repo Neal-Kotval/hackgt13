@@ -2,7 +2,7 @@ import { getDatabase } from "../../../lib/auth.mjs";
 import { requireEmployee, requireMembership } from "../../../lib/employee";
 import { body, failure, sameOrigin } from "../../../lib/http";
 import { InputError, getState } from "../../../lib/store";
-import { demoGpuProfile } from "../../../lib/resource-profiles";
+import { demoGpuProfile, runpodGpuProfile } from "../../../lib/resource-profiles";
 import { listRunBoxJobs, migrateRunBoxJobs, saveRunBoxDecision } from "../../../lib/run-box-jobs.mjs";
 
 export const runtime = "nodejs";
@@ -31,10 +31,15 @@ export async function POST(request: Request) {
     if (membership.role === "member" && resourceRequest.requestedBy?.employeeId !== employee.id)
       throw new InputError("Only the requester or project owner may decide this request", 403);
     const preference = resourceRequest.computePreference;
+    const awsEligible = preference?.provider === "aws-ec2" &&
+      preference.profileId === demoGpuProfile.id && preference.region === demoGpuProfile.region &&
+      preference.instanceType === demoGpuProfile.instanceType;
+    const runpodEligible = preference?.provider === "runpod" &&
+      preference.profileId === runpodGpuProfile.id && preference.gpuId === runpodGpuProfile.gpuId &&
+      preference.cloud === runpodGpuProfile.cloud && preference.maxHourlyUsd === runpodGpuProfile.maxHourlyUsd;
     if (resourceRequest.kind !== "gpu" || resourceRequest.status !== "requested" ||
         resourceRequest.decision.status !== "not_evaluated" ||
-        preference?.provider !== "aws-ec2" || preference.profileId !== demoGpuProfile.id ||
-        preference.region !== demoGpuProfile.region || preference.instanceType !== demoGpuProfile.instanceType ||
+        !preference || (!awsEligible && !runpodEligible) ||
         ![1, 2].includes(preference.durationHours) ||
         resourceRequest.requestedBy?.organizationId !== employee.activeOrganization?.id)
       throw new InputError("Resource request is not eligible for this run-box policy", 409);
@@ -46,14 +51,15 @@ export async function POST(request: Request) {
         employeeId: employee.id,
         organizationId: employee.activeOrganization!.id,
         projectRole: membership.role,
-        provider: "aws-ec2",
+        provider: preference.provider,
+        profileId: preference.profileId,
         maxDurationMinutes: preference.durationHours * 60,
         repoUrl: project.repo,
       });
     } catch (error) {
       if (error instanceof Error && error.message === "Invalid repository URL")
         throw new InputError("Project repository URL is not eligible for a run box", 409);
-      if (error instanceof Error && /Idempotency key reused|already has a run-box decision|AWS run box is already active/.test(error.message))
+      if (error instanceof Error && /Idempotency key reused|already has a run-box decision|(?:AWS|Runpod) run box is already active/.test(error.message))
         throw new InputError(error.message, 409);
       throw error;
     }
