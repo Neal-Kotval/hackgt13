@@ -20,7 +20,7 @@ import type {
   ResourceRequest,
   ResourceStatus,
 } from "@/lib/types";
-import { demoGpuDurations, demoGpuProfile } from "@/lib/resource-profiles";
+import { demoGpuDurations, demoGpuProfile, runpodGpuProfile } from "@/lib/resource-profiles";
 import "./resources.css";
 
 type ResourceAction = (input: Record<string, unknown>) => Promise<unknown>;
@@ -28,6 +28,7 @@ type ResourceProps = { project: Project; onAction: ResourceAction };
 type RunBoxJob = {
   id: string;
   resource_request_id: string;
+  provider: "aws-ec2" | "runpod";
   state: "queued" | "allocating" | "connecting" | "verifying" | "ready" | "stopping" | "stopped" | "failed";
   provider_resource_id: string | null;
   max_duration_minutes: number;
@@ -369,6 +370,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
   const [agentId, setAgentId] = useState("");
   const [purpose, setPurpose] = useState("");
   const [durationHours, setDurationHours] = useState<number>(2);
+  const [gpuProfileId, setGpuProfileId] = useState<string>(runpodGpuProfile.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -417,7 +419,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
       const data = await response.json() as { job?: RunBoxJob; error?: string };
       if (!response.ok || !data.job) throw new Error(data.error || "GPU approval was not saved.");
       setJobs((current) => [{ ...data.job!, resource_request_id: resourceRequestId }, ...current.filter((job) => job.id !== data.job!.id)]);
-      setJobSuccess("GPU job approved and queued. The worker may launch a billable instance.");
+      setJobSuccess("GPU job approved and queued. The worker may launch a billable GPU box.");
     } catch (caught) {
       setJobError(caught instanceof Error ? caught.message : "Could not approve GPU job.");
     } finally { setJobBusy(""); }
@@ -458,7 +460,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
         purpose: purpose.trim(),
         ...(!resourceId && kind === "gpu"
           ? {
-              gpuProfileId: demoGpuProfile.id,
+              gpuProfileId,
               durationHours,
             }
           : {}),
@@ -536,10 +538,13 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
           {!resourceId && kind === "gpu" && (
             <div className="resource-price-summary">
               <label>
-                <span className="visually-hidden">GPU profile</span>
-                <Select value={demoGpuProfile.id} disabled>
+                <span>GPU provider and profile</span>
+                <Select value={gpuProfileId} onChange={(event) => setGpuProfileId(event.target.value)}>
+                  <option value={runpodGpuProfile.id}>
+                    {runpodGpuProfile.label}
+                  </option>
                   <option value={demoGpuProfile.id}>
-                    {demoGpuProfile.label} · {demoGpuProfile.instanceType}
+                    AWS EC2 · {demoGpuProfile.label} (paid AWS account required)
                   </option>
                 </Select>
               </label>
@@ -558,6 +563,15 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                   ))}
                 </Select>
               </label>
+              {gpuProfileId === runpodGpuProfile.id ? (
+                <>
+                  <dl className="resource-facts resource-facts--compact">
+                    <div><dt>GPU</dt><dd>{runpodGpuProfile.gpuId}</dd></div>
+                    <div><dt>Rate limit</dt><dd>Up to ${runpodGpuProfile.maxHourlyUsd.toFixed(2)}/hour; live price checked before launch</dd></div>
+                  </dl>
+                  <p className="resource-note">Runpod Secure Cloud charges for compute and storage. The worker checks live availability and price before creating a Pod, then terminates it at stop or expiry. No Pod starts when you save this request.</p>
+                </>
+              ) : (<>
               <dl className="resource-facts resource-facts--compact">
                 <div>
                   <dt>Compute rate</dt>
@@ -580,6 +594,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                 transfer, and taxes. Quota, price, credit, and capacity are
                 checked again before launch. Approval may incur charges.
               </p>
+              </>)}
             </div>
           )}
           <label>
@@ -699,14 +714,12 @@ function RequestCard({
       <dl className="resource-facts resource-facts--compact">
         {request.computePreference && (
           <div>
-            <dt>GPU estimate</dt>
-            <dd>
-              {request.computePreference.instanceType} · $
-              {request.computePreference.estimatedComputeUsd.toFixed(2)} compute
-              for {request.computePreference.durationHours}{" "}
-              {request.computePreference.durationHours === 1 ? "hour" : "hours"}{" "}
-              (quote {request.computePreference.quotedAt})
-            </dd>
+            <dt>GPU plan</dt>
+            {request.computePreference.provider === "runpod" ? (
+              <dd>{request.computePreference.gpuId} · Runpod Secure Cloud · up to ${request.computePreference.maxHourlyUsd.toFixed(2)}/hour for {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}; live price pending</dd>
+            ) : (
+              <dd>{request.computePreference.instanceType} · ${request.computePreference.estimatedComputeUsd.toFixed(2)} compute for {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"} (quote {request.computePreference.quotedAt})</dd>
+            )}
           </div>
         )}
         <div>
@@ -740,9 +753,9 @@ function RequestCard({
             </span>
           </div>
           <dl className="resource-facts resource-facts--compact">
-            <div><dt>Provider</dt><dd>AWS EC2{job.provider_resource_id ? ` · ${job.provider_resource_id}` : " · not allocated"}</dd></div>
+            <div><dt>Provider</dt><dd>{job.provider === "runpod" ? "Runpod" : "AWS EC2"}{job.provider_resource_id ? ` · ${job.provider_resource_id}` : " · not allocated"}</dd></div>
             <div><dt>Approved limit</dt><dd>{job.max_duration_minutes} minutes</dd></div>
-            <div><dt>Cleanup</dt><dd>{job.state === "stopped" ? job.provider_resource_id ? "EC2 release confirmed by worker" : "Cancelled before allocation" : job.stop_requested_at ? "Stop requested; awaiting confirmation" : "Not requested"}</dd></div>
+            <div><dt>Cleanup</dt><dd>{job.state === "stopped" ? job.provider_resource_id ? `${job.provider === "runpod" ? "Pod" : "EC2"} release confirmed by worker` : "Cancelled before allocation" : job.stop_requested_at ? "Stop requested; awaiting confirmation" : "Not requested"}</dd></div>
           </dl>
           {projectRole === "owner" && job.state !== "stopped" && !job.stop_requested_at && (
             <button className="button" type="button" disabled={Boolean(busy)} onClick={() => void onStop(job)}>
@@ -751,9 +764,13 @@ function RequestCard({
           )}
           {job.state === "failed" && <p className="resource-note">The job failed. Check worker evidence and request cleanup before trying again.</p>}
         </div>
-      ) : request.kind === "gpu" && request.computePreference?.provider === "aws-ec2" && projectRole === "owner" ? (
+      ) : request.kind === "gpu" && request.computePreference && projectRole === "owner" ? (
         <div className="resource-job">
-          <p className="resource-note">Approving this request queues an AWS GPU launch for up to {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}. Compute is quoted at ${request.computePreference.estimatedComputeUsd.toFixed(2)} before storage, network, and tax. The worker must pass live cost and safety checks before launch.</p>
+          {request.computePreference.provider === "runpod" ? (
+            <p className="resource-note">Approving this request queues a Runpod GPU Pod for up to {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}. The worker must confirm availability and a live compute price at or below ${request.computePreference.maxHourlyUsd.toFixed(2)}/hour before launch. Storage and taxes may add cost.</p>
+          ) : (
+            <p className="resource-note">Approving this request queues an AWS GPU launch for up to {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}. Compute is quoted at ${request.computePreference.estimatedComputeUsd.toFixed(2)} before storage, network, and tax. The worker must pass live cost and safety checks before launch.</p>
+          )}
           <button className="button primary" type="button" disabled={Boolean(busy)} onClick={() => void onApprove(request.id)}>
             {busy === request.id ? "Approving…" : "Approve and queue GPU"}
           </button>

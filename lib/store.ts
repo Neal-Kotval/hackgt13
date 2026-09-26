@@ -10,7 +10,7 @@ import type {
   ResourceRequest,
   InferenceConfiguration,
 } from "./types";
-import { demoGpuDurations, demoGpuProfile } from "./resource-profiles";
+import { demoGpuDurations, demoGpuProfile, runpodGpuProfile } from "./resource-profiles";
 interface Credential {
   hash: string;
   projectId: string;
@@ -455,7 +455,7 @@ export async function resourceAction(
           hasGpuPreference &&
           (resourceId ||
             kind !== "gpu" ||
-            input.gpuProfileId !== demoGpuProfile.id ||
+            (input.gpuProfileId !== demoGpuProfile.id && input.gpuProfileId !== runpodGpuProfile.id) ||
             typeof input.durationHours !== "number" ||
             !demoGpuDurations.some((hours) => hours === input.durationHours))
         )
@@ -480,7 +480,14 @@ export async function resourceAction(
           },
           ...(hasGpuPreference
             ? {
-                computePreference: {
+                computePreference: input.gpuProfileId === runpodGpuProfile.id ? {
+                  provider: runpodGpuProfile.provider,
+                  profileId: runpodGpuProfile.id,
+                  gpuId: runpodGpuProfile.gpuId,
+                  cloud: runpodGpuProfile.cloud,
+                  durationHours: input.durationHours as number,
+                  maxHourlyUsd: runpodGpuProfile.maxHourlyUsd,
+                } : {
                   provider: demoGpuProfile.provider,
                   profileId: demoGpuProfile.id,
                   region: demoGpuProfile.region,

@@ -95,6 +95,13 @@ export interface ResourceRequest {
     durationHours: number;
     estimatedComputeUsd: number;
     quotedAt: string;
+  } | {
+    provider: "runpod";
+    profileId: string;
+    gpuId: string;
+    cloud: "SECURE";
+    durationHours: number;
+    maxHourlyUsd: number;
   };
   status: ResourceRequestStatus;
   decision: {
