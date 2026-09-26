@@ -8,16 +8,25 @@
     "start": "next start --hostname 127.0.0.1",
     "check": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
-    "tokens:check": "node scripts/check-tokens.mjs"
+    "tokens:check": "node scripts/check-tokens.mjs",
+    "auth:setup": "node scripts/auth-setup.mjs",
+    "auth:bootstrap": "node scripts/auth-bootstrap.mjs",
+    "test:auth:browser": "node tests/auth.browser.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
+    "better-auth": "^1.7.6",
+    "better-sqlite3": "^13.0.3",
     "next": "^16.0.0",
+    "nodemailer": "^10.0.10",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "prettier": "^3.9.9",

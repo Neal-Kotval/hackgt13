@@ -15,7 +15,7 @@ These are reviewable slices within phases 1–4, in the order they should land. 
 | Slice | Build | Exit evidence |
 | --- | --- | --- |
 | A. Durable contract | Database migrations for employee membership, request decisions, box jobs, runs, events, and verification; import path for existing local projects; idempotent state transitions | Restart and retry a job without losing a decision, duplicating a box, or reclassifying a local draft as an allocation |
-| B. Identity and decision | One working OIDC provider, server sessions, project roles, and a policy check before allocation | Two real test employees get different server decisions; unauthenticated mutation fails |
+| B. Identity and decision | Local Better Auth sessions and project roles (HAC-1), followed by a policy check before allocation | Two real test employees get different server decisions; unauthenticated mutation fails |
 | C. Known-host box | Worker and existing-host provider with pinned host identity, remote account/workspace evidence, stop and reconciliation | Attached box passes a GPU workload from the intended execution account; failed probe never shows ready |
 | D. Managed EC2 box | EC2 adapter under the same provider interface, with account/Region quota check, instance identity, Systems Manager management path, EBS retention, stop confirmation | Real launch, verification, stop/restart, and workspace recovery; request/box IDs tie each result to the same run |
 | E. Real agent run | One supported agent adapter, bounded command/result events, event replay, and an authorized/denied resource test | Agent completes the GPU task; dashboard mirrors actual work; reconnect and denial evidence pass [MVP_SPEC.md](MVP_SPEC.md) |
@@ -39,6 +39,8 @@ Acceptance:
 This phase does not provide a remote machine, execute a model, or guarantee filesystem isolation.
 
 ## 1 — Employee login and resource policy
+
+HAC-1 implements local Better Auth email/password sessions, SQLite auth migrations, verified signup, organization creation and invitations, and project memberships. Local email capture is the default; SMTP is configurable. Human APIs validate verified sessions and organization/project access. Resource decisions, transactional jobs, enterprise OIDC, and remote enforcement remain pending.
 
 Add one working employee identity-provider integration, server-side sessions, project roles, and resource request decisions. First migrate decisions and job records to transactional storage with explicit migrations and a path for existing local state. Keep employee, agent, and remote execution identities distinct. Local development may use one organization; it must not be presented as production tenant isolation.
 

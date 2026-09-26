@@ -1,7 +1,14 @@
+import { requireEmployee, employeeState } from "../../../lib/employee";
+import { failure } from "../../../lib/http";
 import { getState } from "../../../lib/store";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
+  try {
+    await requireEmployee(request);
+  } catch (error) {
+    return failure(error);
+  }
   const encoder = new TextEncoder();
   let interval: ReturnType<typeof setInterval> | undefined;
   let closed = false;
@@ -22,7 +29,8 @@ export async function GET(request: Request) {
         if (closed || busy) return;
         busy = true;
         try {
-          const state = await getState();
+          const employee = await requireEmployee(request);
+          const state = employeeState(await getState(), employee);
           if (closed) return;
           const serialized = JSON.stringify(state);
           if (serialized !== snapshot) {

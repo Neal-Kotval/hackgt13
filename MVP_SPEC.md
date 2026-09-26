@@ -10,7 +10,7 @@ AgentCloud should support that known-host path and use EC2 as its first managed 
 
 ## User flow
 
-1. **Employee login:** A human signs in through one working identity provider. AgentCloud creates a server-side session and associates that employee with a project role. The unauthenticated dashboard/API used by the current local prototype cannot serve this flow.
+1. **Employee login:** A human signs in through one working identity provider. AgentCloud creates a server-side session and associates that employee with a project role. Local Better Auth email/password login and project memberships provide the initial identity layer; resource policy is follow-up work.
 2. **Connect a machine and evaluate policy:** The employee selects a project and connects a machine or requests an environment in the web app. A server-side policy checks employee identity, project role, resource, and requested environment action. No task or agent run is required at this stage. The UI shows the decision and reason.
 3. **Provision and verify:** A provider creates a real run environment on known remote capacity. AgentCloud verifies host identity, the remote execution identity, the worktree or working directory, GPU visibility, and a small representative GPU operation before showing `ready`.
 4. **Create a task and start the agent:** In the desktop app, the employee selects the ready environment, creates/assigns a task, and requests an agent start. The server checks task, agent, and environment permissions before one real coding-agent adapter starts or connects to a session inside that environment. The agent executes a task whose local environment lacks the required GPU capacity. The exact local limitation and remote result are recorded, rather than asserting that a terminal agent is inherently unable to do the work.
@@ -23,7 +23,7 @@ AgentCloud should support that known-host path and use EC2 as its first managed 
 | --- | --- |
 | Web control surface | Employee login, environment setup and lifecycle controls, request/approval state, operational analytics, progress, real output, and result viewing |
 | Desktop app | Task creation, instructions, agent assignment, and follow-ups persisted through the shared authenticated backend |
-| Identity and policy | One OIDC-compatible employee login, project roles, server-side decisions, separate agent/run credentials, and attributed audit events |
+| Identity and policy | Local employee email/password login, project roles, server-side decisions, separate agent/run credentials, and attributed audit events |
 | Resource provider | Create/attach/stop a run environment on one known Linux host or provider, verify capability, and report failures honestly |
 | Remote runner | Start the selected agent and commands in the intended environment, stream bounded events, and preserve the project worktree across reconnects |
 | GPU target | One actual GPU reachable from the run environment; verify device and workload rather than trusting a label |
@@ -57,4 +57,4 @@ Before the run starts, show that the chosen workload is unavailable in the local
 
 Two-agent service handoffs, a broad CPU/GPU marketplace, managed GPU purchasing, low-latency data connectors, artifact homes, wikis, production multi-tenant SSO, hardware device attestation, and a full interactive terminal emulator are extensions. The MVP should make one remote GPU task and one real permission denial undeniable before adding them.
 
-The current repository is a local single-user coordination foundation. It has no employee login, remote resource provisioner, agent execution adapter, enforced SSH boundary, or GPU workload. This file specifies the next demonstrated capability, not current behavior.
+The current repository is a local single-user coordination foundation. It has local employee login and project memberships, but no remote resource provisioner, agent execution adapter, enforced SSH boundary, or GPU workload. This file specifies the next demonstrated capability, not current behavior.

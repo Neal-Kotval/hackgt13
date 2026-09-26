@@ -2,7 +2,7 @@
 
 ## Current executable boundary
 
-AgentCloud is a React / Next.js App Router application with Node.js route handlers, a durable JSON store, an SSE event stream, and a Node CLI. It is a **single-user development prototype intended to bind to loopback**. The dashboard APIs are unauthenticated. Do not deploy this build as a public multi-user service.
+AgentCloud is a React / Next.js App Router application with Node.js route handlers, a durable JSON store, an SSE event stream, and a Node CLI. It is a **local organization-aware demo intended to bind to loopback**. Human dashboard/API access requires a Better Auth cookie session and project membership. Do not deploy this build as a public multi-user service.
 
 The product coordinates multiple identities around tasks, registered services, and structured handoffs. Fresh storage starts with an empty project list. There are no bundled project fixtures or replay actions; the supplied reference exports provide visual inspiration only.
 
@@ -37,7 +37,7 @@ flowchart LR
 
 | Boundary | Planned responsibility | Explicit limit |
 | --- | --- | --- |
-| Authenticated API | Employee sessions, project membership, requests, policy decisions, scoped reads/writes | Current human routes are unauthenticated |
+| Authenticated API | Employee sessions, project membership, requests, policy decisions, scoped reads/writes | Sessions and membership implemented locally; resource decision policies remain planned |
 | Transactional store | Decisions, jobs, box identities, runs, events, and idempotent transitions | Current JSON queue protects only one Node process |
 | Run-box worker | Claim approved jobs, call a provider, verify outcomes, reconcile drift | Never accept an arbitrary browser command as a provisioning job |
 | Provider adapter | Attach an existing SSH host or launch/stop EC2 using the same lifecycle contract | A stored hostname or EC2 API success is not a ready run box |
@@ -50,16 +50,16 @@ For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU 
 
 | Route | Behavior |
 | --- | --- |
-| `GET /api/state` | Current public state; never includes credential hashes |
+| `GET /api/state` | Session-required, membership-filtered state; never includes credential hashes |
 | `POST /api/state` | Human project/task/agent/handoff actions |
 | `POST /api/actions` | Alias of the human mutation endpoint |
 | `GET /api/events` | Default SSE messages containing complete state on state changes, including heartbeat expiry; comments keep connection alive |
 | `POST /api/agent` | Bearer-scoped `connect`, `heartbeat`, `context`, `task`, `service`, and `handoff` operations |
-| `POST /api/resources` | Local-administrator catalog registrations, resource requests, and inference configuration drafts; no allocation or policy approval |
+| `POST /api/resources` | Authenticated project-member catalog registrations, resource requests, and inference configuration drafts; no allocation or policy approval |
 
 Human mutations accept `{type, projectId, ...fields}` and return `{state, ...result}`. Creating a project returns `id`; creating an agent returns `agentId` and the one-time plaintext `token`. API errors use `{error}` with appropriate 400, 401, 403, 404, or 409 status codes. Internal errors return a generic 500 response.
 
-The resource API accepts `registerResource`, `requestResource`, and `saveInferenceDraft`. It validates bounded fields and same-project task, agent, and resource references. New catalog entries are only `registered`; inference configurations are only `draft`. Requests are only `requested` with a `not_evaluated` decision explaining that employee identity and resource policy are absent. Callers cannot provide approval, allocation, running, or verified state. Older project snapshots load with empty resource arrays. The Runs screen projects existing events and heartbeats; the Graph screen projects persisted relationships. Neither creates execution evidence.
+The resource API accepts `registerResource`, `requestResource`, and `saveInferenceDraft`. It validates bounded fields and same-project task, agent, and resource references. New catalog entries are only `registered`; inference configurations are only `draft`. Requests are only `requested` with a `not_evaluated` decision explaining that resource policy is absent. Callers cannot provide approval, allocation, running, or verified state. Older project snapshots load with empty resource arrays. The Runs screen projects existing events and heartbeats; the Graph screen projects persisted relationships. Neither creates execution evidence.
 
 ## Persistence and concurrency
 
@@ -71,7 +71,7 @@ This protects concurrent requests **within one Node process**. It is not a distr
 
 Tokens are cryptographically random and stored as SHA-256 hashes. Every agent operation resolves project and identity from its credential. Supplied mismatched project or identity identifiers are denied. Agents can update only their owned tasks and cannot start/finish dependent tasks before the prerequisite is complete. Handoffs must target an identity in the same project. Registered service URLs must use HTTP or HTTPS. Unsupported operations, including shell commands, are denied.
 
-The credential grants project-wide context read access. There is no claimed filesystem sandbox, path-level enforcement, remote shell permission model, encryption of saved state, token rotation/revocation UI, resource approval enforcement, or per-user authentication. The human dashboard is trusted local administration and can reassign task status. Accepting a handoff idempotently assigns a queued follow-up to its recipient, or reuses that recipient’s matching active task. Project creation accepts HTTPS repository URLs without embedded credentials and the two supported compute choices; SSH metadata requires a valid hostname or user@hostname. Browser origin checks compare against the browser-facing `Host` header (falling back to the request URL) and `x-forwarded-proto` (falling back to the URL protocol), so Next.js internal hostname normalization does not reject a local same-origin request. Any reverse proxy must overwrite forwarded protocol headers; this local prototype does not establish a general trusted-proxy boundary. Cross-origin browser mutation requests are denied, but this is not a replacement for authentication. The CLI requires HTTPS for non-loopback server connections. It never prints the bearer token.
+The credential grants project-wide context read access. There is no claimed filesystem sandbox, path-level enforcement, remote shell permission model, encryption of saved state, token rotation/revocation UI, resource approval enforcement, or production tenant isolation. The human dashboard requires employee authentication and project membership and can reassign task status. Accepting a handoff idempotently assigns a queued follow-up to its recipient, or reuses that recipient’s matching active task. Project creation accepts HTTPS repository URLs without embedded credentials and the two supported compute choices; SSH metadata requires a valid hostname or user@hostname. Browser origin checks compare against the browser-facing `Host` header (falling back to the request URL) and `x-forwarded-proto` (falling back to the URL protocol), so Next.js internal hostname normalization does not reject a local same-origin request. Any reverse proxy must overwrite forwarded protocol headers; this local prototype does not establish a general trusted-proxy boundary. Cross-origin browser mutation requests are denied, but this is not a replacement for authentication. The CLI requires HTTPS for non-loopback server connections. It never prints the bearer token.
 
 Connection status reflects the most recent heartbeat; identities are shown as disconnected after 45 seconds without a heartbeat. Endpoints are metadata supplied by clients and are not fetched by the server.
 
@@ -81,9 +81,9 @@ The intended remote architecture keeps development endpoints inside an organizat
 
 The HackGT MVP is now a governed single-agent GPU run, specified in [MVP_SPEC.md](MVP_SPEC.md). The first remote-computer milestone is to attach to a user-controlled Linux host, verify its identity, and create or attach a real run environment there. A GPU may be on that host or on a separate SSH resource target reachable from it. Verify task-critical access from the agent's actual execution environment; this is not proof that AgentCloud procured or isolated a GPU. The control plane records intended targets separately from verified connections and completed work.
 
-The planned path is employee OIDC login → server-side resource policy → provisioner → identified remote run environment → actual agent/command event stream → authenticated control surface. The box performs the work; the web app displays what the remote runner reports and what the server verifies. One real agent adapter and one known GPU host are enough for the MVP. Employee, agent session, and remote execution identities must remain distinct. The current JSON store and unauthenticated human routes do not provide these properties. [BACKEND_PLAN.md](BACKEND_PLAN.md) defines separate request, box, run, and GPU-verification state machines.
+The planned path is employee login (local email/password now; OIDC later) → server-side resource policy → provisioner → identified remote run environment → actual agent/command event stream → authenticated control surface. The box performs the work; the web app displays what the remote runner reports and what the server verifies. One real agent adapter and one known GPU host are enough for the MVP. Employee, agent session, and remote execution identities must remain distinct. The current JSON coordination store does not provide transactional run/decision records. [BACKEND_PLAN.md](BACKEND_PLAN.md) defines separate request, box, run, and GPU-verification state machines.
 
-1. Add transactional decision/job/run storage, one employee identity-provider integration, project roles, server-side sessions, and authenticated human APIs. Keep the existing JSON state readable during migration. Do not enable multi-user access on the current unauthenticated JSON API.
+1. Add transactional decision/job/run storage and server-enforced resource policies, building on local employee sessions and project memberships. Keep existing JSON state readable during migration.
 2. Add a run-box worker that first attaches a known Linux host, then implements EC2 as the first managed provider behind the same contract. Validate repository URLs, clone safely, and record machine, account, and worktree identity. Keep provider/model credentials separate from remote execution credentials.
 3. Launch one real agent adapter on that environment and stream bounded command/session events. Verify the GPU workload and one authorized/denied resource action at the actual SSH or execution boundary. Treat unrestricted SSH as trusted access.
 4. Add a second independent agent and private development service discovery, then artifact homes with independent storage and serving lifecycles. See [FEATURE_SPEC.md](FEATURE_SPEC.md) for temporary-service and publication behavior.
@@ -93,4 +93,12 @@ The planned desktop app owns the task-authoring workflow and may reuse the CLI t
 
 ## Verification
 
-`npm test` exercises the current local persistence and resource records, simultaneous writes, cross-project/identity denial, task ownership, dependency enforcement, cross-agent discovery and handoffs, unsupported execution denial, URL validation, credential redaction, and request validation. These tests do not verify employee login, provider calls, or remote GPU execution. Production build/type checks and browser UI checks are separate verification layers.
+`npm test` exercises the current local persistence and resource records, simultaneous writes, cross-project/identity denial, task ownership, dependency enforcement, cross-agent discovery and handoffs, unsupported execution denial, URL validation, credential redaction, and request validation. Authentication tests additionally verify login, logout, verified signup, organization invitations and project isolation, persisted sessions across a fresh process, anonymous denial, and employee/agent identity separation. They do not verify provider calls or remote GPU execution. Production build/type checks and browser UI checks are separate verification layers.
+
+## Local employee identity
+
+`lib/auth.mjs` owns Better Auth, the organization plugin, and SQLite. `lib/employee.ts` resolves verified session identity, active organization, and project access. Owners/admins see all projects in their organization; members require explicit assignments. The dashboard checks sessions and active membership server-side. `/api/auth/[...all]` serves Better Auth; `/api/employee` exposes the caller's identity and memberships; `/api/organizations` serves organization management and project assignment; `/api/invitations/[id]` exposes invitation details only to its verified recipient.
+
+`npm run auth:setup` migrates users, sessions, organizations, memberships, invitations, `project_organization`, and delivery records. A SQLite member-delete trigger revokes project assignments both on removal and voluntary departure. New accounts verify email before organization creation or invitation acceptance. Local messages are captured in private files by default; SMTP is optional. See README for setup and limitations.
+
+JSON still stores coordination data. There is no cross-store transaction: failed project attachment can require administrative repair. Existing legacy projects require explicit owner adoption into an organization. Allocation policy, enterprise SSO, production tenant isolation, and remote execution enforcement remain unimplemented.

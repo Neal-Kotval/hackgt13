@@ -30,7 +30,7 @@ This repository is the web application and a local coordination foundation. New 
 | Collaboration | Shared service records, structured handoffs, and streamed activity |
 | Persistence | JSON state on the application server's local disk; not remote workspace persistence |
 | Dashboard and review | Human coordination views and functional handoffs; Changes and Checks are explicit empty future-state panels |
-| Employee login and resource policy | Local resource/request records and an explicit unevaluated decision; no employee login or enforceable approval; the human dashboard/API remain unauthenticated local administration |
+| Employee login and resource policy | Local Better Auth verified accounts, organization invitations/roles, and project memberships; human routes require authentication. Resource decisions remain unevaluated; no allocation approval or SSH enforcement |
 | Resource graph and inference | Graph of persisted coordination relationships and configuration drafts only; no GPU allocation, private endpoint, or serving process |
 | SSH / hosted compute | Setup intent and metadata only until a workspace provider is implemented |
 | Run boxes and artifact homes | Planned execution and publication lifecycles; neither is provisioned by this application yet |
@@ -95,7 +95,7 @@ The CLI remains a coordination client. The HackGT MVP additionally requires auth
 
 API authorization and operating-system permissions are separate boundaries. An unrestricted SSH shell is **trusted access**. It must never be presented as restricted by an API path toggle. A filesystem restriction is only a product feature once the execution boundary actually enforces it and a forbidden operation has been demonstrated to fail.
 
-The current local application is a single-user development deployment. Production requires human authentication, tenant isolation, transport security, secret management, and an audited workspace execution boundary. Never expose the development server to an untrusted network as a multi-tenant product.
+The current local application is a local organization-aware development deployment with employee sessions. Production requires tenant isolation, transport security, secret management, and an audited workspace execution boundary. Never expose the development server to an untrusted network as a multi-tenant product.
 
 ## Experience requirements
 

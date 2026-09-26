@@ -1,3 +1,8 @@
+import {
+  requireEmployee,
+  requireMembership,
+  employeeState,
+} from "../../../lib/employee";
 import { resourceAction } from "../../../lib/store";
 import { body, failure, sameOrigin } from "../../../lib/http";
 
@@ -6,8 +11,15 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
+    const employee = await requireEmployee(request);
     sameOrigin(request);
-    return Response.json(await resourceAction(await body(request)));
+    const input = await body(request);
+    requireMembership(employee, input.projectId);
+    const result = await resourceAction(input);
+    return Response.json({
+      ...result,
+      state: employeeState(result.state, employee),
+    });
   } catch (error) {
     return failure(error);
   }

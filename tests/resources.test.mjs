@@ -1,3 +1,4 @@
+import { prepareAuth } from "./auth-fixture.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
@@ -25,9 +26,8 @@ for (const name of ["store", "http", "resource-profiles"]) {
     .outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'");
   await writeFile(path.join(temporary, `${name}.js`), output);
 }
-const { action, resourceAction, getState } = await import(
-  path.join(temporary, "store.js")
-);
+const { action, resourceAction, getState } = await import(path.join(temporary, "store.js"));
+const authFixture = await prepareAuth(temporary);
 after(() => rm(temporary, { recursive: true, force: true }));
 
 test("resource records persist without implying allocation or policy approval", async () => {
@@ -61,7 +61,7 @@ test("resource records persist without implying allocation or policy approval", 
   assert.equal(requested.request.status, "requested");
   assert.deepEqual(requested.request.decision, {
     status: "not_evaluated",
-    reason: "Employee identity and resource policy are not configured.",
+    reason: "Resource policy is not configured.",
   });
   const draft = await resourceAction({
     type: "saveInferenceDraft",
@@ -249,26 +249,13 @@ test("resource route returns persisted records and denies cross-origin mutations
   await writeFile(path.join(temporary, "resources-route.js"), output);
   const { POST } = await import(path.join(temporary, "resources-route.js"));
   const projectId = (await getState()).projects[0].id;
-  const payload = JSON.stringify({
-    type: "requestResource",
-    projectId,
-    kind: "run-box",
-    purpose: "Use remote compute",
-  });
-  const blocked = await POST(
-    new Request("http://localhost/api/resources", {
-      method: "POST",
-      headers: { origin: "https://elsewhere.example" },
-      body: payload,
-    }),
-  );
+  authFixture.grantMembership(authFixture.users[0].id, projectId, "owner");
+  const payload = JSON.stringify({ type: "requestResource", projectId, kind: "run-box", purpose: "Use remote compute" });
+  const blocked = await POST(new Request("http://localhost/api/resources", {
+    method: "POST", headers: { origin: "https://elsewhere.example", cookie: authFixture.users[0].cookie }, body: payload,
+  }));
   assert.equal(blocked.status, 403);
-  const accepted = await POST(
-    new Request("http://localhost/api/resources", {
-      method: "POST",
-      body: payload,
-    }),
-  );
+  const accepted = await POST(new Request("http://localhost/api/resources", { method: "POST", headers: { cookie: authFixture.users[0].cookie }, body: payload }));
   assert.equal(accepted.status, 200);
   const response = await accepted.json();
   assert.equal(response.request.status, "requested");
