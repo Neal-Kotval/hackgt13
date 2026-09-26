@@ -50,7 +50,8 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+summary:focus-visible {
   outline: var(--focus-width) solid var(--color-accent);
   outline-offset: var(--focus-offset);
 }
@@ -2221,4 +2222,24 @@ select {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+.project-sections {
+  display: grid;
+  gap: var(--space-8);
+}
+.project-disclosure {
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.project-disclosure > summary {
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+}
+.project-disclosure[open] > summary {
+  margin-bottom: var(--space-6);
 }
