@@ -1,7 +1,7 @@
 "use client";
 import { Select } from "@/components/ui/select";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import {
   Pulse as ActivityIcon,
   Clock,
@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react";
 import type { Activity, Agent, Project } from "@/lib/types";
 import styles from "./run-control.module.css";
+import { AgentRuns } from "./agent-runs";
 
 const executionKinds = new Set([
   "run-started",
@@ -103,10 +104,14 @@ export function RunControl({ project }: { project: Project }) {
         <div>
           <p className={styles.eyebrow}>Run control / {project.name}</p>
           <h2 id="runs-heading">Agent runs</h2>
-          <p>Observe connected identities and persisted activity. Remote execution will appear here when a runner reports it.</p>
+          <p>Follow agent runs reported from the desktop Codex panel, then review connected identities and persisted coordination activity.</p>
         </div>
-        <span className={styles.localBoundary}>Local coordination only</span>
+        <span className={styles.localBoundary}>Reported evidence only</span>
       </header>
+
+      <Suspense fallback={null}>
+        <AgentRuns project={project} />
+      </Suspense>
 
       <div className={styles.summaryGrid}>
         <section className={styles.summaryCard} aria-labelledby="transport-heading">
@@ -120,9 +125,9 @@ export function RunControl({ project }: { project: Project }) {
         <section className={styles.summaryCard} aria-labelledby="execution-heading">
           <TerminalWindow aria-hidden="true" />
           <div>
-            <h2 id="execution-heading">Model execution</h2>
+            <h2 id="execution-heading">Coordination execution</h2>
             <strong>{executionEvents.length ? `${executionEvents.length} execution events` : "No run reported"}</strong>
-            <p>{executionEvents.length ? "Events reported by the connected runner." : "No agent adapter or remote runner is connected."}</p>
+            <p>{executionEvents.length ? "Events reported by the connected runner." : "No coordination client reported execution. Desktop agent runs appear above."}</p>
           </div>
         </section>
         <section className={styles.summaryCard} aria-labelledby="task-heading">
