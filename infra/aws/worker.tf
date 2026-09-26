@@ -42,12 +42,18 @@ resource "aws_iam_role_policy" "worker" {
           "ec2:DescribeLaunchTemplateVersions", "ec2:DescribeSecurityGroups", "ec2:DescribeSubnets",
           "ec2:DescribeInstanceTypeOfferings", "ec2:DescribeVolumes",
           "servicequotas:GetServiceQuota", "freetier:GetAccountPlanState",
-          "pricing:GetProducts", "budgets:ViewBudget", "lambda:GetFunctionConfiguration",
+          "pricing:GetProducts", "budgets:ViewBudget", "aws-portal:ViewBilling",
           "events:DescribeRule", "events:ListTargetsByRule",
           "ssm:DescribeInstanceInformation", "ssm:GetCommandInvocation",
           "sts:GetCallerIdentity"
         ]
         Resource = "*"
+      },
+      {
+        Sid      = "ReadOnlyDemoExpiryFunction"
+        Effect   = "Allow"
+        Action   = "lambda:GetFunctionConfiguration"
+        Resource = aws_lambda_function.expiry.arn
       },
       {
         Sid      = "LaunchOnlyG6InstanceThroughPinnedTemplate"
