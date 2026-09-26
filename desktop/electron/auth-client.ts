@@ -260,9 +260,11 @@ export class DesktopAuthClient {
     path: string,
     init: RequestInit = {},
   ): Promise<Response> {
-    const url = path.startsWith("http")
-      ? path
-      : `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+    const target = new URL(path, `${this.baseUrl}/`);
+    if (target.origin !== new URL(this.baseUrl).origin || target.username || target.password) {
+      throw new AuthError("Employee requests must stay on the configured AgentCloud server.");
+    }
+    const url = target.href;
 
     const headers = new Headers(init.headers);
     if (headers.has("authorization")) {
@@ -277,7 +279,7 @@ export class DesktopAuthClient {
       headers.set("origin", this.baseUrl);
     }
 
-    const response = await this.fetchImpl(url, { ...init, headers });
+    const response = await this.fetchImpl(url, { ...init, headers, redirect: "error" });
     this.applySetCookie(response);
     return response;
   }

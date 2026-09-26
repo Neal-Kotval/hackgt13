@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChatCircle, HardDrives, List, ListChecks, SignOut, X } from "@phosphor-icons/react";
+import { Robot, ChatCircle, HardDrives, List, ListChecks, SignOut, X } from "@phosphor-icons/react";
 
-export type AppSection = "tasks" | "environments" | "local-chat";
+export type AppSection = "tasks" | "environments" | "codex" | "local-chat";
 type ShellNavProps = {
   section: AppSection;
   employeeName: string;
@@ -12,6 +12,7 @@ type ShellNavProps = {
   children: ReactNode;
 };
 const sections = [
+  { id: "codex", label: "Codex agents", icon: Robot },
   { id: "tasks", label: "Tasks", icon: ListChecks },
   { id: "environments", label: "Environments", icon: HardDrives },
   { id: "local-chat", label: "Project chat", icon: ChatCircle },
