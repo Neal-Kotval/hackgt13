@@ -90,26 +90,30 @@
 }
 
 :root {
-  /* Primitives: the supplied AgentCloud Mockup v4 palette. */
-  --palette-ink: #0b0c0d;
-  --palette-panel: #0f1112;
-  --palette-selected: #121415;
-  --palette-raised: #232526;
-  --palette-paper: #e6e4e1;
-  --palette-gray-300: #444646;
-  --palette-gray-500: #7d7979;
-  --palette-gray-550: #999494;
-  --palette-gray-600: #a8a4a4;
-  --palette-gray-700: #c9c5c5;
-  --palette-cyan: #38a6cf;
-  --palette-cyan-light: #99e0ff;
-  --palette-cyan-dark: #0a303e;
-  --palette-pink: #ff458e;
-  --palette-pink-dark: #4b1528;
-  --palette-green: #82dba5;
-  --palette-green-dark: #173426;
-  --palette-amber: #e9bc70;
-  --palette-amber-dark: #3a2d18;
+  /* Primitives: restrained slate palette evolved from the v4 reference. */
+  --palette-ink: #0d1218;
+  --palette-panel: #141c25;
+  --palette-selected: #1b2732;
+  --palette-raised: #253442;
+  --palette-paper: #e8edf2;
+  --palette-gray-300: #455667;
+  --palette-gray-500: #778797;
+  --palette-gray-550: #94a3b5;
+  --palette-gray-600: #a5b2c0;
+  --palette-gray-700: #c9d3df;
+  --palette-teal: #69c5bd;
+  --palette-teal-light: #aae5dc;
+  --palette-teal-dark: #173b3b;
+  --palette-violet: #b9a1e3;
+  --palette-violet-dark: #30263f;
+  --palette-sage: #a1c9b3;
+  --palette-sage-dark: #243c32;
+  --palette-amber: #ddbd86;
+  --palette-amber-dark: #41341f;
+  --palette-blue: #8bb8ed;
+  --palette-blue-dark: #1c304b;
+  --palette-coral: #e6a098;
+  --palette-coral-dark: #422b2c;
   --palette-transparent: transparent;
 
   /* Semantic colors: component CSS references these, never primitives. */
@@ -124,32 +128,37 @@
   --color-border: color-mix(in srgb, var(--palette-paper) 14%, transparent);
   --color-border-subtle: color-mix(in srgb, var(--palette-paper) 8%, transparent);
   --color-border-strong: color-mix(in srgb, var(--palette-paper) 20%, transparent);
-  --color-accent: var(--palette-cyan);
+  --color-accent: var(--palette-teal);
   --color-accent-text: var(--palette-ink);
-  --color-accent-hover: var(--palette-cyan-light);
-  --color-accent-soft: var(--palette-cyan-dark);
-  --color-pink: var(--palette-pink);
-  --color-pink-soft: var(--palette-pink-dark);
-  --color-success: var(--palette-green);
-  --color-success-soft: var(--palette-green-dark);
+  --color-accent-hover: var(--palette-teal-light);
+  --color-accent-soft: var(--palette-teal-dark);
+  --color-agent-secondary: var(--palette-violet);
+  --color-agent-secondary-soft: var(--palette-violet-dark);
+  /* Legacy secondary-agent aliases; danger has its own coral role. */
+  --color-pink: var(--color-agent-secondary);
+  --color-pink-soft: var(--color-agent-secondary-soft);
+  --color-info: var(--palette-blue);
+  --color-info-soft: var(--palette-blue-dark);
+  --color-success: var(--palette-sage);
+  --color-success-soft: var(--palette-sage-dark);
   --color-warning: var(--palette-amber);
   --color-warning-soft: var(--palette-amber-dark);
-  --color-danger: var(--palette-pink);
-  --color-danger-soft: var(--palette-pink-dark);
+  --color-danger: var(--palette-coral);
+  --color-danger-soft: var(--palette-coral-dark);
   --color-transparent: var(--palette-transparent);
   --color-overlay: rgb(0 0 0 / 65%);
   --color-dot-grid: color-mix(in srgb, var(--palette-paper) 8%, transparent);
 
   /* Quiet glass navigation: dark translucent fill, restrained edge highlights. */
-  --color-glass: rgb(22 25 27 / 82%);
-  --color-glass-hover: rgb(230 228 225 / 6%);
-  --color-glass-selected: rgb(56 166 207 / 12%);
-  --color-glass-edge: rgb(230 228 225 / 9%);
-  --shadow-glass: inset 0 1px 0 rgb(230 228 225 / 6%), 0 8px 32px rgb(0 0 0 / 14%);
+  --color-glass: rgb(20 28 37 / 88%);
+  --color-glass-hover: rgb(232 237 242 / 6%);
+  --color-glass-selected: rgb(105 197 189 / 12%);
+  --color-glass-edge: rgb(232 237 242 / 9%);
+  --shadow-glass: inset 0 1px 0 rgb(232 237 242 / 6%), 0 8px 32px rgb(0 0 0 / 14%);
   --glass-blur: 20px;
   --glass-saturation: 115%;
   --radius-navigation: 0.75rem;
-  --radius-navigation-panel: 1.25rem;
+  --radius-navigation-panel: var(--radius-lg);
   --navigation-width: 15rem;
   --z-navigation-backdrop: 40;
   --z-navigation: 50;
@@ -196,10 +205,10 @@
   --space-24: 6rem;
 
   --radius-none: 0;
-  --radius-xs: var(--radius-none);
-  --radius-sm: var(--radius-none);
-  --radius-md: var(--radius-none);
-  --radius-lg: var(--radius-none);
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
   --radius-full: 999rem;
   --border-width: 1px;
   --visually-hidden-size: 1px;
