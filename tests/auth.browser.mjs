@@ -78,7 +78,7 @@ try {
       await page.getByRole("link", { name: "Open projects", exact: true }).click();
       await page.waitForURL("**/projects");
       await page.reload();
-      await page.getByRole("button", { name: "Sign out" }).waitFor({ state: "attached" });
+      await page.getByRole("button", { name: "Sign out", includeHidden: true }).waitFor({ state: "attached" });
       // Session refetches must not crash the dashboard if user data is absent.
       await page.route("**/api/auth/get-session**", (route) => route.fulfill({ json: {} }));
       await page.reload();
@@ -97,7 +97,7 @@ try {
         await stop();
         await start();
         await page.reload();
-        await page.getByRole("button", { name: "Sign out" }).waitFor({ state: "attached" });
+        await page.getByRole("button", { name: "Sign out", includeHidden: true }).waitFor({ state: "attached" });
       }
       const employee = await page.request.get(
         "http://127.0.0.1:3100/api/employee",
