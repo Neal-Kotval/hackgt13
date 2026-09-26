@@ -1,6 +1,8 @@
 export type DeepLinkTarget = {
   projectId: string;
   environmentId?: string;
+  /** Run-box job id (HAC-90). Opens Environments; never carries host/port. */
+  runBoxId?: string;
 };
 
 export type DeepLinkParseResult =
@@ -10,7 +12,10 @@ export type DeepLinkParseResult =
 const SCHEME = "agentcloud:";
 
 /**
- * Parse `agentcloud://open?projectId=…&environmentId=…` (environment optional).
+ * Parse `agentcloud://open?projectId=…&environmentId=…` (environment optional)
+ * or `agentcloud://open?projectId=…&runBoxId=…`. Any other query values —
+ * including host or port — are ignored; connection details always come from
+ * the authenticated connection API.
  */
 export function parseAgentCloudDeepLink(raw: string): DeepLinkParseResult {
   const trimmed = raw.trim();
@@ -44,11 +49,16 @@ export function parseAgentCloudDeepLink(raw: string): DeepLinkParseResult {
     };
   }
   const environmentId = url.searchParams.get("environmentId")?.trim() || undefined;
+  const runBoxId = url.searchParams.get("runBoxId")?.trim() || undefined;
+  if (runBoxId && !/^[A-Za-z0-9_-]{1,128}$/.test(runBoxId)) {
+    return { ok: false, error: "Deep link runBoxId is malformed." };
+  }
   return {
     ok: true,
     target: {
       projectId,
       ...(environmentId ? { environmentId } : {}),
+      ...(runBoxId ? { runBoxId } : {}),
     },
   };
 }

@@ -7,6 +7,7 @@ import {
 } from "electron";
 import { randomUUID } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
+import { hostname } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -17,7 +18,9 @@ import { AuthError, DesktopAuthClient } from "./auth-client.ts";
 import { LoopbackApiClient, LoopbackApiError } from "./api-client.ts";
 import { ChatStore, ChatStoreError } from "./chat-store.ts";
 import { SessionStore } from "./session-store.ts";
-import type { AssistantStreamEvent } from "../src/lib/types.ts";
+import { DeviceKeyRegistrar, DeviceKeyStore } from "./device-key.ts";
+import { TerminalSessions } from "./terminal-sessions.ts";
+import type { AssistantStreamEvent, TerminalEvent } from "../src/lib/types.ts";
 import {
   findDeepLinkUrl,
   parseAgentCloudDeepLink,
@@ -109,6 +112,7 @@ loadEnvFile(path.join(app.getAppPath(), ".env"));
 let store: ChatStore;
 let authClient: DesktopAuthClient;
 let apiClient: LoopbackApiClient;
+let terminals: TerminalSessions | null = null;
 const assistant = new OpenAIResponsesAdapter(
   () => process.env.OPENAI_API_KEY,
   process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini",
@@ -372,6 +376,13 @@ function createWindow(): void {
   });
 
   attachWindowHandlers(win);
+  const ownerId = win.webContents.id;
+  // SSH sessions belong to this renderer; tear them down with it.
+  win.webContents.once("destroyed", () => terminals?.closeOwner(ownerId));
+  win.webContents.on("render-process-gone", () => terminals?.closeOwner(ownerId));
+  win.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) terminals?.closeOwner(ownerId);
+  });
   void loadRenderer(win).catch((error) => {
     console.error("[desktop] initial load failed:", error);
     showBridgeError(
@@ -430,14 +441,86 @@ app.whenReady().then(async () => {
     request: (path, init) => authClient.fetchHuman(path, init),
   });
 
-  wrapIpc("auth:status", async () => authClient.status());
+  // HAC-90: one ed25519 key per device, encrypted with safeStorage. The
+  // private key stays in this process; only public status crosses IPC.
+  const keyStore = new DeviceKeyStore(path.join(app.getPath("userData"), "ssh"), {
+    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    encryptString: (plain) => safeStorage.encryptString(plain),
+    decryptString: (encrypted) => safeStorage.decryptString(encrypted),
+  });
+  const registrar = new DeviceKeyRegistrar(keyStore, hostname(), (requestPath, init) =>
+    authClient.fetchHuman(requestPath, init),
+  );
+  const terminalSessions = new TerminalSessions({
+    request: (requestPath, init) => authClient.fetchHuman(requestPath, init),
+    privateKey: () => registrar.privateKey(),
+    beforeConnect: async () => {
+      await registrar.ensureRegistered();
+    },
+  });
+  terminals = terminalSessions;
+
+  wrapIpc("auth:status", async () => {
+    const status = await authClient.status();
+    if (status.signedIn) void registrar.ensureRegistered();
+    return status;
+  });
   wrapIpc("auth:signIn", async (_event, email: string, password: string) => {
     const user = await authClient.signIn(email, password);
+    void registrar.ensureRegistered();
     return { user, status: await authClient.status() };
   });
   wrapIpc("auth:signOut", async () => {
+    terminalSessions.closeAll();
+    registrar.reset();
     await authClient.signOut();
     return authClient.status();
+  });
+  wrapIpc("deviceKey:status", async () => {
+    const status = registrar.status();
+    // Retry a failed/unstarted registration when a session exists.
+    if (
+      (status.state === "error" || status.state === "unavailable") &&
+      authClient.hasLocalSession()
+    ) {
+      return registrar.ensureRegistered();
+    }
+    return status;
+  });
+  wrapIpc("api:listRunBoxes", async (_event, projectId: string) =>
+    apiClient.listRunBoxes(projectId),
+  );
+  wrapIpc(
+    "terminal:open",
+    async (
+      event,
+      sessionId: string,
+      runBoxId: string,
+      size: { cols: number; rows: number },
+    ) => {
+      const sender = event.sender;
+      return terminalSessions.open(
+        sender.id,
+        (payload: TerminalEvent) => {
+          if (!sender.isDestroyed()) sender.send("terminal:event", payload);
+        },
+        sessionId,
+        runBoxId,
+        size,
+      );
+    },
+  );
+  ipcMain.on("terminal:write", (event, sessionId: string, data: string) => {
+    terminalSessions.write(event.sender.id, sessionId, data);
+  });
+  ipcMain.on(
+    "terminal:resize",
+    (event, sessionId: string, cols: number, rows: number) => {
+      terminalSessions.resize(event.sender.id, sessionId, cols, rows);
+    },
+  );
+  wrapIpc("terminal:close", async (event, sessionId: string) => {
+    terminalSessions.close(event.sender.id, sessionId);
   });
   wrapIpc(
     "auth:fetchHuman",
@@ -658,6 +741,10 @@ app.whenReady().then(async () => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on("before-quit", () => {
+  terminals?.closeAll();
 });
 
 app.on("window-all-closed", () => {

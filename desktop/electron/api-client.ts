@@ -4,6 +4,7 @@
  * when Origin is set to the configured AGENTCLOUD_URL.
  * Session cookies are supplied by the auth client (HAC-24) — never logged.
  */
+import { parseRunBoxList, type RunBoxSummary } from "../src/lib/run-boxes.ts";
 
 export type HumanRequest = (
   path: string,
@@ -339,5 +340,36 @@ export class LoopbackApiClient {
       state: summarizeState(statePayload),
       raw: parsed,
     };
+  }
+
+  /** GET /api/run-boxes?projectId= — environments for one project (HAC-90). */
+  async listRunBoxes(projectId: string): Promise<RunBoxSummary[]> {
+    const baseUrl = this.getBaseUrl();
+    if (typeof projectId !== "string" || !projectId.trim() || projectId.length > 256) {
+      throw new LoopbackApiError("Invalid project id.");
+    }
+    let response: Response;
+    try {
+      response = await this.request(
+        `/api/run-boxes?projectId=${encodeURIComponent(projectId)}`,
+        { method: "GET" },
+      );
+    } catch {
+      throw new LoopbackApiError(serverUnreachableMessage(baseUrl));
+    }
+    const text = await response.text();
+    if (!response.ok) {
+      throw new LoopbackApiError(
+        mapApiFailure(response.status, text, baseUrl),
+        response.status,
+      );
+    }
+    try {
+      return parseRunBoxList(JSON.parse(text));
+    } catch (error) {
+      throw new LoopbackApiError(
+        error instanceof Error ? error.message : "Could not parse /api/run-boxes JSON.",
+      );
+    }
   }
 }

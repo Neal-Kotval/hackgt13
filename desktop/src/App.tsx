@@ -4,6 +4,7 @@ import { Conversation } from "./components/Conversation";
 import { ShellNav, type AppSection } from "./components/ShellNav";
 import { SignInScreen } from "./components/SignInScreen";
 import { ProjectPicker } from "./components/ProjectPicker";
+import { EnvironmentsPanel } from "./components/EnvironmentsPanel";
 import { ThreadList } from "./components/ThreadList";
 import { desktopApi } from "./lib/desktop-api";
 import type {
@@ -38,6 +39,10 @@ export default function App() {
     null,
   );
   const [deepLink, setDeepLink] = useState<DeepLinkParseResult | null>(null);
+  const [environmentsLink, setEnvironmentsLink] =
+    useState<DeepLinkParseResult | null>(null);
+  // Keep Environments mounted after first visit so open terminals survive tab switches.
+  const [environmentsMounted, setEnvironmentsMounted] = useState(false);
   const selectedIdRef = useRef<string | null>(null);
   const sending =
     activeThread?.messages.some((message) => message.status === "streaming") ??
@@ -46,6 +51,26 @@ export default function App() {
   const clearDeepLink = useCallback(() => {
     setDeepLink(null);
   }, []);
+
+  const clearEnvironmentsLink = useCallback(() => {
+    setEnvironmentsLink(null);
+  }, []);
+
+  // runBoxId links open Environments (HAC-90); other links keep the Tasks flow.
+  const routeDeepLink = useCallback((result: DeepLinkParseResult) => {
+    if (result.ok && result.target.runBoxId) {
+      setSection("environments");
+      setEnvironmentsMounted(true);
+      setEnvironmentsLink(result);
+      return;
+    }
+    setSection("tasks");
+    setDeepLink(result);
+  }, []);
+
+  useEffect(() => {
+    if (section === "environments") setEnvironmentsMounted(true);
+  }, [section]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -59,18 +84,12 @@ export default function App() {
       void (async () => {
         try {
           const pending = await api.takePendingDeepLink();
-          if (!cancelled && pending) {
-            setSection("tasks");
-            setDeepLink(pending);
-          }
+          if (!cancelled && pending) routeDeepLink(pending);
         } catch {
           // Ignore bridge races during boot.
         }
       })();
-      stop = api.onDeepLink((result) => {
-        setSection("tasks");
-        setDeepLink(result);
-      });
+      stop = api.onDeepLink(routeDeepLink);
     } catch {
       // Non-Electron preview.
     }
@@ -78,7 +97,7 @@ export default function App() {
       cancelled = true;
       stop?.();
     };
-  }, []);
+  }, [routeDeepLink]);
 
   const refreshThreads = useCallback(async () => {
     const api = desktopApi();
@@ -229,6 +248,8 @@ export default function App() {
       setSelectedId(null);
       setActiveThread(null);
       setDrafts({});
+      setEnvironmentsMounted(false);
+      setSection("tasks");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-out failed");
     } finally {
@@ -432,7 +453,16 @@ export default function App() {
         void handleSignOut();
       }}
     >
-      {section === "tasks" ? (
+      {environmentsMounted ? (
+        <div className="section-host" hidden={section !== "environments"}>
+          <EnvironmentsPanel
+            webBaseUrl={auth.baseUrl}
+            deepLink={environmentsLink}
+            onDeepLinkHandled={clearEnvironmentsLink}
+          />
+        </div>
+      ) : null}
+      {section === "environments" ? null : section === "tasks" ? (
         <ProjectPicker
           webBaseUrl={auth.baseUrl}
           deepLink={deepLink}

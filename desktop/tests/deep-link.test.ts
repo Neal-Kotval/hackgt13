@@ -21,6 +21,37 @@ describe("parseAgentCloudDeepLink", () => {
     assert.deepEqual(result, { ok: true, target: { projectId: "p1" } });
   });
 
+  it("parses open with project and runBoxId", () => {
+    const result = parseAgentCloudDeepLink(
+      "agentcloud://open?projectId=p1&runBoxId=job-42",
+    );
+    assert.deepEqual(result, {
+      ok: true,
+      target: { projectId: "p1", runBoxId: "job-42" },
+    });
+  });
+
+  it("ignores host and port supplied in the URL", () => {
+    const result = parseAgentCloudDeepLink(
+      "agentcloud://open?projectId=p1&runBoxId=job-42&host=evil.example&port=2222&hostPublicKey=x",
+    );
+    assert.deepEqual(result, {
+      ok: true,
+      target: { projectId: "p1", runBoxId: "job-42" },
+    });
+  });
+
+  it("rejects malformed runBoxId values", () => {
+    const result = parseAgentCloudDeepLink(
+      "agentcloud://open?projectId=p1&runBoxId=..%2Fetc",
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects runBoxId without projectId", () => {
+    assert.equal(parseAgentCloudDeepLink("agentcloud://open?runBoxId=j1").ok, false);
+  });
+
   it("rejects missing projectId", () => {
     const result = parseAgentCloudDeepLink("agentcloud://open?environmentId=e1");
     assert.equal(result.ok, false);
