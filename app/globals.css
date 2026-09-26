@@ -45,6 +45,7 @@ button:disabled {
   opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }
+.app-shell:focus-visible,
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
