@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { createAwsGpuProvider, assumeGpuWorkerRole } from "../lib/aws-gpu-provider.mjs";
+import { createAwsGpuProvider, assumeGpuWorkerRole, assertPaidGpuPlan, createAwsCli } from "../lib/aws-gpu-provider.mjs";
 
 const jobId = "11111111-1111-4111-8111-111111111111";
 const instanceId = "i-0123456789abcdef0";
@@ -21,6 +21,57 @@ test("root identity is rejected before any provider operation", async () => {
   await assert.rejects(provider.identifyWorker(), /root and application credentials are rejected/);
   await assert.rejects(provider.inspect({ id: jobId }), /root and application credentials are rejected/);
   await assert.rejects(assumeGpuWorkerRole({ aws }), /root credentials are rejected/);
+});
+
+test("G6 requires Paid plan even when Free credits and quota remain", async () => {
+  const calls = [];
+  const aws = mockAws((service, operation) => {
+    calls.push(`${service}:${operation}`);
+    if (operation === "get-account-plan-state") return {
+      accountId: identity.Account, accountPlanType: "FREE", accountPlanStatus: "ACTIVE",
+      accountPlanRemainingCredits: { unit: "USD", amount: 160 }, accountPlanExpirationDate: "2030-01-01T00:00:00Z",
+    };
+    if (operation === "describe-instances") return { Reservations: [] };
+    return {};
+  });
+  const provider = createAwsGpuProvider({ aws, subnetId, now: () => new Date("2026-09-26T00:00:00Z") });
+  await assert.rejects(provider.allocate({ id: jobId, provider: "aws-ec2", max_duration_minutes: 60, project_id: "project-1" }),
+    /requires an active AWS Paid plan; current plan is FREE/);
+  assert.ok(!calls.includes("ec2:run-instances"));
+  assert.ok(!calls.includes("ec2:describe-launch-template-versions"));
+});
+
+test("Paid plan still requires credits and a sufficient runtime window", () => {
+  const plan = { accountId: identity.Account, accountPlanType: "PAID", accountPlanStatus: "ACTIVE",
+    accountPlanRemainingCredits: { unit: "USD", amount: 5 }, accountPlanExpirationDate: "2026-09-26T04:00:00Z" };
+  assert.doesNotThrow(() => assertPaidGpuPlan(plan, new Date("2026-09-26T00:00:00Z")));
+  assert.throws(() => assertPaidGpuPlan({ ...plan, accountPlanRemainingCredits: { unit: "USD", amount: 0 } }, new Date("2026-09-26T00:00:00Z")),
+    /credits or runtime window unavailable/);
+  assert.throws(() => assertPaidGpuPlan({ ...plan, accountPlanExpirationDate: "2026-09-26T02:00:00Z" }, new Date("2026-09-26T00:00:00Z")),
+    /credits or runtime window unavailable/);
+});
+
+test("AWS CLI errors preserve only operation, code, and known Free Tier rejection", async () => {
+  const run = async () => { const error = new Error("aws --cli-input-json secret-value");
+    error.stderr = "An error occurred (Client.InvalidParameterCombination) when calling the RunInstances operation: The instance type 'g6.xlarge' is not eligible for Free Tier; secret-value";
+    throw error; };
+  const aws = createAwsCli({ run, env: {} });
+  await assert.rejects(aws("ec2", "run-instances", "--cli-input-json", "secret-value"), (error) => {
+    assert.equal(error.message, "AWS ec2:run-instances Client.InvalidParameterCombination: g6.xlarge is not eligible for Free Tier");
+    assert.doesNotMatch(error.message, /secret-value/);
+    return true;
+  });
+});
+
+test("managed volume inventory includes orphan volumes", async () => {
+  const volume = { VolumeId: "vol-0123456789abcdef0", Tags: [{ Key: "Project", Value: "AgentCloudDemo" }] };
+  const aws = mockAws((service, operation, args) => {
+    assert.equal(`${service}:${operation}`, "ec2:describe-volumes");
+    assert.ok(args.includes("Name=tag:AgentCloudAutoExpire,Values=true"));
+    return { Volumes: [volume] };
+  });
+  const provider = createAwsGpuProvider({ aws, subnetId });
+  assert.deepEqual(await provider.listManagedVolumes(), [volume]);
 });
 
 test("retry discovers tagged instance before attempting a new launch", async () => {
