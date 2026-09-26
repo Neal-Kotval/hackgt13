@@ -685,13 +685,13 @@ td:first-child {
   height: var(--icon-sm);
 }
 .status-select {
-  padding: var(--space-1) var(--space-2);
+  padding: var(--select-padding-block) var(--select-padding-inline);
   border: 0;
   background: var(--color-surface-raised);
   border-radius: var(--radius-xs);
   font-size: var(--text-xs);
   color: var(--color-muted);
-  min-height: var(--control-height-small);
+  min-height: var(--select-min-height);
 }
 .status-select.done {
   background: var(--color-success-soft);
@@ -1124,7 +1124,7 @@ form {
 form > label {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--field-label-gap);
   font-size: var(--text-sm);
 }
 input,
@@ -1948,6 +1948,8 @@ dialog::backdrop {
   margin-left: auto;
 }
 .organization-switcher {
+  display: grid;
+  gap: var(--field-label-gap);
   min-width: 0;
   max-width: var(--sidebar-width);
 }
@@ -1984,11 +1986,11 @@ dialog::backdrop {
 }
 .organization-form {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-5);
 }
 .organization-form label {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--field-label-gap);
   min-width: 0;
 }
 .organization-form input,
@@ -2139,3 +2141,17 @@ dialog::backdrop {
     padding: var(--space-5);
   }
 }
+
+/* Keep select labels above their controls, including inline member actions. */
+label:has(> select) {
+  display: grid;
+  gap: var(--field-label-gap);
+  min-width: 0;
+}
+select {
+  min-height: var(--select-min-height);
+  max-width: 100%;
+  padding: var(--select-padding-block) var(--select-padding-inline);
+  line-height: var(--leading-normal);
+}
+.organization-list .auth-actions { align-items: end; gap: var(--space-4); }
