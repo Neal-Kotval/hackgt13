@@ -4,13 +4,15 @@ import {
   createRunpodProvider,
   RunpodAmbiguousCreateError,
   runpodJobMarker,
+  runpodPodName,
 } from "../lib/runpod-provider.mjs";
 
 const key = "unit-test-runpod-key";
-const jobId = "job-123";
-const spec = { jobId, gpuId: "NVIDIA GeForce RTX 4090", image: "runpod/pytorch:test", dataCenterId: "US-KS-2", diskGb: 40 };
+const jobId = "12345678-1234-1234-1234-123456789abc";
+const expiresAt = "2026-09-26T22:00:00.000Z";
+const spec = { jobId, expiresAt, gpuId: "NVIDIA GeForce RTX 4090", image: "runpod/pytorch:test", dataCenterId: "US-KS-2", diskGb: 40 };
 const pod = (overrides = {}) => ({
-  id: "pod123", name: runpodJobMarker(jobId), status: "RUNNING", image: spec.image,
+  id: "pod123", name: runpodPodName(jobId, expiresAt), status: "RUNNING", image: spec.image,
   gpu: { id: spec.gpuId, count: 1 }, disk: 40, cloud: "SECURE", dataCenterId: spec.dataCenterId,
   env: { PRIVATE_TOKEN: "never-return-this" },
   ssh: { direct: { host: "203.0.113.10", port: 30222, username: "root", command: "ssh root@203.0.113.10" }, proxy: null },
@@ -83,11 +85,23 @@ test("create sends v2 body with one GPU, SSH access, and no browser-controlled s
   assert.equal(result.status, "PROVISIONING");
   const body = JSON.parse(h.calls[1].body);
   assert.deepEqual(body, {
-    name: "agentcloud-job-123", image: spec.image, gpu: { id: spec.gpuId, count: 1 },
+    name: runpodPodName(jobId, expiresAt), image: spec.image, gpu: { id: spec.gpuId, count: 1 },
     disk: 40, cloud: "SECURE", startSsh: true, ports: ["22/tcp"], dataCenterIds: ["US-KS-2"],
   });
   assert.equal(h.calls[1].method, "POST");
   assert.equal(h.calls[1].headers["Content-Type"], "application/json");
+});
+
+test("expiry marker is stable, bounded, and required before allocation", async () => {
+  assert.equal(runpodJobMarker(jobId), `agentcloud-${jobId}--exp-`);
+  assert.equal(runpodPodName(jobId, expiresAt), `agentcloud-${jobId}--exp-1790460000`);
+  assert.ok(runpodPodName(jobId, expiresAt).length <= 63);
+  assert.throws(() => runpodPodName(jobId, "invalid"), /expiry/);
+  assert.throws(() => runpodJobMarker("not-a-uuid"), /job ID/);
+  const differentDeadline = harness([list([pod()])]);
+  await assert.rejects(differentDeadline.provider.createPod({ ...spec, expiresAt: "2026-09-26T23:00:00.000Z" }),
+    (error) => error.code === "marker_conflict");
+  assert.deepEqual(differentDeadline.calls.map((call) => call.method), ["GET"]);
 });
 
 test("lost create response reconciles the marker without issuing a second POST", async () => {
