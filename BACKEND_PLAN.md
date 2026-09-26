@@ -44,9 +44,9 @@ Analytics aggregate recorded run outcomes, durations, failures, and environment 
 | Run event | Run, monotonically increasing sequence, timestamp, actor, kind, bounded detail or output reference | Worker/runner with authenticated attribution |
 | Verification | Box/run, probe name, command or method, exit status, device/result summary, time, evidence reference | Worker from a real probe |
 
-The existing JSON project store and `/api/resources` route remain local coordination code. Resource registrations are metadata, requests remain `requested` with `not_evaluated` policy, and inference configurations remain drafts. The table above requires new storage and APIs; do not reinterpret old records as approvals or allocations.
+The existing JSON project store and `/api/resources` route remain local coordination code. Resource registrations are metadata, requests remain `requested` with `not_evaluated` policy, and inference configurations remain drafts. `auth:setup` now creates SQLite decision, job, and transition tables for the local worker contract. Those tables are not yet written by a human API or consumed by an EC2 provider. Do not reinterpret old resource records as approvals or allocations.
 
-Use a transactional database for employee sessions, decisions, jobs, and run transitions. PostgreSQL is the default proposal for this phase. A single worker can poll a database-backed job/outbox table for the MVP; a distributed queue is unnecessary until the load or failure evidence warrants it. Keep database migrations explicit and preserve existing local project records through an import or migration path rather than silently replacing them.
+Use a transactional database for employee sessions, decisions, jobs, and run transitions. The local single-worker foundation uses the existing Better Auth SQLite database for atomic decision/job creation, worker leases, and state transitions. PostgreSQL remains the proposed move before distributed workers or production multi-user deployment. A single worker can poll the job table for the MVP; a distributed queue is unnecessary until the load or failure evidence warrants it. Keep database migrations explicit and preserve existing local project records through an import or migration path rather than silently replacing them.
 
 ## State transitions and evidence
 

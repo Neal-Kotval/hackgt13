@@ -31,16 +31,13 @@ export function OrganizationDashboard() {
   function create(event: FormEvent<HTMLFormElement>) {event.preventDefault();const form=event.currentTarget;const values=new FormData(form);void run(async()=>{const result=await client.organization.create({name:String(values.get("name")),slug:String(values.get("slug"))});checked(result);form.reset();},"Organization created. You are its owner.");}
   function invite(event: FormEvent<HTMLFormElement>) {event.preventDefault();const form=event.currentTarget;const values=new FormData(form);void run(async()=>{checked(await client.organization.inviteMember({email:String(values.get("email")).trim(),role:values.get("role") as "member" | "admin",organizationId:active!.id}));form.reset();},data?.mailMode==="local"?"Invitation captured in the local mailbox. No external email was sent.":"Invitation submitted to the email provider.");}
   return <><header className="organization-header"><Link className="brand" href="/projects">agentcloud_</Link><div className="organization-header-actions"><EmployeeMenu /></div></header>
-  <main className="organization-page"><div className="section-heading"><h1>People & organizations</h1></div>
+  <main className="organization-page"><div className="section-heading"><h1>People & organizations</h1><a className="button" href="#create-organization">New organization</a></div>
     {error && <p className="auth-error" role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     {!data ? <p>Loading organizations…</p> : <>
       <section className="organization-panel"><h2>Your organizations</h2>
         {data.organizations.length===0 ? <p>Create your first organization, or open an invitation from your email.</p> : <ul className="organization-list">{data.organizations.map(org=><li key={org.id}><div><strong>{org.name}</strong><p>{org.role}{active?.id===org.id ? " · Active" : ""}</p></div><button className="button" disabled={busy || active?.id===org.id} onClick={()=>void run(async()=>{checked(await client.organization.setActive({organizationId:org.id}));},"Active organization changed.")}>Switch to {org.name}</button></li>)}</ul>}
         {active && <Link className="button primary" href="/projects">Open projects</Link>}
       </section>
-      <section className="organization-panel"><h2>Create an organization</h2><form className="organization-form" onSubmit={create}>
-        <label>Organization name<input name="name" maxLength={100} required /></label><label>Organization URL name<input name="slug" pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={80} placeholder="your-team" required /></label><button className="button primary" disabled={busy}>Create organization</button>
-      </form></section>
       {active && <section className="organization-panel"><h2>{active.name} · People</h2><p>Your role: {active.role}. Owners and admins manage all organization projects; members receive explicit project access.</p>
         {manage && <><h3>Invite a teammate</h3><p>{data.mailMode==="local"?"Development mailbox: messages are captured locally, not delivered to external inboxes.":"Invitations are submitted through your configured email provider."}</p><form className="organization-form" onSubmit={invite}>
           <label>Teammate email<input name="email" type="email" required /></label><label><span className="visually-hidden">Invitation role</span><Select name="role"><option value="member">Member</option><option value="admin">Admin</option></Select></label><button className="button primary" disabled={busy}>Send invitation</button>
@@ -62,6 +59,9 @@ export function OrganizationDashboard() {
       <ul className="organization-list">{data.assignments.flatMap(a=>{const m=data.members.find(m=>m.userId===a.userId && m.role==="member"),p=data.projects.find(p=>p.id===a.projectId);return m&&p?[<li key={`${a.userId}-${a.projectId}`}><span>{m.email} → {p.name}</span><button className="button ghost" disabled={busy} onClick={()=>void run(()=>mutate({type:"setProjectAccess",...a,allowed:false}),"Project access revoked.")}>Revoke project access</button></li>]:[];})}</ul>
       {data.legacyProjects.length>0&&<><h3>Existing projects</h3><p>Move projects you own into this organization. Previous collaborators must join the organization and receive project access.</p><ul className="organization-list">{data.legacyProjects.map(p=><li key={p.id}><strong>{p.name}</strong><button className="button" disabled={busy} onClick={()=>{if(window.confirm(`Move ${p.name} into ${active!.name}? Existing collaborators will need organization membership.`))void run(()=>mutate({type:"adoptProject",projectId:p.id}),"Project moved into this organization.");}}>Move into {active!.name}</button></li>)}</ul></>}
       </section>}
+      <section className="organization-panel" id="create-organization" aria-labelledby="create-organization-heading"><h2 id="create-organization-heading">Create an organization</h2><p>Start a separate organization for another team.</p><form className="organization-form" onSubmit={create}>
+        <label>Organization name<input name="name" maxLength={100} required /></label><label>Organization URL name<input name="slug" pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={80} placeholder="your-team" required /></label><button className="button primary" disabled={busy}>Create organization</button>
+      </form></section>
     </>}
   </main></>;
 }
