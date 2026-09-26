@@ -331,7 +331,7 @@
 }
 
 .resource-form input,
-.resource-form select,
+.resource-form .select-field,
 .resource-form textarea {
   width: 100%;
 }

@@ -210,10 +210,15 @@
   --control-height: 2.5rem;
   --control-height-small: 2rem;
   /* Dropdowns share comfortable label separation and text insets. */
-  --field-label-gap: var(--space-3);
-  --select-padding-block: var(--space-3);
-  --select-padding-inline: var(--space-4);
-  --select-min-height: var(--space-12);
+  --field-label-gap: var(--space-2);
+  --select-padding-block: var(--space-1);
+  --select-padding-inline: var(--space-3);
+  --select-min-height: var(--control-height-small);
+  --select-menu-max-height: 20rem;
+  /* Radix measures these geometry values at runtime; fallback only. */
+  --radix-select-trigger-width: 0;
+  --radix-select-content-available-width: 100vw;
+  --radix-select-content-available-height: 100vh;
   --panel-min-height: 15rem;
   --card-min-width: 18rem;
   --agent-card-min-width: 15rem;
@@ -234,6 +239,7 @@
   --grid-size: var(--space-6);
   --z-header: 10;
   --z-modal: 100;
+  --z-popover: 150;
   --z-toast: 200;
 }
 

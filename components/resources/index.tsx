@@ -1,4 +1,5 @@
 "use client";
+import { Select } from "@/components/ui/select";
 
 import { useState, type FormEvent } from "react";
 import {
@@ -199,7 +200,7 @@ export function ResourceCatalog({ project, onAction }: ResourceProps) {
             </label>
             <label>
               Type
-              <select
+              <Select
                 value={kind}
                 onChange={(event) =>
                   setKind(event.target.value as ResourceKind)
@@ -212,7 +213,7 @@ export function ResourceCatalog({ project, onAction }: ResourceProps) {
                       {entry.label}
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
             <label>
               Capability
@@ -428,7 +429,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
           </div>
           <label>
             Catalog resource
-            <select
+            <Select
               value={resourceId}
               onChange={(event) => setResourceId(event.target.value)}
             >
@@ -438,12 +439,12 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                   {resource.name} ({resource.status})
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           {!resourceId && (
             <label>
               Resource type
-              <select
+              <Select
                 value={kind}
                 onChange={(event) =>
                   setKind(event.target.value as ResourceKind)
@@ -454,22 +455,22 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                     {entry.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
           {!resourceId && kind === "gpu" && (
             <div className="resource-price-summary">
               <label>
                 GPU profile
-                <select value={demoGpuProfile.id} disabled>
+                <Select value={demoGpuProfile.id} disabled>
                   <option value={demoGpuProfile.id}>
                     {demoGpuProfile.label} · {demoGpuProfile.instanceType}
                   </option>
-                </select>
+                </Select>
               </label>
               <label>
                 Requested duration
-                <select
+                <Select
                   value={durationHours}
                   onChange={(event) =>
                     setDurationHours(Number(event.target.value))
@@ -480,7 +481,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                       {hours} {hours === 1 ? "hour" : "hours"}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <dl className="resource-facts resource-facts--compact">
                 <div>
@@ -509,7 +510,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
           )}
           <label>
             Task
-            <select
+            <Select
               value={taskId}
               onChange={(event) => setTaskId(event.target.value)}
             >
@@ -519,11 +520,11 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                   {task.title}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label>
             Agent
-            <select
+            <Select
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
             >
@@ -533,7 +534,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                   {agent.name} · {agent.role}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label>
             Purpose
@@ -772,26 +773,26 @@ export function InferenceDraft({ project, onAction }: ResourceProps) {
             </label>
             <label>
               Access scope
-              <select
+              <Select
                 value={accessScope}
                 onChange={(event) => setAccessScope(event.target.value)}
               >
                 <option>Project agents</option>
                 <option>Project members</option>
                 <option>Named identities</option>
-              </select>
+              </Select>
               <small>Intent only; no access rule is enforced.</small>
             </label>
             <label>
               Lifetime
-              <select
+              <Select
                 value={lifetime}
                 onChange={(event) => setLifetime(event.target.value)}
               >
                 <option>One run</option>
                 <option>Project session</option>
                 <option>Persistent service</option>
-              </select>
+              </Select>
               <small>Intent only; no expiry is enforced.</small>
             </label>
           </div>

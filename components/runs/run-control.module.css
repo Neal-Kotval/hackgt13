@@ -201,7 +201,7 @@
   font-size: var(--text-xs);
 }
 
-.filterLabel select {
+.filterLabel :global(.select-trigger) {
   min-height: var(--select-min-height);
   max-width: 100%;
   padding: var(--select-padding-block) var(--select-padding-inline);
@@ -212,7 +212,7 @@
   font: inherit;
 }
 
-.filterLabel select:focus-visible {
+.filterLabel :global(.select-trigger):focus-visible {
   outline: var(--focus-width) solid var(--color-accent);
   outline-offset: var(--focus-offset);
 }

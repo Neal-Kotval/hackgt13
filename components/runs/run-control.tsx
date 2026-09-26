@@ -1,4 +1,5 @@
 "use client";
+import { Select } from "@/components/ui/select";
 
 import { useState } from "react";
 import {
@@ -164,11 +165,11 @@ export function RunControl({ project }: { project: Project }) {
             </div>
             <label className={styles.filterLabel}>
               Identity
-              <select value={selectedAgent} onChange={(event) => setSelectedAgent(event.target.value)}>
+              <Select value={selectedAgent} onChange={(event) => setSelectedAgent(event.target.value)}>
                 <option value="all">All identities</option>
                 <option value="human">Local administrator</option>
                 {project.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
-              </select>
+              </Select>
             </label>
           </div>
           {events.length ? (
