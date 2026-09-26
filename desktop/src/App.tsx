@@ -439,11 +439,8 @@ export default function App() {
   return (
     <ShellNav
       section={section}
-      employeeLabel={
-        auth.user
-          ? `${auth.user.name} · ${auth.user.email}`
-          : "Signed in"
-      }
+      employeeName={auth.user?.name ?? "Signed in"}
+      employeeEmail={auth.user?.email ?? ""}
       busy={busy || sending || signingOut}
       onSectionChange={setSection}
       onSignOut={() => {

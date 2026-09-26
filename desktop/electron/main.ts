@@ -359,7 +359,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: "#0f1112",
+    backgroundColor: "#090b0f",
     title: "AgentCloud Chat",
     show: false,
     webPreferences: {
