@@ -280,12 +280,18 @@ test("an operator-pinned host key overrides the injected key only for its exact 
   assert.equal(operatorPinnedHostKey(undefined, "203.0.113.10", 30222), null);
 });
 
-test("budget RTX 4000 Ada profile preflights its own GPU and $0.50 ceiling", async () => {
-  const job = { id: "11111111-1111-4111-8111-111111111111", provider: "runpod", profile_id: "runpod-rtx-4000-ada",
+test("budget profile picks the cheapest in-stock listed GPU under its $0.50 ceiling", async () => {
+  const job = { id: "11111111-1111-4111-8111-111111111111", provider: "runpod", profile_id: "runpod-budget-gpu",
     max_duration_minutes: 60, created_at: new Date().toISOString() };
-  const catalog = (price) => ({ async listGpuTypes() { return [{ id: "NVIDIA RTX 4000 Ada Generation", availability: "LOW", secureHourlyUsd: price }]; },
-    async listPods() { return []; } });
-  assert.deepEqual(await preflightRunpod(catalog(0.28), job), { hourlyUsd: 0.28 });
-  await assert.rejects(preflightRunpod(catalog(0.6), job), /above \$0.5 ceiling/);
-  await assert.rejects(preflightRunpod(catalog(0.28), { ...job, profile_id: "runpod-a100" }), /Unapproved Runpod profile/);
+  const catalog = (entries) => ({ async listGpuTypes() { return entries; }, async listPods() { return []; } });
+  const gpu = (id, availability, secureHourlyUsd) => ({ id, availability, secureHourlyUsd });
+  assert.deepEqual(await preflightRunpod(catalog([
+    gpu("NVIDIA RTX 4000 Ada Generation", "NONE", 0.2),
+    gpu("NVIDIA RTX A5000", "LOW", 0.27),
+    gpu("NVIDIA RTX 2000 Ada Generation", "LOW", 0.24),
+    gpu("NVIDIA GeForce RTX 3070", "HIGH", 0.1),
+  ]), job), { hourlyUsd: 0.24, gpuId: "NVIDIA RTX 2000 Ada Generation" });
+  await assert.rejects(preflightRunpod(catalog([gpu("NVIDIA RTX A5000", "LOW", 0.6)]), job), /above \$0.5 ceiling/);
+  await assert.rejects(preflightRunpod(catalog([gpu("NVIDIA RTX A5000", "NONE", 0.27)]), job), /availability is unconfirmed/);
+  await assert.rejects(preflightRunpod(catalog([]), { ...job, profile_id: "runpod-a100" }), /Unapproved Runpod profile/);
 });

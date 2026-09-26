@@ -22,16 +22,17 @@ export const runpodGpuProfile = {
   label: "Runpod Secure Cloud · RTX 4090",
 } as const;
 
-// Cheapest in-stock Secure Cloud GPU for short smoke tests (live catalog ~$0.28/hr).
+// Short smoke tests: the worker takes the cheapest in-stock GPU from a fixed list
+// (RTX 2000 Ada, RTX A5000, RTX 4000 Ada) under the ceiling; the GPU proof confirms it.
 export const runpodBudgetGpuProfile = {
-  id: "runpod-rtx-4000-ada",
+  id: "runpod-budget-gpu",
   provider: "runpod",
-  gpuId: "NVIDIA RTX 4000 Ada Generation",
+  gpuId: "NVIDIA RTX 2000 Ada Generation",
   image: "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
   cloud: "SECURE",
   diskGb: 50,
   maxHourlyUsd: 0.5,
-  label: "Runpod Secure Cloud · RTX 4000 Ada",
+  label: "Runpod Secure Cloud · budget GPU",
 } as const;
 
 export const runpodGpuProfiles = [runpodBudgetGpuProfile, runpodGpuProfile] as const;

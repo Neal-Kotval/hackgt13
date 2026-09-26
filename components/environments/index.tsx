@@ -69,9 +69,9 @@ const profiles = [
   },
   {
     id: runpodBudgetGpuProfile.id,
-    label: "Runpod RTX 4000 Ada",
+    label: "Runpod budget GPU",
     icon: <Lightning aria-hidden="true" />,
-    summary: `Runpod Secure Cloud · budget GPU · up to $${runpodBudgetGpuProfile.maxHourlyUsd.toFixed(2)}/hour`,
+    summary: `RTX 2000 Ada, A5000, or 4000 Ada, whichever is in stock · up to $${runpodBudgetGpuProfile.maxHourlyUsd.toFixed(2)}/hour`,
     detail:
       "Billable, for short smoke tests. The worker checks live price and availability against the hourly ceiling before creating a Pod, and marks it ready only after an SSH and GPU probe succeeds.",
   },
