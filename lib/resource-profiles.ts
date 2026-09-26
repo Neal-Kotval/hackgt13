@@ -22,4 +22,16 @@ export const runpodGpuProfile = {
   label: "Runpod Secure Cloud · RTX 4090",
 } as const;
 
+// CPU-only Linux container on the machine running the docker-local worker.
+// Never present it as GPU capacity.
+export const localDockerSandboxProfile = {
+  id: "local-docker-sandbox",
+  provider: "docker-local",
+  label: "Local Docker sandbox · CPU only",
+  description:
+    "CPU-only Linux container on the machine running the worker. No GPU. Costs nothing. SSH access is trusted shell access, not a filesystem or command sandbox.",
+  gpu: null,
+  hourlyComputeUsd: 0,
+} as const;
+
 export const demoGpuDurations = [1, 2] as const;
