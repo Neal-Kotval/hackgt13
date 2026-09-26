@@ -1,0 +1,8 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!example.tfvars
+expiry.zip
+__pycache__/

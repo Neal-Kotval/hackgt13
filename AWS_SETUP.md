@@ -1,6 +1,6 @@
 # AWS GPU demo setup
 
-This is the AWS decision and live preflight record for [HAC-3](https://linear.app/startup-yc/issue/HAC-3/p21-aws-confirm-gpu-quota-capacity-and-demo-cost-limits). It does not mean AgentCloud can provision EC2 yet. The application still lacks the approved-job worker and EC2 provider described in [BACKEND_PLAN.md](BACKEND_PLAN.md).
+This is the AWS decision and live preflight record for [HAC-3](https://linear.app/startup-yc/issue/HAC-3/p21-aws-confirm-gpu-quota-capacity-and-demo-cost-limits). **Terraform in [infra/aws/](infra/aws/) is the source of truth for AgentCloud AWS resources.** Do not create or edit AWS resources manually; import any preexisting resource into Terraform before changing it. The application still lacks the approved-job worker and EC2 provider described in [BACKEND_PLAN.md](BACKEND_PLAN.md).
 
 ## Selected demo profile
 
@@ -18,21 +18,27 @@ This is the AWS decision and live preflight record for [HAC-3](https://linear.ap
 ## Read-only checks and account changes, 2026-09-26
 
 - AWS STS resolved the logged-in account to `662660921850`. The session is a root identity; routine worker calls must use a scoped role, never root credentials or keys.
-- The Free account plan was active with **$120 remaining credits** and an expiration of **2026-09-30 21:30 UTC**. Verify the balance and plan again before launching. The account may close when the Free plan expires; do not treat the workspace as long-term storage.
+- The Free account plan was active with **$140 remaining credits** at the latest check and an expiration of **2026-09-30 21:30 UTC**. The owner wants to stay below the original $100 free-credit allowance, regardless of the displayed balance. Verify the balance and plan again before launching. The account may close when the Free plan expires; do not treat the workspace as long-term storage.
 - The `us-east-1` On-Demand G/VT quota was **0 vCPU**. A request for **4 vCPU** (`L-DB2E81BA`) was submitted as `b2037d23f4be4eed829be427a7f4c063lLLSx7mB`; its last observed state was `CASE_OPENED` on 2026-09-26. This is not approval. No GPU instance has launched.
 - EC2 lists `g6.xlarge` offerings in several `us-east-1` availability zones. An offering listing does **not** prove launch-time capacity.
 - The AWS Price List API returned **$0.8048 per running hour** for Linux On-Demand `g6.xlarge` in US East (N. Virginia) on this date. Two hours of instance compute is about **$1.61**, before EBS, public IPv4 if used, data transfer, logs, taxes, and any other services. Recheck the quote before showing it to a user or launching.
 - The local Requests UI now shows this dated compute quote for a one- or two-hour GPU request and saves the selected profile and duration as intent. This does not provision a box or enforce an expiry. Other resource categories do not yet have priced provider profiles.
-- The account has a default VPC with public subnets. Network design for the run box is not yet applied; no new security group, subnet, role, or instance profile has been created.
-- Created and read back account-wide monthly cost budget `AgentCloud-Demo-Gross-25` for **$25**, with credits and refunds excluded. Actual-cost email notifications to the account owner are set at 50%, 80%, and 100%. A monthly budget is a warning, not a per-run cap or shutdown mechanism.
+- The account has a default VPC with public subnets. Terraform created security group `sg-0446333335c7914f6` with no inbound rules and only TCP 443 egress, an SSM instance role/profile, and GPU launch template `lt-068a4a4399752a47b`. The template specifies the verified AMI, `g6.xlarge`, IMDSv2, an encrypted 25 GiB gp3 root volume deleted on termination, and demo instance/volume tags. A launch worker must select a subnet with working SSM connectivity and verify it on the actual box.
+- Created and read back account-wide monthly cost budget `AgentCloud-Demo-Gross-25` for **$25**, with credits and refunds excluded. It and the existing quota were imported into Terraform state. Actual-cost email notifications to the account owner are set at 50%, 80%, and 100%. A monthly budget is a warning, not a per-run cap or shutdown mechanism.
+- Terraform created an EventBridge schedule and Lambda `agentcloud-demo-expiry` that check tagged demo instances every five minutes. For a launch to remain active, the worker must set UTC `AgentCloudCreatedAt` and `AgentCloudExpiresAt` tags on the instance, with the deadline no later than 120 minutes after creation. Missing, malformed, or expired tags cause a termination request on the next check. The role may terminate only instances tagged `Project=AgentCloudDemo` and `AgentCloudAutoExpire=true`. This is a backup guard, not a substitute for worker reconciliation or a guaranteed hard dollar cap. Its first real termination has not been tested because no instance was launched.
+- Terraform apply added 14 foundation resources and changed none of the imported budget/quota resources. A post-apply plan reported no changes. Direct checks confirmed no inbound security-group rules and no demo instances. A manual Lambda invocation returned `expired_count: 0` without error.
 - Cost Explorer returned `DataUnavailableException` for current-month costs; its history cannot currently confirm usage or remaining credit. The Free Tier plan API supplied the credit snapshot above.
+
+## Terraform workflow
+
+The configuration is pinned to account `662660921850` and Region `us-east-1`. It uses the existing AWS CLI login (`aws login`) and does not require an AWS access-key `.env` file. Before a change, verify `aws sts get-caller-identity`, the Free plan, quota, AMI, and price. Then run `terraform -chdir=infra/aws init`, `terraform -chdir=infra/aws plan`, and review the entire plan before `terraform -chdir=infra/aws apply`. Commit configuration and `.terraform.lock.hcl`, never state, plan files, credentials, or generated ZIPs. The current state is local to this workstation in `infra/aws/terraform.tfstate` and is gitignored; preserve it securely. Shared execution needs a protected remote state backend before another operator applies this configuration. The original budget and quota request were made before the Terraform decision and have been imported. The pending AWS quota case is not an approval and Terraform's quota declaration intentionally ignores value drift while AWS reviews it.
 
 ## Gates before a billable GPU run
 
 1. Confirm quota approval and recheck the Free plan, credits, price, and account identity. Do not upgrade the Free plan merely to obtain a GPU without a separate owner decision.
 2. Build the server-approved, idempotent job and worker contract. The browser must not receive AWS credentials or arbitrary launch parameters.
-3. Create a scoped worker role and a minimal SSM instance profile. Verify AMI, networking, no inbound SSH, encrypted gp3 volume, instance and volume tags, and deletion settings.
-4. Enforce a two-hour expiry independently of AWS Budgets, including reconciliation after worker restart. Test stop, restart, termination, and EBS deletion paths without claiming a preview operation performed them.
+3. Build a scoped worker role in Terraform. The SSM profile, launch template, and no-inbound security group are ready, but the worker must verify AMI, subnet connectivity, volume behavior, and tags at launch.
+4. Enforce a two-hour expiry independently of AWS Budgets, including reconciliation after worker restart. The Terraform expiry Lambda is a second guard. Test stop, restart, termination, and EBS deletion paths without claiming the current zero-instance check proved them.
 5. Launch one instance only from an approved job. Verify the non-root account, workspace, repository revision, GPU device, and CPU-versus-CUDA workload from that account. Record actual command evidence and cleanup state.
 
 If the quota request remains unavailable before the Free plan expires, use the known-host GPU path in [ROADMAP.md](ROADMAP.md) for the demonstration rather than claiming an EC2 launch.

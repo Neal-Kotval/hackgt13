@@ -37,7 +37,7 @@ The project control plane now includes Resources, Requests, Runs, Graph, and Inf
 
 The target HackGT MVP is employee login, a real remote run environment, server-enforced resource permission, one agent completing a GPU task, and a control surface mirroring actual work. Two-agent collaboration is a later extension. This repository does not yet fulfill the MVP. See [MVP_SPEC.md](MVP_SPEC.md) and [ROADMAP.md](ROADMAP.md) for concrete acceptance gates.
 
-The proposed backend uses one provider-neutral run-box contract: attach an existing SSH GPU host first when available, then implement EC2 as the first managed provider. [BACKEND_PLAN.md](BACKEND_PLAN.md) defines the records, worker, lifecycle, verification gates, and AWS decisions. This is planning documentation; the current app does not launch boxes.
+The proposed backend uses one provider-neutral run-box contract: attach an existing SSH GPU host first when available, then implement EC2 as the first managed provider. [BACKEND_PLAN.md](BACKEND_PLAN.md) defines the records, worker, lifecycle, verification gates, and AWS decisions. AWS resources are managed through [Terraform](infra/aws/); the current app does not launch boxes.
 
 ## Explore the application
 
@@ -110,7 +110,7 @@ The token check enforces the visual-system rules; it does not replace visual ins
 | [DESIGN.md](DESIGN.md) | Visual system, token rules, component patterns, and responsive behavior |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Application, storage, API, CLI, and future infrastructure boundaries |
 | [BACKEND_PLAN.md](BACKEND_PLAN.md) | Proposed identity, worker, run-box provider, events, and EC2 implementation contract |
-| [AWS_SETUP.md](AWS_SETUP.md) | Live AWS GPU demo preflight, spending policy, quota request, and launch gates |
+| [AWS_SETUP.md](AWS_SETUP.md) | Live AWS GPU demo preflight, Terraform workflow, spending policy, quota request, and launch gates |
 | [ROADMAP.md](ROADMAP.md) | Dependency-ordered delivery phases and acceptance gates |
 | [VERIFICATION.md](VERIFICATION.md) | Recorded check results, remaining verification, and browser-tool limitations |
 | [AGENTS.md](AGENTS.md) | Contributor rules for design, testing, collaboration, and truthful capabilities |

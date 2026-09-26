@@ -38,7 +38,7 @@ flowchart LR
 | Remote runner | Start the actual agent and workload, emit bounded attributed events | Heartbeat and model execution are distinct |
 | Event stream | Snapshot plus replay cursor after reconnect | Current SSE sends whole local-state snapshots and has no durable cursor |
 
-For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU host remains the quickest proof path if it is available. Both paths must verify the execution identity, workspace, GPU operation, and stop result. AWS Systems Manager may provide management access without inbound SSH, but IAM access to the instance does not establish file or command restrictions inside an agent's shell. [AWS Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
+For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU host remains the quickest proof path if it is available. Both paths must verify the execution identity, workspace, GPU operation, and stop result. AgentCloud AWS resources are defined and managed in [Terraform](infra/aws/); the current foundation has a launch template and expiry guard but no deployed run box or EC2 worker. AWS Systems Manager may provide management access without inbound SSH, but IAM access to the instance does not establish file or command restrictions inside an agent's shell. [AWS Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
 
 ## Routes
 
