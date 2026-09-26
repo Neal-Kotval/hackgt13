@@ -5,4 +5,5 @@
 *.tfvars
 !example.tfvars
 expiry.zip
+runpod_expiry.zip
 __pycache__/
