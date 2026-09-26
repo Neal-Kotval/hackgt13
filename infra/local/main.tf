@@ -47,7 +47,7 @@ resource "docker_container" "backend" {
   remove_volumes = false
 
   env = [
-    "NODE_ENV=production",
+    "NODE_ENV=development",
     "PORT=3000",
     "HOSTNAME=0.0.0.0",
     "BETTER_AUTH_URL=${local.backend_url}",

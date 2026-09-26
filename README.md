@@ -38,7 +38,7 @@ For the shared account, open the `AGENTCLOUD_URL` from Doppler in a browser, or 
 
 ### Docker backend simulation (no AWS)
 
-With Docker running, use `just sim-up`, then `just dev-docker`. The frontend is at `http://127.0.0.1:3001` and the isolated backend at `http://127.0.0.1:3002`. Both use the same container database. To change the backend port, set `AGENTCLOUD_SIM_PORT` consistently for both commands. This mode deliberately ignores the shared AWS URL, requires no Doppler or AWS credentials, and does not provision cloud compute. The container runs the real account, organization, project, and resource APIs; GPU/EC2 execution is not simulated as successful.
+With Docker running, use `just sim-up`, then `just dev-docker`. The frontend is at `http://127.0.0.1:3001` and the isolated backend at `http://127.0.0.1:3002`. Both use the same container database. To change the backend port, set `AGENTCLOUD_SIM_PORT` consistently for both commands. This mode deliberately ignores the shared AWS URL, requires no Doppler or AWS credentials, and does not provision cloud compute. The container uses Next’s development runtime and runs the real account, organization, project, and resource APIs; GPU/EC2 execution is not simulated as successful.
 
 The simulation starts empty. Sign up with a new local account; AWS accounts are not copied. Verification emails are captured privately in the data volume. To retrieve your own link, run `docker compose exec backend node scripts/docker/mail-link.mjs your@email.com`. Open the link on port 3002 and then sign in on port 3001. The command prints a sensitive, expiring verification link; do not share it in logs or tickets.
 

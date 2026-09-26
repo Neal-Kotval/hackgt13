@@ -29,4 +29,4 @@ function run(args) {
 }
 await run(["scripts/auth-setup.mjs"]);
 if (stopping) process.exit(0);
-await run(["node_modules/next/dist/bin/next", "start", "--hostname", "0.0.0.0", "--port", "3000"]);
+await run(["node_modules/next/dist/bin/next", "dev", "--hostname", "0.0.0.0", "--port", "3000"]);
