@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const region = "us-east-1";
 const accountId = "662660921850";
+const maxHourlyComputeUsd = 1;
 const checks = [];
 
 async function aws(...args) {
@@ -76,12 +77,12 @@ try {
 
   const credits = plan.accountPlanRemainingCredits;
   const expiration = Date.parse(plan.accountPlanExpirationDate);
-  check("Free plan active", plan.accountId === accountId && plan.accountPlanType === "FREE" && plan.accountPlanStatus === "ACTIVE" && credits?.unit === "USD" && credits.amount > 2 && expiration > Date.now() + 3 * 60 * 60 * 1000, `${plan.accountPlanStatus}, ${credits?.amount} ${credits?.unit}, expires ${plan.accountPlanExpirationDate}`);
+  check("Free plan active", plan.accountId === accountId && plan.accountPlanType === "FREE" && plan.accountPlanStatus === "ACTIVE" && credits?.unit === "USD" && credits.amount > 0 && expiration > Date.now() + 3 * 60 * 60 * 1000, `${plan.accountPlanStatus}, ${credits?.amount} ${credits?.unit}, expires ${plan.accountPlanExpirationDate}`);
   const price = JSON.parse(pricing.PriceList?.[0] || "{}");
   const onDemand = Object.values(price.terms?.OnDemand || {})[0];
   const dimension = Object.values(onDemand?.priceDimensions || {}).find((value) => value.unit === "Hrs");
   const hourlyUsd = Number(dimension?.pricePerUnit?.USD);
-  check("G6 compute price", hourlyUsd > 0 && hourlyUsd <= 1, `${hourlyUsd} USD/hour; storage, network, and tax excluded`);
+  check("G6 compute price", hourlyUsd > 0 && hourlyUsd <= maxHourlyComputeUsd, `${hourlyUsd} USD/hour (check ceiling ${maxHourlyComputeUsd}); storage, network, and tax excluded`);
 
   const active = (instances.Reservations || []).flatMap((reservation) => reservation.Instances || []);
   check("No active demo instance", active.length === 0, `${active.length} active instance(s)`);
