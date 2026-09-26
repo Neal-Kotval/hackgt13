@@ -107,6 +107,56 @@ test("migration upgrades existing job tables and stale workers cannot transition
   old.close();
 });
 
+test("Runpod schema upgrade preserves AWS jobs and dependent foreign keys", () => {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = ON");
+  db.exec(`CREATE TABLE run_box_decision (
+    id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, request_hash TEXT NOT NULL,
+    resource_request_id TEXT NOT NULL UNIQUE, project_id TEXT NOT NULL, employee_id TEXT NOT NULL,
+    organization_id TEXT NOT NULL, project_role TEXT NOT NULL CHECK(project_role IN ('owner', 'member')),
+    provider TEXT NOT NULL CHECK(provider IN ('ssh-host', 'aws-ec2')),
+    max_duration_minutes INTEGER NOT NULL CHECK(max_duration_minutes IN (60, 120)),
+    outcome TEXT NOT NULL CHECK(outcome IN ('approved', 'denied')), reason TEXT NOT NULL,
+    policy_version TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE TABLE run_box_job (
+    id TEXT PRIMARY KEY, decision_id TEXT NOT NULL UNIQUE REFERENCES run_box_decision(id),
+    project_id TEXT NOT NULL, provider TEXT NOT NULL CHECK(provider IN ('ssh-host', 'aws-ec2')),
+    max_duration_minutes INTEGER NOT NULL CHECK(max_duration_minutes IN (60, 120)),
+    state TEXT NOT NULL CHECK(state IN ('queued', 'allocating', 'connecting', 'verifying', 'ready', 'stopping', 'stopped', 'failed')),
+    repo_url TEXT, repo_revision TEXT, provider_resource_id TEXT, worker_id TEXT, lease_expires_at TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0, stop_requested_at TEXT, stop_requested_by TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(provider, provider_resource_id));
+    CREATE TABLE run_box_transition (id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT NOT NULL REFERENCES run_box_job(id), from_state TEXT, to_state TEXT NOT NULL,
+      actor TEXT NOT NULL, reason TEXT, evidence_ref TEXT, created_at TEXT NOT NULL);
+    CREATE TABLE aws_gpu_verification (job_id TEXT PRIMARY KEY REFERENCES run_box_job(id), value TEXT);
+    CREATE TABLE run_box_preallocation_cleanup (job_id TEXT PRIMARY KEY REFERENCES run_box_job(id), status TEXT);`);
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO run_box_decision VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    "decision-1", "idem-1", "hash-1", "request-1", "project-1", "employee-1", "org-1", "owner", "aws-ec2", 60,
+    "approved", "approved", "runbox-v1", now);
+  db.prepare(`INSERT INTO run_box_job (id, decision_id, project_id, provider, max_duration_minutes, state, repo_url,
+    created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    "aws-job", "decision-1", "project-1", "aws-ec2", 60, "failed", "https://example.com/repo.git", now, now);
+  db.prepare("INSERT INTO run_box_transition (job_id, to_state, actor, created_at) VALUES (?, ?, ?, ?)")
+    .run("aws-job", "failed", "worker", now);
+  db.prepare("INSERT INTO aws_gpu_verification VALUES (?, ?)").run("aws-job", "evidence");
+  db.prepare("INSERT INTO run_box_preallocation_cleanup VALUES (?, ?)").run("aws-job", "retry");
+  migrateRunBoxJobs(db);
+  migrateRunBoxJobs(db);
+  assert.equal(db.prepare("SELECT provider FROM run_box_job WHERE id = 'aws-job'").get().provider, "aws-ec2");
+  assert.equal(db.prepare("SELECT value FROM aws_gpu_verification WHERE job_id = 'aws-job'").get().value, "evidence");
+  assert.equal(db.prepare("SELECT status FROM run_box_preallocation_cleanup WHERE job_id = 'aws-job'").get().status, "retry");
+  assert.deepEqual(db.pragma("foreign_key_check"), []);
+  assert.equal(db.pragma("foreign_keys", { simple: true }), 1);
+  const created = saveRunBoxDecision(db, request({ idempotencyKey: "runpod-idem", resourceRequestId: "runpod-request",
+    provider: "runpod", profileId: "runpod-rtx-4090" }));
+  assert.equal(created.job.profile_id, "runpod-rtx-4090");
+  assert.equal(claimRunBoxJob(db, "runpod-worker", new Date(), 60_000, "runpod").id, created.job.id);
+  assert.deepEqual(db.pragma("foreign_key_check"), []);
+  db.close();
+});
+
 test("approved request is atomic and idempotent across retries", () => {
   const db = database();
   try {
