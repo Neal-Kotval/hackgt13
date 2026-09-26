@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
+import { execFileSync } from "node:child_process";
+import { generateKeyPairSync } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { migrateSshKeys, registerSshKey, sshFingerprint } from "../lib/ssh-keys.mjs";
+import { getRunBoxSshEndpoint } from "../lib/run-box-ssh.mjs";
 import { migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
 import { migrateRunpodCleanup } from "../lib/runpod-reconcile.mjs";
-import { preflightRunpod, workOneRunpodJob } from "../lib/runpod-worker.mjs";
+import { preflightRunpod, RUNPOD_SSH_USER, validateRunpodSshConfig, workOneRunpodJob } from "../lib/runpod-worker.mjs";
 
 function setup() {
   const db = new Database(":memory:");
@@ -30,11 +37,12 @@ function setup() {
 
 function provider(jobId, overrides = {}) {
   const calls = [];
-  const pod = { id: "pod123", name: `agentcloud-${jobId}`, status: "RUNNING",
+  const pod = { id: "pod123", name: `agentcloud-${jobId}--exp-1790460000`, status: "RUNNING",
     ssh: { direct: { host: "203.0.113.10", port: 30222, username: "root" } } };
   return { calls,
     async listGpuTypes() { calls.push("catalog"); return [{ id: "NVIDIA GeForce RTX 4090", availability: "HIGH", secureHourlyUsd: .49 }]; },
     async listPods() { calls.push("list"); return []; },
+    async findPodByJobId() { calls.push("find"); return null; },
     async createPod(input) { calls.push(["create", input]); return pod; },
     async getPod(id) { calls.push(["get", id]); return pod; }, ...overrides };
 }
@@ -112,5 +120,106 @@ test("stop request before allocation does not create a Pod", async () => {
   const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker", verify: async () => {} });
   assert.equal(result.state, "stopping");
   assert.equal(service.calls.length, 0);
+  db.close();
+});
+
+function ed25519PublicKey() {
+  const raw = Buffer.from(generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x, "base64url");
+  const type = Buffer.from("ssh-ed25519");
+  const length = (n) => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b; };
+  return `ssh-ed25519 ${Buffer.concat([length(type.length), type, length(raw.length), raw]).toString("base64")}`;
+}
+
+test("Runpod create pins a generated host key and verify trusts only that key", async () => {
+  const { db, job } = setup();
+  migrateSshKeys(db);
+  db.prepare("INSERT INTO user VALUES ('employee-2', 1), ('outsider', 1)").run();
+  db.prepare("INSERT INTO member VALUES ('employee-2', 'org-1', 'member'), ('outsider', 'org-1', 'member')").run();
+  db.prepare("INSERT INTO project_membership VALUES ('employee-2', 'project-1', 'member')").run();
+  const ownerKey = ed25519PublicKey();
+  const memberKey = ed25519PublicKey();
+  registerSshKey(db, "employee-1", { label: "Owner laptop", publicKey: ownerKey });
+  registerSshKey(db, "employee-2", { label: "Member laptop", publicKey: memberKey });
+  registerSshKey(db, "outsider", { label: "Outsider", publicKey: ed25519PublicKey() });
+  const operatorKey = ed25519PublicKey();
+  const service = provider(job.id);
+  let seen;
+  const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker",
+    connection: { keyFile: "/private/key", publicKey: `${operatorKey} operator@worker` },
+    checkSshConfig() {}, checkCleanupGuard: async () => true,
+    verify: async (_job, connection) => {
+      seen = { ...connection, knownHosts: readFileSync(connection.knownHostsFile, "utf8") };
+      return proof(job.id);
+    } });
+  assert.equal(result.state, "ready");
+
+  const [, input] = service.calls.find((call) => Array.isArray(call) && call[0] === "create");
+  assert.match(input.expiresAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(input.cmd.slice(0, 2), ["bash", "-c"]);
+  assert.match(input.cmd[2], /\/etc\/ssh\/ssh_host_ed25519_key/);
+  assert.match(input.cmd[2], /exec \/start\.sh$/);
+  assert.equal(input.env.AGENTCLOUD_OPERATOR_PUBLIC_KEY, operatorKey);
+  assert.equal(Buffer.from(input.env.AGENTCLOUD_AUTHORIZED_KEYS_B64, "base64").toString(),
+    `${operatorKey}\n${ownerKey}\n${memberKey}\n`);
+
+  // The private key in the create env derives exactly the pinned public key.
+  const directory = mkdtempSync(path.join(os.tmpdir(), "agentcloud-worker-test-"));
+  try {
+    const file = path.join(directory, "key");
+    writeFileSync(file, Buffer.from(input.env.AGENTCLOUD_SSH_HOST_KEY_B64, "base64"), { mode: 0o600 });
+    const derived = execFileSync("ssh-keygen", ["-y", "-f", file], { encoding: "utf8" }).trim().split(" ").slice(0, 2).join(" ");
+    assert.equal(derived, input.env.AGENTCLOUD_SSH_HOST_PUBLIC_KEY);
+    assert.equal(seen.knownHosts, `[203.0.113.10]:30222 ${derived}\n`);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+  assert.equal(existsSync(seen.knownHostsFile), false);
+  assert.equal(seen.publicKey, operatorKey);
+  assert.deepEqual(seen.authorizedKeys, [operatorKey, ownerKey, memberKey]);
+
+  const endpoint = getRunBoxSshEndpoint(db, job.id);
+  assert.equal(endpoint.username, RUNPOD_SSH_USER);
+  assert.equal(endpoint.host, "203.0.113.10");
+  assert.equal(endpoint.port, 30222);
+  assert.equal(endpoint.hostPublicKey, input.env.AGENTCLOUD_SSH_HOST_PUBLIC_KEY);
+  assert.deepEqual(endpoint.authorizedFingerprints, [sshFingerprint(ownerKey), sshFingerprint(memberKey)]);
+  // The private host key is not persisted anywhere in the database.
+  const dump = JSON.stringify(db.prepare("SELECT * FROM runpod_ssh_host_key").all()) +
+    JSON.stringify(db.prepare("SELECT * FROM run_box_ssh_endpoint").all());
+  assert.equal(dump.includes("PRIVATE KEY"), false);
+  assert.equal(dump.includes(input.env.AGENTCLOUD_SSH_HOST_KEY_B64), false);
+  db.close();
+});
+
+test("Runpod SSH config no longer requires an operator known_hosts file", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "agentcloud-worker-config-"));
+  try {
+    const keyFile = path.join(directory, "id_ed25519");
+    writeFileSync(keyFile, "placeholder", { mode: 0o600 });
+    validateRunpodSshConfig({ keyFile, publicKey: ed25519PublicKey() });
+    assert.throws(() => validateRunpodSshConfig({ keyFile, publicKey: "ssh-rsa AAAA" }), /ed25519 public key/);
+    assert.throws(() => validateRunpodSshConfig({ keyFile: path.join(directory, "missing"), publicKey: ed25519PublicKey() }), /unavailable/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("recovered Pod from an interrupted create keeps its recorded host key pin", async () => {
+  const { db, job } = setup();
+  migrateSshKeys(db);
+  const pinned = ed25519PublicKey();
+  const service = provider(job.id);
+  const pod = await service.getPod("pod123");
+  service.calls.length = 0;
+  service.findPodByJobId = async () => { service.calls.push("find"); return pod; };
+  const generateHostKey = async () => { throw new Error("must not generate a replacement key"); };
+  const settings = { workerId: "runpod-worker", connection: { keyFile: "/private/key", publicKey: ed25519PublicKey() },
+    checkSshConfig() {}, checkCleanupGuard: async () => true, generateHostKey,
+    verify: async (_job, connection) => { assert.match(readFileSync(connection.knownHostsFile, "utf8"), new RegExp(pinned.split(" ")[1].replace(/\+/g, "\\+"))); return proof(job.id); } };
+  // First (interrupted) attempt recorded this pin before its POST.
+  const { migrateRunpodHostKeys } = await import("../lib/runpod-worker.mjs");
+  migrateRunpodHostKeys(db);
+  db.prepare("INSERT INTO runpod_ssh_host_key VALUES (?, ?, '[]', ?)").run(job.id, pinned, new Date().toISOString());
+  const result = await workOneRunpodJob(db, service, settings);
+  assert.equal(result.state, "ready");
+  const [, input] = service.calls.find((call) => Array.isArray(call) && call[0] === "create");
+  assert.equal(input.env, undefined);
+  assert.equal(getRunBoxSshEndpoint(db, job.id).hostPublicKey, pinned);
   db.close();
 });

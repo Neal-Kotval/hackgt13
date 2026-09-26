@@ -47,7 +47,6 @@ async function runpodCycle() {
     throw new Error("Runpod cleanup remains unconfirmed; refusing another allocation");
   const connection = {
     keyFile: process.env.AGENTCLOUD_RUNPOD_SSH_KEY_FILE,
-    knownHostsFile: process.env.AGENTCLOUD_RUNPOD_KNOWN_HOSTS_FILE,
     publicKey: process.env.AGENTCLOUD_RUNPOD_SSH_PUBLIC_KEY,
   };
   const result = await workOneRunpodJob(db, provider, { workerId, connection, verify: verifyRunpodSsh });
