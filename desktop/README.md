@@ -55,14 +55,14 @@ Or set `AGENTCLOUD_DESKTOP_DEVTOOLS=1` in `desktop/.env`. DevTools are attached 
 ## Local chat loop
 
 1. Sign in with the same Better Auth employee email/password as the web app (web must be running at `AGENTCLOUD_URL`, default `http://127.0.0.1:3000`).
-2. Open **Local chat** → **New chat**.
-3. Type a message. **Enter** sends; **Shift+Enter** inserts a newline.
+2. Open **Local chat**. Type and **Enter** to send — the first send auto-creates a thread (no mandatory **New chat** click).
+3. **Shift+Enter** inserts a newline. **New chat** still starts another empty thread while one is open.
 4. With `OPENAI_API_KEY` set, the assistant streams a real reply into the thread.
 5. Without credentials, the failed assistant turn explains how to configure `.env` — it does not invent a successful reply.
 6. Create a second chat, switch between them or to **Tasks** and back — titles/messages reload from disk; drafts stay in memory for the session.
 7. **Sign out** clears the employee session; relaunch shows the sign-in screen again (revoked sessions are not silently restored).
 
-Unsent composer drafts are kept **per thread in memory** while the app runs. They are cleared on send and are **not** restored after relaunch.
+Unsent composer drafts are kept **per thread in memory** while the app runs (plus a landing draft when no thread is selected). They are cleared on send and are **not** restored after relaunch.
 
 ## Employee authentication (HAC-24)
 
