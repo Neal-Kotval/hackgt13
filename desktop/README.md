@@ -8,7 +8,7 @@ One window, two primary sections:
 
 | Section | Role |
 | --- | --- |
-| **Tasks** | Future home for AgentCloud task authoring against the shared backend. Empty placeholder today — no seeded tasks; composer comes later. |
+| **Tasks** | Project/environment picker + task composer against the shared backend (`addTask`). Local chat is separate. |
 | **Local chat** | Codex-like on-device threads (`threads.json`). Does **not** create AgentCloud tasks and does **not** sync to the web dashboard. |
 
 Machine-first journey: connect/verify a machine in the **web** app → return to desktop **Tasks** to author work against a ready environment → monitor on the web. Local chat remains an optional scratchpad beside that flow.
@@ -88,6 +88,10 @@ Renderer helpers: `desktop/src/lib/server-api.ts` → `getState()` / `postAction
 - Server down → actionable error (“Start the web app with just…”). Cookies/tokens are never logged.
 
 The **Tasks** panel loads live projects via `getState` (project picker). Empty servers show a connect-on-web CTA; resource statuses are shown as returned (`registered`, `verified`, `not_evaluated`, …) without inventing `ready`.
+
+## Task authoring (HAC-33 / HAC-34)
+
+On **Tasks**, pick a project, then use **Create task** (title, instructions, agent, optional environment). Submit calls main-process `postAction` → `POST /api/state` `{ type: "addTask", projectId, title, owner }`. Instructions are folded into `title` (≤200) because the server has no instructions field yet. Environment is UI context only; Start agent stays disabled. Created tasks appear in the server task list and the web dashboard — not in Local chat `threads.json`.
 
 ## Persistence
 

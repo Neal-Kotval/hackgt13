@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { TaskComposer } from "./TaskComposer";
 import { getState } from "../lib/server-api";
 import type { AgentCloudStateSummary, ProjectSnapshot } from "../lib/types";
 
@@ -128,21 +129,25 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
           </p>
 
           {selected ? (
-            <ProjectDetail project={selected} webBaseUrl={webBaseUrl} />
+            <>
+              <ProjectDetail project={selected} webBaseUrl={webBaseUrl} />
+              <TaskComposer
+                key={selected.id}
+                project={selected}
+                webBaseUrl={webBaseUrl}
+                onCreated={() => refresh()}
+              />
+            </>
           ) : null}
         </div>
       ) : null}
 
       <div className="tasks-empty tasks-aside-panel" role="note">
-        <h2>Composer coming later</h2>
+        <h2>Machine-first reminder</h2>
         <p>
-          Creating tasks with instructions + agent + environment is a follow-up.
-          <strong> Start agent</strong> stays disabled until a verified ready
-          environment exists and the runner lands.
-        </p>
-        <p>
-          <strong>Local chat</strong> does not create AgentCloud tasks and does
-          not sync to the web dashboard.
+          Connect and verify environments on the web first. Desktop authors
+          tasks against the shared backend; Local chat does not create
+          AgentCloud tasks.
         </p>
       </div>
     </main>
@@ -227,17 +232,13 @@ function ProjectDetail({
 
       <DetailList
         title="Tasks (server)"
-        empty="No tasks yet. Desktop composer will create them later."
+        empty="No tasks yet. Use Create task below."
         items={project.tasks.map((task) => ({
           id: task.id,
           primary: task.title,
           secondary: `owner ${task.owner} · ${task.status}`,
         }))}
       />
-
-      <button type="button" className="btn btn-primary" disabled>
-        Start agent (unavailable)
-      </button>
     </section>
   );
 }
