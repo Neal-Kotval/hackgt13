@@ -31,6 +31,7 @@ function newSessionId(): string {
  * text over the preload bridge.
  */
 export function TerminalPanel({ runBoxId, title, onClose }: TerminalPanelProps) {
+  const panelRef = useRef<HTMLElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -41,6 +42,8 @@ export function TerminalPanel({ runBoxId, title, onClose }: TerminalPanelProps) 
   useEffect(() => {
     const surface = surfaceRef.current;
     if (!surface) return;
+    // The panel renders below the list; bring it into view without animation.
+    panelRef.current?.scrollIntoView({ block: "nearest" });
     const font = terminalFontFrom(surface);
     const terminal = new Terminal({
       theme: terminalThemeFromTokens(),
@@ -150,7 +153,7 @@ export function TerminalPanel({ runBoxId, title, onClose }: TerminalPanelProps) 
   const canReconnect = status.kind === "closed" || status.kind === "error";
 
   return (
-    <section className="terminal-panel" aria-label={`Terminal for ${title}`}>
+    <section ref={panelRef} className="terminal-panel" aria-label={`Terminal for ${title}`}>
       <div className="terminal-header">
         <div className="terminal-heading">
           <h2>{title}</h2>
