@@ -22,7 +22,7 @@ The infrastructure definition lives in [`infra/aws-auth/`](infra/aws-auth/). Ter
    terraform -chdir=infra/aws-auth output -raw public_url
    ```
 
-   Open `/sign-in` at that HTTPS URL. All visitors reach the same EC2 app and SQLite database; AWS credentials are needed only by the operator running Terraform/deploy scripts. The EC2 instance must be running. The two-hour stop timer still applies, so restart the instance before another demo.
+   Open `/sign-in` at that HTTPS URL. The same URL is stored as `AGENTCLOUD_URL` in shared Doppler `hackgt/dev` for desktop/CLI clients; update that Doppler value if Terraform replaces the CloudFront distribution. All visitors reach the same EC2 app and SQLite database; AWS credentials are needed only by the operator running Terraform/deploy scripts. The EC2 instance must be running. The two-hour stop timer still applies, so restart the instance before another demo.
 
 5. Existing verified accounts can sign in at the public URL. To read a previously captured verification link as the operator, use:
 
