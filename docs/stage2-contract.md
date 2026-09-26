@@ -61,6 +61,8 @@ GET  /api/agent-runs?projectId=         -> { runs: [...] }          (newest firs
 GET  /api/agent-runs/:id                -> { run, events: [...] }
 ```
 
+Implemented details (HAC-124): `GET /api/agent-runs/:id` also accepts `?afterSeq=<n>` and returns at most 1000 events with `hasMore`. Runs carry `employeeName`, `environment { provider, profileId, state }` and `eventCount`. The events route accepts bodies larger than the shared 32 KiB JSON limit so a full 200-event batch fits. A repeated seq is a duplicate and never overwrites the first report. Events are still accepted after finish (late flushes). A retried finish with the same status is idempotent; a different status returns 409. The web Runs page polls every 3–4 seconds and shows these rows as reports from the desktop client, not independent proof of execution.
+
 ## Desktop IPC (HAC-122 Codex panel, HAC-123 terminal)
 
 All SSH happens in the main process, over the existing pinned host key and device key (`/api/run-boxes/:id/connection`). Tokens and private keys never go over IPC.

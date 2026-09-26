@@ -501,7 +501,7 @@ function EnvironmentCard({
       : copy.detail;
 
   return (
-    <li className="resource-request-card resource-panel environment-card" aria-labelledby={titleId}>
+    <li id={`rb-${job.id}`} className="resource-request-card resource-panel environment-card" aria-labelledby={titleId}>
       <div className="resource-detail-title">
         <div className="environment-title">
           <h4 id={titleId}>{profileLabel(job)}</h4>
