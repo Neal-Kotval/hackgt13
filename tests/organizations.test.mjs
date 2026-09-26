@@ -128,3 +128,14 @@ test("public local-mail configuration keeps authenticated organization reads ava
   if(mode===undefined)delete process.env.AGENTCLOUD_MAIL_MODE;else process.env.AGENTCLOUD_MAIL_MODE=mode;
  }
 });
+test("a fresh sign-in (e.g. the desktop app) starts in the employee's organization",async()=>{
+ const person=await signup("fresh-session@example.test");
+ const create=await call("organization/create",{name:"Fresh session org",slug:"fresh-session-org"},person.cookie);assert.equal(create.status,200);
+ const created=await create.json();
+ const again=await call("sign-in/email",{email:person.email,password:person.password});assert.equal(again.status,200);
+ const session=await auth.api.getSession({headers:new Headers({cookie:cookieFrom(again)})});
+ assert.equal(session.session.activeOrganizationId,created.id);
+ const loner=await signup("no-org-session@example.test");
+ const lonerSession=await auth.api.getSession({headers:new Headers({cookie:loner.cookie})});
+ assert.equal(lonerSession.session.activeOrganizationId ?? null,null);
+});
