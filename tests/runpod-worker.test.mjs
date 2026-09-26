@@ -109,6 +109,21 @@ test("missing independent cleanup guard blocks Runpod POST before catalog checks
   db.close();
 });
 
+test("guard losing freshness during catalog preflight blocks Runpod POST", async () => {
+  const { db, job } = setup();
+  const service = provider(job);
+  let checks = 0;
+  const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker", connection: {},
+    checkSshConfig() {}, checkCleanupGuard: async () => ++checks === 1,
+    verify: async () => { throw new Error("must not verify"); } });
+  assert.equal(result.state, "allocating");
+  assert.equal(result.retry, true);
+  assert.equal(checks, 2);
+  assert.equal(service.calls.some((call) => Array.isArray(call) && call[0] === "create"), false);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM runpod_create_attempt").get().count, 0);
+  db.close();
+});
+
 test("stop request before allocation does not create a Pod", async () => {
   const { db, job } = setup();
   requestRunBoxStop(db, job.id, "owner");

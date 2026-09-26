@@ -12,6 +12,7 @@ import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
 import { migrateRunpodCleanup, reconcileRunpodJobs } from "../lib/runpod-reconcile.mjs";
 import { workOneRunpodJob } from "../lib/runpod-worker.mjs";
 import { loadRunpodApiKey } from "../lib/runpod-secret.mjs";
+import { checkRunpodExpiryGuard } from "./runpod-expiry-preflight.mjs";
 
 const mode = process.argv[2];
 const providerName = process.argv[3] || "aws-ec2";
@@ -43,7 +44,8 @@ async function runpodCycle() {
   migrateRunBoxJobs(db);
   migrateRunpodEvidence(db);
   migrateRunpodCleanup(db);
-  const reconciled = await reconcileRunpodJobs(db, provider, { workerId, requestStop: requestRunBoxStop });
+  const reconciled = await reconcileRunpodJobs(db, provider, { workerId, requestStop: requestRunBoxStop,
+    checkCleanupGuard: checkRunpodExpiryGuard });
   if (reconciled.some((item) => item.status === "retry"))
     throw new Error("Runpod cleanup remains unconfirmed; refusing another allocation");
   const connection = {
@@ -51,7 +53,8 @@ async function runpodCycle() {
     knownHostsFile: process.env.AGENTCLOUD_RUNPOD_KNOWN_HOSTS_FILE,
     publicKey: process.env.AGENTCLOUD_RUNPOD_SSH_PUBLIC_KEY,
   };
-  const result = await workOneRunpodJob(db, provider, { workerId, connection, verify: verifyRunpodSsh });
+  const result = await workOneRunpodJob(db, provider, { workerId, connection, verify: verifyRunpodSsh,
+    checkCleanupGuard: checkRunpodExpiryGuard });
   if (result) console.log(`Processed Runpod job ${result.jobId}: ${result.state}${result.retry ? " (verification pending)" : ""}`);
   return result;
 }
