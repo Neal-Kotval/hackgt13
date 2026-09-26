@@ -115,3 +115,9 @@ The normal project navigation is Overview, Environments, Runs, and Settings. Ove
 Semantic action variants use sage (`.button.success`) for approvals, access grants, and acceptance; coral (`.button.danger`) for removal, revocation, decline, and stopping resources; and amber (`.button.warning`) for operations that require caution, such as moving ownership context. General creation, navigation, and sending actions remain blue or neutral. Variants use the paired soft surface at rest and the semantic fill on hover, with `--color-status-action-text` as the dark foreground. Labels, disabled states, and immediate focus outlines remain visible. Task and request badges use the corresponding status roles; an approved request still does not mean a resource is ready.
 
 The project summary and metadata appear only on Overview, followed by a `--space-8` gap. Subsection pages begin with their own content beneath the breadcrumb; their page title remains available to assistive technology. Section stacks own their gaps; embedded cards, setup layouts, and resource views must not add a second outer margin or padding at that boundary. Preserve each panel’s internal padding independently.
+
+The desktop renderer shares the web token source and Select primitive. Its
+Tasks, Environments, and Project chat destinations use the same flush glass
+sidebar and account-card treatment, with a focus-managed drawer on narrow
+windows. Desktop errors use danger colors; agent identity colors must not
+stand in for failed states.

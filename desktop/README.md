@@ -178,3 +178,9 @@ Do not invent a parallel palette in this package. Use semantic tokens only
 `npm run tokens:check`, which scans `desktop/src/**/*.{css,tsx}` alongside web
 surfaces and fails on raw colors, inline styles, or undefined tokens.
 
+
+The desktop shell follows the web navigation treatment: a flush vertical glass
+sidebar, icon navigation, an account card, and a keyboard-accessible drawer on
+narrow windows. Flat dark surfaces, rounded controls, and semantic action colors
+consume the same tokens. Project and task dropdowns reuse the web Radix Select
+primitive directly, including keyboard navigation and accessible names.

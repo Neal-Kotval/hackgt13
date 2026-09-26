@@ -1,3 +1,4 @@
+import { Select } from "./ui/Select";
 import { useCallback, useEffect, useState } from "react";
 import { TaskComposer } from "./TaskComposer";
 import type { DeepLinkParseResult } from "../lib/deep-link";
@@ -174,9 +175,8 @@ export function ProjectPicker({
       {load.kind === "ok" && load.state.projectCount > 0 ? (
         <div className="picker-layout">
           <label className="picker-select">
-            <span>Project</span>
-            <select
-              className="control-select"
+            <span className="visually-hidden">Project</span>
+            <Select
               aria-label="Project"
               value={selectedId ?? ""}
               onChange={(event) => setSelectedId(event.target.value || null)}
@@ -186,7 +186,7 @@ export function ProjectPicker({
                   {project.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <p className="brand-meta">
             Shared backend revision {load.state.revision} ·{" "}
