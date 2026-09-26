@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 import { getDatabase } from "../lib/auth.mjs";
-import { migrateRunBoxJobs } from "../lib/run-box-jobs.mjs";
+import { migrateRunBoxJobs, requestRunBoxStop } from "../lib/run-box-jobs.mjs";
+import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
 import { assumeGpuWorkerRole, createAwsGpuProvider } from "../lib/aws-gpu-provider.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
 
 const mode = process.argv[2];
+const workerId = `gpu-worker-${process.pid}`;
 if (process.argv.length !== 3 || !["--once", "--loop"].includes(mode)) {
   console.error("Usage: node scripts/run-box-worker.mjs --once|--loop");
   process.exit(2);
@@ -17,7 +19,11 @@ async function cycle() {
   await provider.identifyWorker();
   const db = getDatabase();
   migrateRunBoxJobs(db);
-  const result = await workOneAwsGpuJob(db, provider);
+  migrateRunBoxCleanup(db);
+  const reconciled = await reconcileAwsRunBoxes(db, provider, { workerId, requestStop: requestRunBoxStop });
+  if (reconciled.some((item) => item.status === "retry"))
+    throw new Error("GPU cleanup remains unconfirmed; refusing another allocation");
+  const result = await workOneAwsGpuJob(db, provider, { workerId });
   if (result) console.log(`Processed GPU job ${result.jobId}: ${result.state} (${result.evidenceRef})`);
   return result;
 }

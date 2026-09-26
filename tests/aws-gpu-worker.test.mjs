@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
-import { migrateRunBoxJobs, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
+import { migrateRunBoxJobs, saveRunBoxDecision, requestRunBoxStop } from "../lib/run-box-jobs.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
 
 function setup() {
@@ -45,4 +45,31 @@ test("revoked owner membership prevents allocation", async () => {
   await assert.rejects(workOneAwsGpuJob(db, provider, { workerId: "worker-1" }), /revoked before launch/);
   assert.equal(launched, false);
   assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+});
+
+test("queued cancellation is stopped without invoking EC2", async () => {
+  const { db, job } = setup();
+  requestRunBoxStop(db, job.id, "employee-1");
+  const provider = { async identifyWorker() {}, async allocate() { throw new Error("must not allocate"); } };
+  const result = await workOneAwsGpuJob(db, provider, { workerId: "worker-1" });
+  assert.equal(result.state, "stopped");
+  assert.equal(result.evidenceRef, `job:never-allocated:${job.id}`);
+});
+
+test("stop after an allocation attempt waits for reconciler EBS proof", async () => {
+  const { db, job } = setup();
+  const calls = [];
+  const provider = {
+    async identifyWorker() {},
+    async allocate() {
+      calls.push("allocate");
+      requestRunBoxStop(db, job.id, "employee-1");
+      return { InstanceId: "i-1234567890abcdef0" };
+    },
+    async terminate() { throw new Error("worker must defer termination to reconciler"); },
+  };
+  const result = await workOneAwsGpuJob(db, provider, { workerId: "worker-1" });
+  assert.equal(result.state, "stopping");
+  assert.deepEqual(calls, ["allocate"]);
+  assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopping");
 });
