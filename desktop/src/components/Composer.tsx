@@ -50,11 +50,15 @@ export function Composer({
         />
         <div className="composer-actions">
           {sending ? (
-            <button type="button" className="btn btn-danger" onClick={onStop}>
+            <button type="button" className="button danger" onClick={onStop}>
               Stop
             </button>
           ) : (
-            <button type="submit" className="btn btn-primary" disabled={!canSend}>
+            <button
+              type="submit"
+              className="button primary"
+              disabled={!canSend}
+            >
               Send
             </button>
           )}

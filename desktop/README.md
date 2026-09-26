@@ -105,9 +105,10 @@ From the repository root:
 
 ```sh
 just desktop-check   # TypeScript
+just desktop-tokens  # design token contract (desktop + web)
 just desktop-test    # local chat store tests
 just desktop-build   # production renderer + electron bundles
-just desktop-verify  # all three
+just desktop-verify  # check + tokens + test + build
 ```
 
 ## Limitations (intentional for D1 + D2.0)
@@ -121,4 +122,13 @@ just desktop-verify  # all three
 
 ## Design tokens
 
-Renderer CSS imports the shared AgentCloud token file from `app/tokens.css`. Do not invent a parallel palette in this package.
+Renderer CSS imports the shared AgentCloud token file from `app/tokens.css`
+(Hanken Grotesk / JetBrains Mono via `/fonts/*`). Vite serves the repo
+`public/` directory as the desktop `publicDir`, so Electron resolves the same
+font URLs as the Next app.
+
+Do not invent a parallel palette in this package. Use semantic tokens only
+(`.button`, `.eyebrow`, `.tag`, compact selects). `just desktop-verify` runs
+`npm run tokens:check`, which scans `desktop/src/**/*.{css,tsx}` alongside web
+surfaces and fails on raw colors, inline styles, or undefined tokens.
+

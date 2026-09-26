@@ -24,11 +24,11 @@ export function ShellNav({
       <header className="shell-nav" aria-label="Primary">
         <div className="shell-brand">
           <div className="brand">AgentCloud</div>
-          <div className="employee-label" title={employeeLabel}>
+          <div className="local-label" title={employeeLabel}>
             {employeeLabel}
           </div>
         </div>
-        <nav className="section-tabs" aria-label="App sections">
+        <nav className="control-nav" aria-label="App sections">
           <button
             type="button"
             className="section-tab"
@@ -50,7 +50,7 @@ export function ShellNav({
         </nav>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="button ghost"
           onClick={onSignOut}
           disabled={busy}
         >

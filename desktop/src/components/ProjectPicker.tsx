@@ -64,7 +64,7 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
         </div>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="button ghost"
           onClick={() => {
             void refresh();
           }}
@@ -111,6 +111,7 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
           <label className="picker-select">
             <span>Project</span>
             <select
+              className="control-select"
               aria-label="Project"
               value={selectedId ?? ""}
               onChange={(event) => setSelectedId(event.target.value || null)}
@@ -152,6 +153,28 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
       </div>
     </main>
   );
+}
+
+function statusTagClass(status: string): string {
+  switch (status) {
+    case "verified":
+      return "tag green";
+    case "registered":
+    case "pending":
+    case "in_progress":
+      return "tag cyan";
+    case "failed":
+    case "denied":
+    case "blocked":
+      return "tag pink";
+    case "not_evaluated":
+    default:
+      return "tag yellow";
+  }
+}
+
+function readableStatus(status: string): string {
+  return status.replaceAll("_", " ");
 }
 
 function ProjectDetail({
@@ -202,7 +225,8 @@ function ProjectDetail({
         items={project.resources.map((resource) => ({
           id: resource.id,
           primary: resource.name,
-          secondary: `${resource.kind} · status ${resource.status}`,
+          secondary: resource.kind,
+          status: resource.status,
         }))}
       />
 
@@ -212,9 +236,10 @@ function ProjectDetail({
         items={project.resourceRequests.map((request) => ({
           id: request.id,
           primary: request.purpose,
-          secondary: `request ${request.status} · decision ${request.decisionStatus}${
+          secondary: `decision ${request.decisionStatus}${
             request.decisionReason ? ` — ${request.decisionReason}` : ""
           }`,
+          status: request.status,
         }))}
       />
 
@@ -224,9 +249,8 @@ function ProjectDetail({
         items={project.agents.map((agent) => ({
           id: agent.id,
           primary: `${agent.name} (${agent.role})`,
-          secondary: `status ${agent.status}${
-            agent.lastSeen ? ` · last seen ${agent.lastSeen}` : ""
-          }`,
+          secondary: agent.lastSeen ? `last seen ${agent.lastSeen}` : undefined,
+          status: agent.status,
         }))}
       />
 
@@ -236,7 +260,8 @@ function ProjectDetail({
         items={project.tasks.map((task) => ({
           id: task.id,
           primary: task.title,
-          secondary: `owner ${task.owner} · ${task.status}`,
+          secondary: `owner ${task.owner}`,
+          status: task.status,
         }))}
       />
     </section>
@@ -250,7 +275,12 @@ function DetailList({
 }: {
   title: string;
   empty: string;
-  items: { id: string; primary: string; secondary: string }[];
+  items: {
+    id: string;
+    primary: string;
+    secondary?: string;
+    status?: string;
+  }[];
 }) {
   return (
     <div className="detail-list">
@@ -261,8 +291,20 @@ function DetailList({
         <ul>
           {items.map((item) => (
             <li key={item.id}>
-              <span className="detail-primary">{item.primary}</span>
-              <span className="detail-secondary">{item.secondary}</span>
+              <div className="detail-row">
+                <span className="detail-primary">{item.primary}</span>
+                {item.status ? (
+                  <span
+                    className={statusTagClass(item.status)}
+                    title={item.status}
+                  >
+                    {readableStatus(item.status)}
+                  </span>
+                ) : null}
+              </div>
+              {item.secondary ? (
+                <span className="detail-secondary">{item.secondary}</span>
+              ) : null}
             </li>
           ))}
         </ul>

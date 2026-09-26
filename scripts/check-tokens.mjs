@@ -159,6 +159,7 @@ async function check(file) {
 
 await walk(path.join(root, "app"));
 await walk(path.join(root, "components"));
+await walk(path.join(root, "desktop/src"));
 if (failures.length) {
   console.error(
     `Token contract failed (${failures.length}):\n${failures.join("\n")}`,
