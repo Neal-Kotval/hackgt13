@@ -262,7 +262,7 @@ pre {
   display: inline-block;
   width: var(--dot-size);
   height: var(--dot-size);
-  border-radius: var(--radius-none);
+  border-radius: var(--radius-full);
   background: currentColor;
   flex-shrink: 0;
 }
@@ -364,7 +364,7 @@ h1 {
   overflow-wrap: anywhere;
 }
 .project-meta svg {
-  color: var(--color-subtle);
+  color: var(--color-info);
   width: var(--icon-sm);
   height: var(--icon-sm);
 }
@@ -379,7 +379,7 @@ h1 {
   flex-wrap: wrap;
   font-size: var(--text-xs);
   padding: var(--space-3) 0;
-  color: var(--color-accent);
+  color: var(--color-info);
 }
 .demo-note .muted {
   color: var(--color-subtle);

@@ -1,6 +1,5 @@
 "use client";
 import { Select } from "@/components/ui/select";
-import { EmployeeMenu } from "./employee-auth";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -40,7 +39,6 @@ import type { State, Project, Agent, Task, Handoff } from "@/lib/types";
 import { ResourceCatalog, ResourceRequests, InferenceDraft } from "./resources";
 import { RunControl } from "./runs/run-control";
 import { ResourceGraph } from "./resource-graph";
-type Tab = "overview" | "board" | "services" | "activity";
 type Action = Record<string, unknown>;
 const iconProps = { weight: "duotone" as const };
 function Icon({ children }: { children: ReactNode }) {
@@ -87,7 +85,6 @@ export function CloudApp() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [online, setOnline] = useState(false);
-  const [tab, setTab] = useState<Tab>("overview");
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<"task" | "handoff" | null>(null);
   const [selectedHandoff, setSelectedHandoff] = useState<Handoff | null>(null);
@@ -101,6 +98,7 @@ export function CloudApp() {
       ? state?.projects.find((p) => p.id === id)
       : state?.projects[0];
   const page = pieces[2] || "dashboard";
+  const tab = ["board", "services", "activity"].includes(page) ? page : "overview";
   const refresh = async () => {
     const response = await fetch("/api/state");
     if (!response.ok) throw new Error("Could not load projects.");
@@ -118,7 +116,6 @@ export function CloudApp() {
     return () => source.close();
   }, []);
   useEffect(() => {
-    setTab("overview");
     setFilter("all");
   }, [pathname]);
   useEffect(() => {
@@ -159,40 +156,6 @@ export function CloudApp() {
     return data;
   }
   const base = `/projects/${project?.id || id || ""}`;
-  const nav = [
-    {
-      label: "Projects",
-      url: "/projects",
-      icon: <SquaresFour {...iconProps} />,
-    },
-    ...(project
-      ? [
-          {
-            label: "Workspace",
-            url: base,
-            icon: <TerminalWindow {...iconProps} />,
-          },
-          {
-            label: "Review",
-            url: base + "/review",
-            icon: <GitPullRequest {...iconProps} />,
-          },
-          {
-            label: "Connect",
-            url: base + "/agents",
-            icon: <PlugsConnected {...iconProps} />,
-          },
-        ]
-      : []),
-  ];
-  const isActiveNav = (label: string) =>
-    (label === "Projects" && (isProjects || isSetup)) ||
-    (label === "Workspace" &&
-      !isProjects &&
-      !isSetup &&
-      ["dashboard", "resources", "requests", "runs", "graph", "inference", "desktop"].includes(page)) ||
-    (label === "Review" && page === "review") ||
-    (label === "Connect" && page === "agents");
   if (!state)
     return (
       <main className="loading">
@@ -209,32 +172,7 @@ export function CloudApp() {
       </main>
     );
   return (
-    <div className="app-frame">
-      <a className="skip-link" href="#workspace-content">
-        Skip to content
-      </a>
-      <header className="global-header">
-        <Link className="brand" href="/projects">
-          agentcloud
-          <span className="brand-cursor" aria-hidden="true" />
-        </Link>
-        <nav aria-label="Main navigation">
-          {nav.map((n) => (
-            <Link
-              key={n.label}
-              className={isActiveNav(n.label) ? "active" : ""}
-              aria-current={isActiveNav(n.label) ? "page" : undefined}
-              href={n.url}
-            >
-              <Icon>{n.icon}</Icon>
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="header-right">
-          <EmployeeMenu />
-        </div>
-      </header>
+    <>
       <main className="app-shell" id="workspace-content" tabIndex={-1}>
         <div className="breadcrumb">
           <Link href="/projects">workspace</Link>
@@ -327,24 +265,6 @@ export function CloudApp() {
                 worktrees. GPU job approvals and observed status appear under Requests.
               </span>
             </div>
-            <nav className="control-nav" aria-label="Project control plane">
-              {[
-                ["Resources", "resources"],
-                ["Requests", "requests"],
-                ["Runs", "runs"],
-                ["Graph", "graph"],
-                ["Inference", "inference"],
-              ].map(([label, segment]) => (
-                <Link
-                  key={segment}
-                  href={base + "/" + segment}
-                  aria-current={page === segment ? "page" : undefined}
-                  className={page === segment ? "active" : ""}
-                >
-                  {label}
-                </Link>
-              ))}
-            </nav>
             {page === "agents" ? (
               <AgentSetup
                 project={project}
@@ -376,50 +296,6 @@ export function CloudApp() {
               <InferenceDraft project={project} onAction={resourceAction} />
             ) : (
               <>
-                <div
-                  className="workspace-tabs"
-                  role="tablist"
-                  aria-label="Workspace views"
-                >
-                  {(["overview", "board", "services", "activity"] as Tab[]).map(
-                    (t) => (
-                      <button
-                        key={t}
-                        role="tab"
-                        aria-selected={tab === t}
-                        className={tab === t ? "selected" : ""}
-                        onClick={() => setTab(t)}
-                      >
-                        {t === "overview" ? (
-                          <SquaresFour />
-                        ) : t === "board" ? (
-                          <ListChecks />
-                        ) : t === "services" ? (
-                          <Database />
-                        ) : (
-                          <Lightning />
-                        )}
-                        {t === "board"
-                          ? "Task board"
-                          : t[0].toUpperCase() + t.slice(1)}
-                        {t !== "overview" && (
-                          <span className="count">
-                            {t === "board"
-                              ? project.tasks.length
-                              : t === "services"
-                                ? project.services.length
-                                : project.events.length}
-                          </span>
-                        )}
-                      </button>
-                    ),
-                  )}
-                  <Link className="view-link" href={base + "/desktop"}>
-                    <Desktop />
-                    CLI connection
-                    <ArrowUpRight />
-                  </Link>
-                </div>
                 {tab === "overview" ? (
                   <div className="dashboard-grid">
                     <div className="main-column">
@@ -512,7 +388,7 @@ export function CloudApp() {
                           label="Shared services"
                           number={project.services.length}
                           action={
-                            <button onClick={() => setTab("services")}>
+                            <button onClick={() => router.push(base + "/services")}>
                               View registry <ArrowUpRight />
                             </button>
                           }
@@ -796,7 +672,7 @@ export function CloudApp() {
           </div>
         </Modal>
       )}
-    </div>
+    </>
   );
 }
 function SectionTitle({

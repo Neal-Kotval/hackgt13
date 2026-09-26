@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./tokens.css";
 import "./globals.css";
+import { WebsiteShell } from "@/components/site-shell";
 export const metadata: Metadata = {
   title: "AgentCloud — a workspace for your agent team",
   description:
@@ -13,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><WebsiteShell>{children}</WebsiteShell></body>
     </html>
   );
 }
