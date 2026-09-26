@@ -22,7 +22,25 @@ export function localWatchdogReady(file = watchdogFile(), now = Date.now()) {
   } catch { return false; }
 }
 
+// Read-only: confirms the API key resolves by listing Pods once. Never creates,
+// changes, or terminates a Pod, and never prints the key.
+export async function checkRunpodAccess(provider) {
+  const pods = await provider.listPods();
+  return { total: pods.length, managed: pods.filter((pod) => pod.name.startsWith("agentcloud-")).length };
+}
+
 async function main() {
+  const args = process.argv.slice(2);
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--check")) {
+    console.error("Usage: node scripts/runpod-local-watchdog.mjs [--check]");
+    process.exit(2);
+  }
+  if (!process.env.RUNPOD_API_KEY) throw new Error("RUNPOD_API_KEY is not set; run through doppler run");
+  if (args[0] === "--check") {
+    const { total, managed } = await checkRunpodAccess(createRunpodProvider({ apiKey: process.env.RUNPOD_API_KEY }));
+    console.log(`Runpod API key resolved. Pods visible: ${total} (managed agentcloud-*: ${managed}). No Pod was changed.`);
+    return;
+  }
   const maxMinutes = Number(process.env.AGENTCLOUD_RUNPOD_LOCAL_MAX_MINUTES || 15);
   if (!Number.isFinite(maxMinutes) || maxMinutes < 1 || maxMinutes > 120) throw new Error("Invalid watchdog limit");
   const provider = createRunpodProvider({ apiKey: process.env.RUNPOD_API_KEY });
@@ -54,4 +72,10 @@ async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main();
+if (import.meta.url === `file://${process.argv[1]}`) {
+  try { await main(); }
+  catch (error) {
+    console.error(`Runpod local watchdog failed: ${String(error.message).slice(0, 200)}`);
+    process.exitCode = 1;
+  }
+}

@@ -20,6 +20,19 @@ Every cycle lists managed Pods and reconciles stop requests and expired jobs bef
 
 After SSH proof, `runpod_gpu_verification` stores the non-root account/UID, workspace, checked-out repository SHA, GPU device, CPU/CUDA timings and correctness, output hash, and evidence reference. A running Pod is not proof of a completed GPU test. The Pod remains billable until termination is confirmed.
 
+## Local supervised test from a developer machine
+
+This path is for a short, attended test only. It replaces the independent AWS guard with a local watchdog process, so it depends on this machine staying awake and online. Staging keeps the AWS guard.
+
+1. Doppler supplies `RUNPOD_API_KEY` from project `hackgt`, config `dev`. Doppler CLI access is scoped per directory: run `doppler setup --no-interactive` in this worktree, or set `AGENTCLOUD_DOPPLER_SCOPE` to a directory that already has access (for example the main checkout). The recipes pass `--project hackgt --config dev` explicitly.
+2. `just runpod-local-check` is read-only. It lists Pods once and prints only the count, for example `Pods visible: 0 (managed agentcloud-*: 0)`. It never creates, changes, or terminates a Pod and never prints the key.
+3. In one terminal, run `just runpod-watchdog` (default limit 15 minutes; `just runpod-watchdog 30` for 30, maximum 120). It terminates every `agentcloud-*` Pod that many minutes after first seeing it and writes a heartbeat to `.agentcloud/runpod-local-watchdog.json` (or `AGENTCLOUD_RUNPOD_WATCHDOG_FILE`).
+4. In another terminal, run `just worker-runpod-local` alongside `just dev`. It sets `AGENTCLOUD_RUNPOD_LOCAL=1`, so it takes the key from the environment and refuses to allocate unless the watchdog heartbeat is under 30 seconds old. It loads `.env.local` like `just worker-docker`, so it uses the app's database.
+
+The worker's operator SSH key lives outside the repository in `~/.agentcloud-runpod-local/` (`AGENTCLOUD_RUNPOD_LOCAL_DIR` overrides it). `just runpod-local-key`, which the worker recipe runs first, creates `id_ed25519` there with `ssh-keygen` if absent and leaves an existing key untouched. The private key is passed to the worker only as a file path and is never printed; add only `id_ed25519.pub` to Runpod Credentials if you need operator access. Manual host-key pins for local tests go in `known_hosts` in the same directory.
+
+Approving a Runpod environment while the worker runs creates a billable Pod. Stop the worker before stopping the watchdog, and confirm in the Runpod console that no `agentcloud-*` Pod remains.
+
 ## Live launch blockers
 
 - A Runpod API key in the scoped Secrets Manager secret and billing authorization for a bounded Pod run are required. Neither is in the repository.
