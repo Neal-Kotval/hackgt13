@@ -104,7 +104,11 @@ On **Tasks**, pick a project, then use **Create task** (title, instructions, age
 }
 ```
 
-`instructions` and `environmentId` round-trip in `GET /api/state`. Binding `environmentId` requires a project resource with status `verified`; unknown or unverified ids are rejected. Start agent stays disabled until a runner endpoint exists ([HAC-35](https://linear.app/startup-yc/issue/HAC-35)). Created tasks appear on the web dashboard — not in Local chat `threads.json`.
+`instructions` and `environmentId` round-trip in `GET /api/state`. Binding `environmentId` requires a project resource with status `verified`; unknown or unverified ids are rejected.
+
+### Start agent (HAC-35)
+
+The Tasks panel includes a **Start agent** control that selects a created task + verified environment. It stays **disabled** with an explicit reason: “Agent start requires remote runner — not implemented.” Desktop does not call Local chat / OpenAI as a substitute, and it never marks a task running without server evidence. When a start endpoint lands, wire it here with `taskId` + `environmentId` + agent owner and surface the server decision only.
 
 ## Persistence
 
