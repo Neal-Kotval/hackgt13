@@ -742,7 +742,7 @@ function RequestCard({
           <dl className="resource-facts resource-facts--compact">
             <div><dt>Provider</dt><dd>AWS EC2{job.provider_resource_id ? ` · ${job.provider_resource_id}` : " · not allocated"}</dd></div>
             <div><dt>Approved limit</dt><dd>{job.max_duration_minutes} minutes</dd></div>
-            <div><dt>Cleanup</dt><dd>{job.state === "stopped" ? "Termination confirmed by worker" : job.stop_requested_at ? "Stop requested; awaiting confirmation" : "Not requested"}</dd></div>
+            <div><dt>Cleanup</dt><dd>{job.state === "stopped" ? job.provider_resource_id ? "EC2 release confirmed by worker" : "Cancelled before allocation" : job.stop_requested_at ? "Stop requested; awaiting confirmation" : "Not requested"}</dd></div>
           </dl>
           {projectRole === "owner" && job.state !== "stopped" && !job.stop_requested_at && (
             <button className="button" type="button" disabled={Boolean(busy)} onClick={() => void onStop(job)}>
