@@ -103,6 +103,9 @@ test("uncertain create with no visible pod or duplicate markers fails closed", a
   const duplicate = harness([list([pod(), pod({ id: "pod456" })])]);
   await assert.rejects(duplicate.provider.createPod(spec), RunpodAmbiguousCreateError);
   assert.equal(duplicate.calls.filter((call) => call.method === "POST").length, 0);
+  const timedOut = harness([list([]), json({ detail: "request timed out" }, 408), list([])]);
+  await assert.rejects(timedOut.provider.createPod(spec), RunpodAmbiguousCreateError);
+  assert.equal(timedOut.calls.filter((call) => call.method === "POST").length, 1);
 });
 
 test("upstream errors and malformed replies never expose API keys or response bodies", async () => {
