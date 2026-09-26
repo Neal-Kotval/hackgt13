@@ -227,20 +227,19 @@ export function CloudApp() {
               <div>
                 <div className="eyebrow">
                   <span className="status-dot" />
-                  Project workspace / setup pending
+                  Project workspace
                 </div>
                 <h1>{project.name}</h1>
                 <p>
-                  Coordinate work, inspect requests, and follow recorded
-                  activity.
+                  {page === "environments" ? "Manage machines, resource requests, and approvals." : page === "settings" ? "Set up agent connections for this project." : "Follow your project’s progress and results."}
                 </p>
               </div>
-              <div className="heading-actions">
-                <Link className="button primary" href={base + "/agents"}>
+              {page !== "environments" && <div className="heading-actions">
+                <Link className="button primary" href={base + "/environments"}>
                   <Plus />
-                  Connect agent
+                  Manage environments
                 </Link>
-              </div>
+              </div>}
             </section>
             <div className="project-meta">
               <span>
@@ -257,15 +256,24 @@ export function CloudApp() {
               </span>
               <span className="meta-right">Project workspace pending</span>
             </div>
-            <div className="demo-note">
-              <Warning />
-              <span>Project saved.</span>
-              <span className="muted">
-                Saving this project does not provision a workspace or Git
-                worktrees. GPU job approvals and observed status appear under Requests.
-              </span>
-            </div>
-            {page === "agents" ? (
+            {page === "environments" ? (
+              <div className="project-sections">
+                <ResourceRequests project={project} onAction={resourceAction} />
+                <details className="project-disclosure">
+                  <summary>Machines &amp; resource catalog</summary>
+                  <p className="section-description">Save the machines and resources your project may use. Registration alone does not connect or verify a machine.</p>
+                  <ResourceCatalog project={project} onAction={resourceAction} />
+                </details>
+              </div>
+            ) : page === "settings" ? (
+              <div className="project-sections">
+                <AgentSetup project={project} action={action} busy={busy} notify={setNotice} />
+                <details className="project-disclosure" id="cli-guide">
+                  <summary>CLI connection guide</summary>
+                  <DesktopPage project={project} notify={setNotice} />
+                </details>
+              </div>
+            ) : page === "agents" ? (
               <AgentSetup
                 project={project}
                 action={action}
@@ -297,140 +305,27 @@ export function CloudApp() {
             ) : (
               <>
                 {tab === "overview" ? (
-                  <div className="dashboard-grid">
-                    <div className="main-column">
-                      <section>
-                        <SectionTitle
-                          label="Agent team"
-                          number={project.agents.length}
-                          action={
-                            <Link href={base + "/agents"}>
-                              Manage agents <ArrowUpRight />
-                            </Link>
-                          }
-                        />
-                        {project.agents.length ? (
-                          <div className="agent-grid">
-                            {project.agents.map((a) => (
-                              <AgentCard
-                                key={a.id}
-                                agent={a}
-                                project={project}
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <Empty
-                            title="Your team starts here"
-                            text="Connect an agent, give it a role, and assign its first task."
-                            href={base + "/agents"}
-                            label="Connect an agent"
-                          />
-                        )}
-                      </section>
-                      {project.handoffs.some((h) => !h.accepted) && (
-                        <div className="handoff-callout">
-                          <div className="handoff-symbol">
-                            <PaperPlaneTilt {...iconProps} />
-                          </div>
-                          <div>
-                            <span className="eyebrow pink-text">
-                              Handoff · awaiting you
-                            </span>
-                            <h3>
-                              {project.handoffs.find((h) => !h.accepted)!.title}
-                            </h3>
-                            <p>
-                              {ownerName(
-                                project,
-                                project.handoffs.find((h) => !h.accepted)!.from,
-                              )}{" "}
-                              <ArrowRight />{" "}
-                              {ownerName(
-                                project,
-                                project.handoffs.find((h) => !h.accepted)!.to,
-                              )}{" "}
-                              · context ready to pass
-                            </p>
-                          </div>
-                          <button
-                            className="button pink-button"
-                            onClick={() => {
-                              setSelectedHandoff(
-                                project.handoffs.find((h) => !h.accepted)!,
-                              );
-                              setModal("handoff");
-                            }}
-                          >
-                            Review <ArrowUpRight />
-                          </button>
-                        </div>
-                      )}
-                      <section>
-                        <SectionTitle
-                          label="Project tasks"
-                          number={project.tasks.length}
-                          action={
-                            <button onClick={() => setModal("task")}>
-                              <Plus />
-                              New task
-                            </button>
-                          }
-                        />
-                        <TaskTable
-                          project={project}
-                          action={action}
-                          busy={busy}
-                        />
-                      </section>
-                      <section>
-                        <SectionTitle
-                          label="Shared services"
-                          number={project.services.length}
-                          action={
-                            <button onClick={() => router.push(base + "/services")}>
-                              View registry <ArrowUpRight />
-                            </button>
-                          }
-                        />
-                        <Services project={project} notify={setNotice} />
-                      </section>
-                    </div>
-                    <aside className="side-column">
-                      <ActivityFeed project={project} filter="all" />
-                      <div className="workspace-card">
-                        <div className="section-heading">
-                          <span>
-                            <HardDrives />
-                            Workspace
-                          </span>
-                          <Tag tone="cyan">pending</Tag>
-                        </div>
-                        <dl>
-                          <dt>Compute</dt>
-                          <dd>{project.compute}</dd>
-                          <dt>Worktrees</dt>
-                          <dd>Not provisioned</dd>
-                          <dt>Access</dt>
-                          <dd>Trusted clients</dd>
-                          <dt>Persistence</dt>
-                          <dd>Local disk</dd>
-                        </dl>
-                        <p>
-                          <ShieldCheck />
-                          Each client gets a separate identity. Shell
-                          restrictions are not claimed.
-                        </p>
-                      </div>
-                      <div className="team-note">
-                        <GitBranch {...iconProps} />
-                        <p>
-                          Work independently.
-                          <br />
-                          <strong>Build something together.</strong>
-                        </p>
-                      </div>
-                    </aside>
+                  <div className="project-sections">
+                    <section className="workspace-card">
+                      <SectionTitle label="Environments" />
+                      <p>Set up the machine your agent will use, then follow its request and approval status.</p>
+                      <dl>
+                        <dt>Saved resources</dt><dd>{(project.resources ?? []).length}</dd>
+                        <dt>Resource requests</dt><dd>{(project.resourceRequests ?? []).length}</dd>
+                      </dl>
+                      <p className="muted">Saved resources are configuration records. Check requests for allocation and verification evidence.</p>
+                      <Link className="button secondary" href={base + "/environments"}>Manage environments <ArrowUpRight /></Link>
+                    </section>
+                    <section>
+                      <SectionTitle label="Task progress" number={project.tasks.length} />
+                      <p className="section-description">Monitor tasks here. The desktop app is the intended place to create tasks and send instructions; its integration is still in progress.</p>
+                      <TaskTable project={project} />
+                    </section>
+                    <section className="workspace-card">
+                      <SectionTitle label="Agent activity" number={project.agents.length} />
+                      <p>See connection status, recorded activity, and command results reported by your agents.</p>
+                      <Link className="button secondary" href={base + "/runs"}>View runs <ArrowUpRight /></Link>
+                    </section>
                   </div>
                 ) : tab === "board" ? (
                   <section className="standalone">
@@ -798,20 +693,12 @@ function StatusSelect({
     </Select>
   );
 }
-function TaskTable({
-  project,
-  action,
-  busy,
-}: {
-  project: Project;
-  action: (a: Action) => Promise<unknown>;
-  busy: boolean;
-}) {
+function TaskTable({ project }: { project: Project }) {
   if (!project.tasks.length)
     return (
       <Empty
-        title="Give your team a direction"
-        text="Create a task and choose an agent to own it."
+        title="No tasks yet"
+        text="Tasks will appear here when they are added to this project."
       />
     );
   return (
@@ -858,7 +745,7 @@ function TaskTable({
                 </span>
               </td>
               <td>
-                <StatusSelect task={t} action={action} busy={busy} />
+                <Tag>{t.status}</Tag>
               </td>
             </tr>
           ))}
@@ -1482,9 +1369,7 @@ function AgentSetup({
             </div>
           ))}
         </div>
-        <Link className="text-link" href={`/projects/${project.id}/desktop`}>
-          CLI setup guide <ArrowUpRight />
-        </Link>
+        <p className="muted">For terminal setup, expand the CLI connection guide in Settings.</p>
       </aside>
     </div>
   );
@@ -1620,7 +1505,7 @@ function DesktopPage({
             <p>Choose a role and generate a scoped connection token.</p>
             <Link
               className="button secondary"
-              href={`/projects/${project.id}/agents`}
+              href={`/projects/${project.id}/settings`}
             >
               Agent setup <ArrowRight />
             </Link>
