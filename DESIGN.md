@@ -101,3 +101,5 @@ Before accepting a UI change:
 The prototype is a visual reference, not evidence of remote infrastructure. The UI must identify simulated activity and unavailable connections honestly. A trusted SSH shell cannot be described as path-restricted unless the backend actually enforces that boundary.
 
 The dominant interface palette is black, blue, and cool grey. Use saturated blue for primary actions and selected navigation, subdued blue-grey for supporting identity, and neutral charcoal for panels. Sage, amber, and coral are reserved for meaningful success, warning, and error states rather than decorative accents.
+
+The sidebar hides native scrollbar chrome while preserving wheel, touch, and keyboard scrolling. Its Project section uses a heading aligned with navigation icons. Account identity combines an initials avatar, display name, and email; long names wrap and email truncates with its full value available on hover. All account styling uses existing semantic and scale tokens.
