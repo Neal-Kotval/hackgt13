@@ -30,7 +30,8 @@ function provider(pods, { stillPresent = false, failDelete = false } = {}) {
     async getPod(id) { calls.push(["get", id]); return stillPresent ? pods.find((pod) => pod.id === id) || null : null; } };
 }
 
-function name(job) { return runpodPodName(job.id, new Date(Date.parse(job.created_at) + job.max_duration_minutes * 60_000)); }
+function name(job) { return runpodPodName(job.id,
+  new Date(Math.floor((Date.parse(job.created_at) + job.max_duration_minutes * 60_000) / 1_000) * 1_000)); }
 
 test("active Runpod job remains allocated until stop or expiry", async () => {
   const { db, job } = setup();

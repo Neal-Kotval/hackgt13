@@ -31,7 +31,7 @@ function setup() {
 
 function provider(job, overrides = {}) {
   const calls = [];
-  const expiresAt = new Date(Date.parse(job.created_at) + job.max_duration_minutes * 60_000);
+  const expiresAt = new Date(Math.floor((Date.parse(job.created_at) + job.max_duration_minutes * 60_000) / 1_000) * 1_000);
   const pod = { id: "pod123", name: runpodPodName(job.id, expiresAt), status: "RUNNING",
     ssh: { direct: { host: "203.0.113.10", port: 30222, username: "root" } } };
   return { calls,
@@ -76,7 +76,7 @@ test("approved Runpod job reaches ready only after SSH and durable GPU proof", a
   assert.equal(db.prepare("SELECT gpu_device FROM runpod_gpu_verification WHERE job_id = ?").get(job.id).gpu_device, "NVIDIA GeForce RTX 4090");
   assert.equal(service.calls.filter((call) => Array.isArray(call) && call[0] === "create").length, 1);
   assert.equal(service.calls.find((call) => Array.isArray(call) && call[0] === "create")[1].expiresAt,
-    new Date(Date.parse(job.created_at) + job.max_duration_minutes * 60_000).toISOString());
+    new Date(Math.floor((Date.parse(job.created_at) + job.max_duration_minutes * 60_000) / 1_000) * 1_000).toISOString());
   db.close();
 });
 
