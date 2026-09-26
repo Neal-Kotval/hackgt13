@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import test from "node:test";
-import { CODEX_IMAGE, createCodexDockerRuntime } from "../lib/codex-docker.mjs";
+import { CODEX_IMAGE, createCodexDockerRuntime, stopCodexContainer } from "../lib/codex-docker.mjs";
 
 const sessionId = "12345678-1234-1234-1234-123456789abc";
 const installId = "test-install";
@@ -90,7 +90,7 @@ test("oversized responses terminate transport, stop retains workspace volume", a
 function ownedContainer(overrides = {}) {
   return {
     Image: "sha256:demo",
-    Config: { User: "node", Labels: { "com.agentcloud.codex.install": installId, "com.agentcloud.codex.session": sessionId } },
+    Config: { Image: CODEX_IMAGE, User: "node", Labels: { "com.agentcloud.codex.install": installId, "com.agentcloud.codex.session": sessionId } },
     Mounts: [{ Type: "volume", Name: `agentcloud-codex-${installId}-${sessionId}-home`, Destination: "/home/node", RW: true }],
     HostConfig: { Privileged: false, NetworkMode: "default", ReadonlyRootfs: true, Memory: 2 * 1024 ** 3, NanoCpus: 2_000_000_000, PidsLimit: 256, CapDrop: ["ALL"], SecurityOpt: ["no-new-privileges"], PortBindings: {} },
     State: { Running: false },
@@ -121,4 +121,23 @@ test("malformed protocol rejects pending work and reports exit once", async () =
   const pending = assert.rejects(runtime.request("thread/read"), /invalid protocol/);
   f.child.stdout.write("not json\n"); await pending;
   runtime.close(); assert.equal(exits.length, 1);
+});
+
+test("standalone stop never creates resources or starts app-server", async () => {
+  const calls = [];
+  const exec = async args => { calls.push(args); return { code: 1, stderr: 'No such container' }; };
+  assert.deepEqual(await stopCodexContainer({sessionId,installId},{exec}),{stopped:true});
+  assert.deepEqual(calls.map(x=>x.slice(0,2)),[['container','inspect']]);
+});
+
+test("standalone stop validates ownership then stops without image build or protocol", async () => {
+  const calls = [];
+  const container = ownedContainer({State:{Running:true}});
+  const volume = { Driver:'local', Labels:container.Config.Labels };
+  const exec = async args => { calls.push(args); return {code:0,stdout:JSON.stringify([args[0]==='container'?container:volume])}; };
+  await stopCodexContainer({sessionId,installId},{exec});
+  assert.deepEqual(calls.map(x=>x[0]),['container','volume','stop']);
+  container.Config.Labels = {};
+  await assert.rejects(stopCodexContainer({sessionId,installId},{exec}),/does not belong/);
+  assert.equal(calls.filter(x=>x[0]==='stop').length,1);
 });
