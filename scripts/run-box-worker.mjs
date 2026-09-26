@@ -17,6 +17,7 @@ import { createDockerSandboxProvider } from "../lib/docker-sandbox-provider.mjs"
 import { reconcileDockerSandboxes, workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
 import { loadRunpodApiKey } from "../lib/runpod-secret.mjs";
 import { checkRunpodExpiryGuard } from "./runpod-expiry-preflight.mjs";
+import { localWatchdogReady } from "./runpod-local-watchdog.mjs";
 
 const mode = process.argv[2];
 const providerName = process.argv[3] || "aws-ec2";
@@ -42,14 +43,19 @@ async function awsCycle() {
   return result;
 }
 
+// Opt-in supervised test from a developer machine: key from the environment and the
+// separate scripts/runpod-local-watchdog.mjs process as the cleanup guard.
+const runpodLocal = process.env.AGENTCLOUD_RUNPOD_LOCAL === "1";
+const runpodGuard = runpodLocal ? async () => localWatchdogReady() : checkRunpodExpiryGuard;
+
 async function runpodCycle() {
-  const provider = createRunpodProvider({ apiKey: await loadRunpodApiKey() });
+  const provider = createRunpodProvider({ apiKey: runpodLocal ? process.env.RUNPOD_API_KEY : await loadRunpodApiKey() });
   const db = getDatabase();
   migrateRunBoxJobs(db);
   migrateRunpodEvidence(db);
   migrateRunpodCleanup(db);
   const reconciled = await reconcileRunpodJobs(db, provider, { workerId, requestStop: requestRunBoxStop,
-    checkCleanupGuard: checkRunpodExpiryGuard });
+    checkCleanupGuard: runpodGuard });
   if (reconciled.some((item) => item.status === "retry"))
     throw new Error("Runpod cleanup remains unconfirmed; refusing another allocation");
   const connection = {
@@ -59,7 +65,7 @@ async function runpodCycle() {
     knownHostsFile: process.env.AGENTCLOUD_RUNPOD_KNOWN_HOSTS_FILE || "/var/lib/agentcloud/runpod/known_hosts",
   };
   const result = await workOneRunpodJob(db, provider, { workerId, connection, verify: verifyRunpodSsh,
-    checkCleanupGuard: checkRunpodExpiryGuard });
+    checkCleanupGuard: runpodGuard });
   if (result) console.log(`Processed Runpod job ${result.jobId}: ${result.state}${result.retry ? " (verification pending)" : ""}`);
   return result;
 }
