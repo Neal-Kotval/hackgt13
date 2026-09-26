@@ -15,7 +15,8 @@ for (const name of ["store", "http", "resource-profiles"]) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-await copyFile(new URL("../lib/run-box-jobs.mjs", import.meta.url), path.join(directory, "run-box-jobs.mjs"));
+for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys"])
+  await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
 const db = fixture.getDatabase();
 const store = await import(path.join(directory, "store.js"));
@@ -25,7 +26,7 @@ async function route(sourcePath, outputName, depth) {
   const code = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replaceAll(prefix, "./").replace(/from ["']\.\/([\w-]+)["']/g, (match, name) =>
-    `from './${name}${["auth", "run-box-jobs"].includes(name) ? ".mjs" : ".js"}'`);
+    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys"].includes(name) ? ".mjs" : ".js"}'`);
   await writeFile(path.join(directory, outputName), code);
   return import(path.join(directory, outputName));
 }
