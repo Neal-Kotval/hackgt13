@@ -83,7 +83,7 @@ function SiteShell({ children }: { children: ReactNode }) {
       <Link className="site-brand" href="/projects" onClick={() => setOpen(false)}>agentcloud<span className="brand-cursor" aria-hidden="true" /></Link>
       <button className="button ghost site-sidebar-close" aria-label="Close navigation" onClick={() => setOpen(false)}><X /></button>
       <nav className="site-navigation" aria-label="Main navigation">
-        <div className="site-nav-group">{navLink("Projects", "/projects", SquaresFour, pathname === "/projects" || pathname === "/projects/new")}{navLink("Organization settings", "/organizations", Users)}</div>
+        <div className="site-nav-group">{navLink("Projects", "/projects", SquaresFour, pathname === "/projects" || pathname === "/projects/new")}{navLink("Organizations", "/organizations", Users)}</div>
         {projects.length > 0 && <div className="site-nav-group"><div className="site-project-picker"><h2 className="site-nav-label">Project</h2><Select aria-label="Current project" value={project?.id || ""} onChange={event => {router.push(`/projects/${event.target.value}`); setOpen(false);}}><option value="" disabled>Select project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></div>
         {project && views.map(([label, segment, Icon]) => navLink(label, `/projects/${project.id}${segment ? "/" + segment : ""}`, Icon, pieces[1] === "projects" && pieces[2] === project.id && section === segment))}</div>}
       </nav>
