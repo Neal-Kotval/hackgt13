@@ -279,7 +279,7 @@ h1 {
   font-size: var(--text-3xl);
   letter-spacing: var(--tracking-tight);
   line-height: var(--leading-tight);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   overflow-wrap: anywhere;
 }
 .cursor {
@@ -2044,9 +2044,13 @@ dialog::backdrop {
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
 }
-.tag {
+.tag,
+.tag.cyan,
+.tag.pink,
+.tag.green,
+.tag.yellow {
   background: var(--color-transparent);
-  border-color: currentColor;
+  border: var(--border-width) solid currentColor;
 }
 .project-heading {
   border-bottom: var(--border-width) solid var(--color-border);
@@ -2064,7 +2068,8 @@ dialog::backdrop {
   color: var(--color-accent);
 }
 @media (max-width: 1440px) {
-  .dashboard-grid {
+  .dashboard-grid,
+  .review-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .side-column {
