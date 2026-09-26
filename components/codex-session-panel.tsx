@@ -106,7 +106,7 @@ function ProjectCodexSessions({ project }: { project: Project }) {
         <Command aria-hidden="true" />
         <div><h2 id="codex-sessions-title">Codex agent</h2><p>Start a local Docker box here, then talk to Codex in the desktop app.</p></div>
       </header>
-      <p className="muted">This is a separate CPU environment on this computer, not a cloud or GPU machine. Codex can run commands in its container workspace.</p>
+      <p className="muted">This is a separate CPU environment on this computer, not a cloud or GPU machine. Codex can run commands in its container workspace. It starts empty; ask Codex in the desktop app to clone your project repository when needed.</p>
       {(error || loadError) && <div className="alert error" role="alert">{error || loadError}<button type="button" className="button secondary" onClick={() => { setError(""); setRetry((previous) => previous + 1); }}>Retry</button></div>}
       {enabled === null && !error && !loadError && <p role="status">Checking local Codex setup…</p>}
       {enabled === false && <div className="info-note"><div><strong>Local Codex setup is not enabled</strong><p>On the backend computer, run <code>npm run codex:setup</code>, then restart the server with <code>AGENTCLOUD_CODEX_ENABLED=1</code>.</p></div></div>}

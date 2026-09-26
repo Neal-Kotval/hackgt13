@@ -46,3 +46,25 @@ test('restart marks lost connections honestly and preserves history',async()=>{
  assert.equal(restarted.get(a.id).status,'error');assert.equal(restarted.get(a.id).threadId,'thread-1');assert(restarted.snapshot(a.id).events.length);
  await assert.rejects(restarted.action(a.id,{action:'message',text:'test',requestId:randomUUID()}),/Reconnect/);f.db.close();
 });
+test('empty unpersisted Codex threads can reconnect; submitted turns never get replaced',async()=>{
+ const db=new Database(':memory:');let starts=0;
+ const runtime={async request(method){if(method==='account/read')return {account:{type:'chatgpt'}};if(method==='thread/resume')throw Error('No saved rollout');if(method==='thread/start')return {thread:{id:`thread-${++starts}`}};if(method==='turn/start')throw Error('ambiguous');},close(){},async stop(){}};
+ const service=createCodexSessionService({db,dataDir:'/tmp/test',runtimeFactory:async()=>runtime});
+ const s=service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ await service.action(s.id,{action:'resume'});assert.equal(starts,2);
+ const input={action:'message',text:'run',requestId:randomUUID()};
+ await assert.rejects(service.action(s.id,input),e=>e.code==='ambiguous_turn');
+ await service.action(s.id,{action:'resume'});assert.equal(service.get(s.id).status,'error');assert.equal(starts,2);
+ // Even if an operator recovers the original thread, unknown requests never become success.
+ db.prepare("UPDATE codex_session SET status='ready'").run();
+ await service.action(s.id,{action:'resume'});assert.equal(starts,2);
+ service.close();db.close();
+});
+test('failed starts are never acknowledged as successful retries',async()=>{
+ const db=new Database(':memory:');let fail=true;
+ const runtime={async request(method){if(method==='account/read')return {account:{type:'chatgpt'}};if(method.startsWith('thread/'))return {thread:{id:'t'}};if(method==='turn/start'&&fail)throw Error('lost');return {};},close(){},async stop(){}};
+ const service=createCodexSessionService({db,dataDir:'/tmp/test',runtimeFactory:async()=>runtime});const s=service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ const input={action:'message',text:'run',requestId:randomUUID()};await assert.rejects(service.action(s.id,input),e=>e.code==='ambiguous_turn');fail=false;
+ await service.action(s.id,{action:'resume'});await assert.rejects(service.action(s.id,input),e=>e.code==='ambiguous_turn');
+ await service.action(s.id,{...input,requestId:randomUUID()});service.close();db.close();
+});

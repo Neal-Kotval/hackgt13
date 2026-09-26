@@ -15,7 +15,7 @@ export function codexService() {
   });
 }
 export function codexFailure(error: unknown) {
-  if (error instanceof CodexSessionError) return Response.json({error:error.message},{status:error.status});
+  if (error instanceof CodexSessionError) return Response.json({error:error.message,code:error.code},{status:error.status});
   // Protocol/Docker errors can contain provider text. Do not expose or log raw errors.
   if (error instanceof InputError) return failure(error);
   return Response.json({error:'Codex operation failed. Check Docker and reconnect.'},{status:502});
