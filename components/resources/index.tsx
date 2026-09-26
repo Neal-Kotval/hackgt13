@@ -757,6 +757,12 @@ function RequestCard({
             <div><dt>Approved limit</dt><dd>{job.max_duration_minutes} minutes</dd></div>
             <div><dt>Cleanup</dt><dd>{job.state === "stopped" ? job.provider_resource_id ? `${job.provider === "runpod" ? "Pod" : "EC2"} release confirmed by worker` : "Cancelled before allocation" : job.stop_requested_at ? "Stop requested; awaiting confirmation" : "Not requested"}</dd></div>
           </dl>
+          {job.provider === "runpod" && job.state === "allocating" && !job.provider_resource_id && (
+            <p className="resource-note">Checking Runpod setup, live price, and the independent cleanup guard before creating a Pod.</p>
+          )}
+          {job.provider === "runpod" && ["connecting", "verifying"].includes(job.state) && (
+            <p className="resource-note">SSH identity, workspace, and GPU workload verification are in progress.</p>
+          )}
           {projectRole === "owner" && job.state !== "stopped" && !job.stop_requested_at && (
             <button className="button" type="button" disabled={Boolean(busy)} onClick={() => void onStop(job)}>
               {busy === job.id ? "Requesting stop…" : "Request stop"}
