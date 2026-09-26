@@ -2152,10 +2152,11 @@ dialog::backdrop {
 
 /* Keep select labels above their controls, including inline member actions. */
 label:has(> select),
-label:has(> .select-field) {
+label:has(> .select-field > .select-trigger) {
   display: grid;
   gap: var(--field-label-gap);
   min-width: 0;
+  font-size: var(--text-xs);
 }
 select {
   min-height: var(--select-min-height);
