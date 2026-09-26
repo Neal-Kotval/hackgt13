@@ -1516,7 +1516,19 @@ function DesktopPage({
             <Link
               className="button secondary"
               href={`/projects/${project.id}/settings#agent-setup`}
-              onClick={() => document.getElementById("agent-setup")?.focus({ preventScroll: true })}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                const setup = document.getElementById("agent-setup");
+                if (!setup) return;
+                // Handle local anchors directly: the router skips repeated hashes
+                // and can cancel an in-flight native smooth scroll.
+                event.preventDefault();
+                if (window.location.hash !== "#agent-setup") {
+                  window.history.pushState(null, "", event.currentTarget.href);
+                }
+                setup.focus({ preventScroll: true });
+                setup.scrollIntoView({ block: "start" });
+              }}
             >
               Agent setup <ArrowRight />
             </Link>

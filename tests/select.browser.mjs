@@ -230,6 +230,13 @@ try {
         await page.getByText("CLI connection guide", {exact: true}).focus();
         await page.keyboard.press("Enter");
         await expect(page.getByRole("button", {name: "Copy command", exact: true})).toBeVisible();
+        // Each click must scroll even when the URL already contains this hash.
+        for (let activation = 0; activation < 2; activation++) {
+          await page.getByRole("link", {name: "Agent setup", exact: true}).click();
+          await expect(page.locator("#agent-setup")).toBeFocused();
+          await expect.poll(() => page.locator("#agent-setup").evaluate(element => element.getBoundingClientRect().top)).toBeGreaterThanOrEqual(0);
+          await expect.poll(() => page.locator("#agent-setup").evaluate(element => element.getBoundingClientRect().top)).toBeLessThan(100);
+        }
       }
     }
     expect(errors).toEqual([]);
