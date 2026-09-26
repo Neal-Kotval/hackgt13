@@ -145,6 +145,7 @@
   --color-warning-soft: var(--palette-amber-dark);
   --color-danger: var(--palette-coral);
   --color-danger-soft: var(--palette-coral-dark);
+  --color-status-action-text: var(--palette-ink);
   --color-transparent: var(--palette-transparent);
   --color-overlay: rgb(0 0 0 / 65%);
   --color-dot-grid: color-mix(in srgb, var(--palette-paper) 8%, transparent);

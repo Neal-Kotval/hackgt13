@@ -538,7 +538,7 @@ export function CloudApp() {
             <h4>Next step</h4>
             <p>{selectedHandoff.next}</p>
             <button
-              className="button primary"
+              className="button success"
               disabled={busy || selectedHandoff.accepted}
               onClick={async () => {
                 if (
@@ -745,7 +745,7 @@ function TaskTable({ project }: { project: Project }) {
                 </span>
               </td>
               <td>
-                <Tag>{t.status}</Tag>
+                <Tag tone={t.status === "done" ? "green" : t.status === "blocked" ? "yellow" : t.status === "in progress" ? "cyan" : "neutral"}>{t.status}</Tag>
               </td>
             </tr>
           ))}
