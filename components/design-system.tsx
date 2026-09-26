@@ -7,6 +7,8 @@ const colors = [
   ["bg", "Canvas", "The working room"],
   ["surface", "Surface", "A distinct group"],
   ["surface-raised", "Raised", "Controls and layers"],
+  ["selected", "Selected", "Active navigation surface"],
+  ["border", "Divider", "Panel boundaries"],
   ["text", "Text", "Primary information"],
   ["muted", "Muted", "Supporting context"],
   ["subtle", "Subtle", "Quiet metadata"],
@@ -16,8 +18,8 @@ const colors = [
   ["warning", "Warning", "Attention required"],
 ] as const;
 const typography = [
-  ["hero", "A room for your team.", "Screen headline"],
-  ["3xl", "Context travels with the work.", "Section headline"],
+  ["hero", "Your computers.", "Hanken Grotesk · screen headline"],
+  ["2xl", "Connect a computer.", "Hanken Grotesk · section headline"],
   ["xl", "Build the integration together.", "Panel heading"],
   ["base", "Codex published the API. Claude can start the frontend.", "Body copy"],
   ["sm", "backend/api · ready for handoff", "Supporting text"],
@@ -30,14 +32,14 @@ export default function DesignSystem() {
   return (
     <div className="ds-page">
       <header className="ds-header">
-        <Link className="brand" href="/projects">agentcloud<span>_</span></Link>
-        <span className="tag cyan">Design reference</span>
+        <Link className="brand" href="/projects">agentcloud<span aria-hidden="true" /></Link>
+        <span className="tag cyan">Design reference · v4</span>
         <Link className="ds-back" href="/projects">Back to projects ↗</Link>
       </header>
       <main className="ds-main">
         <section className="ds-intro" aria-labelledby="design-title">
           <div className="eyebrow">One source of truth · app/tokens.css</div>
-          <h1 id="design-title">Built from tokens<span className="cursor">_</span></h1>
+          <h1 id="design-title">Built from tokens<span className="cursor" aria-hidden="true" /></h1>
           <p>A shared visual language for a shared workspace. Every color, space, and interface state starts with a named purpose.</p>
           <nav className="ds-jump" aria-label="Design system sections">
             <a href="#palette">Palette</a><a href="#typography">Typography</a><a href="#spacing">Spacing</a><a href="#components">Components</a><a href="#contract">Contract</a>
@@ -58,7 +60,7 @@ export default function DesignSystem() {
         </section>
 
         <section className="ds-section" id="typography" aria-labelledby="type-title">
-          <div className="ds-section-title"><h2 id="type-title">A working typeface</h2><p>JetBrains Mono with local monospace fallbacks. One family, clear hierarchy.</p></div>
+          <div className="ds-section-title"><h2 id="type-title">Two typefaces, clear roles</h2><p>Hanken Grotesk for headings. JetBrains Mono for interface copy and metadata. Both served locally.</p></div>
           <div className="ds-type-list">
             {typography.map(([size, sample, purpose]) => (
               <div className="ds-type-row" key={size}><div className="ds-type-meta"><code>--text-{size}</code><span>{purpose}</span></div><p className={`ds-type-${size}`}>{sample}</p></div>
@@ -87,7 +89,7 @@ export default function DesignSystem() {
           <div className="ds-contract-files"><code>app/tokens.css</code><span>Palette, scales, semantic aliases</span><code>DESIGN.md</code><span>Rules, exceptions, and review criteria</span><code>npm run tokens:check</code><span>Check application styles against the contract</span></div>
         </section>
       </main>
-      <footer className="ds-footer"><span>AgentCloud · Design system</span><span>Quiet chrome. Visible collaboration.</span></footer>
+      <footer className="ds-footer"><span>AgentCloud · Design system</span><span>Square controls. Quiet surfaces. Visible progress.</span></footer>
     </div>
   );
 }

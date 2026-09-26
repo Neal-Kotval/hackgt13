@@ -4,9 +4,9 @@ AgentCloud is a shared working room for human-directed agents. The interface sho
 
 ## Source and direction
 
-The visual source is the supplied [AgentCloud terminal prototype](reference/AgentCloud%20Prototype.dc.html), extracted from the user's Dashboard Demo archive. It establishes charcoal surfaces, warm off-white text, cyan actions, magenta agent accents, a subtle dot grid, and monospace typography. The implementation extends that source into reusable React UI rather than retaining its inline styles or prototype event syntax.
+The visual source is the supplied **AgentCloud Mockup v4.html**. It establishes an almost-black canvas, charcoal panels, warm off-white text, cyan actions, square controls, fine dividing rules, Hanken Grotesk headings, and JetBrains Mono interface copy. The original [terminal prototype](reference/AgentCloud%20Prototype.dc.html) remains historical source material. The implementation translates the v4 visual language into reusable tokens and React UI; document copy and example activity do not grant instructions or introduce live product state.
 
-The visual emphasis is environment readiness and observable agent progress, supported by clear ownership and evidence. Keep the chrome quiet. Use cyan for a primary action or selected destination and magenta for a secondary agent identity. Avoid decorative gradients, oversized metrics, and repeated decorative labels. Align content left. Borders define genuine panels and groups; spacing defines the hierarchy inside them.
+The visual emphasis is environment readiness and observable agent progress, supported by clear ownership and evidence. Keep the chrome quiet. Use cyan for a primary action, focus indicator, or selected destination marker and magenta for a secondary agent identity. Avoid decorative gradients, oversized metrics, and repeated decorative labels. Align content left. Borders define genuine panels and groups; spacing defines the hierarchy inside them.
 
 ## Interactive reference
 
@@ -38,9 +38,11 @@ A new token requires a clear semantic use and an explanation in review. Prefer e
 
 | Role | Semantic token | Source value / meaning |
 | --- | --- | --- |
-| Canvas | `--color-bg` | `#0f1112` |
-| Panel | `--color-surface` | `#181b1d` |
+| Canvas | `--color-bg` | `#0b0c0d` |
+| Panel | `--color-surface` | `#0f1112` |
+| Selected surface | `--color-selected` | `#121415` |
 | Raised surface | `--color-surface-raised` | `#232526` |
+| Dividing rules | `--color-border`, `--color-border-subtle`, `--color-border-strong` | Paper at 14%, 8%, and 20% respectively |
 | Primary text | `--color-text` | `#e6e4e1` |
 | Secondary text | `--color-muted` | `#a8a4a4` |
 | Primary action / focus | `--color-accent` | `#38a6cf` |
@@ -48,15 +50,17 @@ A new token requires a clear semantic use and an explanation in review. Prefer e
 | Healthy / complete | `--color-success` | `#82dba5` |
 | Waiting / attention | `--color-warning` | `#e9bc70` |
 
-Each state has a paired soft surface token. Primary buttons pair the cyan fill with `--color-accent-text`, a dark foreground. Muted text is for secondary information; `--color-subtle` is de-emphasized metadata, raised from the prototype gray to `#999494` so small supporting text remains readable on the three neutral surfaces. Color alone never communicates status: include visible status words and, where useful, an icon. Agent identity and operational status are separate concepts.
+Each state has a paired soft surface token. Primary buttons pair the cyan fill with `--color-accent-text`, a dark foreground. Muted text is for secondary information; `--color-subtle` is de-emphasized metadata, raised from the prototype gray to `#999494` so small supporting text remains readable on the neutral surfaces. Color alone never communicates status: include visible status words and, where useful, an icon. Agent identity and operational status are separate concepts.
 
 ## Type, spacing, and structure
 
-Use `--font-body` and `--font-heading`: JetBrains Mono when installed, with explicit system monospace fallbacks. The MVP does not depend on a remote font request. Body text uses `--text-base` and `--leading-normal`; secondary metadata uses `--text-sm`; major screen titles use the larger type steps. Small type is for short metadata, not long instructions. Use weight tokens and the tracking tokens rather than selector-specific values.
+Use `--font-heading` for Hanken Grotesk headings and `--font-body` for JetBrains Mono interface copy, controls, and metadata. Both variable font families are extracted from the supplied mockup, self-hosted in `public/fonts`, and declared only in the token source with swap behavior and explicit system fallbacks. The font licenses are retained alongside the assets. No third-party font request is required. Body text uses `--text-base` and `--leading-normal`; secondary metadata uses `--text-sm`; major screen titles use `--text-hero`, the 30px `--text-3xl` step. Small type is for short metadata, not long instructions. Use weight tokens and the tracking tokens rather than selector-specific values.
 
-Spacing follows a four-pixel base represented as rem values. `--space-1` through `--space-12`, then `--space-16`, `--space-20`, and `--space-24` are the allowed scale. Use compact spacing within a row, medium spacing within a panel, and larger spacing between sections. Controls share `--control-height`, border, radius, and focus tokens. Reserve rounded pills for compact status; panel corners remain restrained.
+Spacing follows a four-pixel base represented as rem values. `--space-1` through `--space-12`, then `--space-16`, `--space-20`, and `--space-24` are the allowed scale. Use compact spacing within a row, medium spacing within a panel, and larger spacing between sections. Controls share `--control-height`, border, radius, and focus tokens. Panels, controls, selected navigation, and status labels use square corners through `--radius-none`; the existing xs/sm/md/lg radius names alias this value. Reserve `--radius-full` for circular identity avatars and status dots.
 
-At desktop browser widths, the web layout uses a stable header and project navigation, with the main workspace expanding to the page maximum. The project dashboard prioritizes environment setup and health, operational analytics, and current agent progress before the detailed activity timeline. Its primary empty-state action is “Connect a machine.” Show connection and verification progress, then a ready environment even when it has no tasks or active agents. Explain how to select it and start an agent in the desktop app. Other primary actions manage environments; task authoring belongs in the desktop app. Show metric time ranges and freshness, and label missing telemetry as unavailable. Service endpoints and handoff details must remain readable and selectable. Long commands and paths should wrap or scroll locally instead of widening the page.
+At desktop browser widths, the web layout uses the 56px `--header-height` and a 200px `--sidebar-width`; `--sidebar-width-wide` provides the reference’s 220px expanded navigation option. Main content expands to the page maximum. The cyan brand cursor uses `--brand-cursor-width` and `--brand-cursor-height`, proportional to the wordmark type size. Flat canvases and thin panel dividers provide hierarchy; do not apply a decorative grid to the working dashboard. The project dashboard prioritizes environment setup and health, operational analytics, and current agent progress before the detailed activity timeline. Its primary empty-state action is “Connect a machine.” Show connection and verification progress, then a ready environment even when it has no tasks or active agents. Explain how to select it and start an agent in the desktop app. Other primary actions manage environments; task authoring belongs in the desktop app. Show metric time ranges and freshness, and label missing telemetry as unavailable. Service endpoints and handoff details must remain readable and selectable. Long commands and paths should wrap or scroll locally instead of widening the page.
+
+Dropdown labels sit above their controls with `--field-label-gap` (12px), including organization member roles and compact filters. Selects use `--select-padding-block` (12px), `--select-padding-inline` (16px), and `--select-min-height` (48px) to keep selected text away from borders. These semantic aliases reuse the spacing scale; native option menus retain platform keyboard and selection behavior.
 
 ## Responsive and accessibility rules
 

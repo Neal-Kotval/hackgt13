@@ -3,9 +3,14 @@ node_modules/
 .data/
 .env*
 !.env.example
+!desktop/.env.example
 *.tsbuildinfo
 .DS_Store
 artifacts/
 .playwright-mcp/
 
 .agentcloud/
+
+desktop/dist/
+desktop/dist-electron/
+desktop/node_modules/
