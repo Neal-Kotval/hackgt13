@@ -11,7 +11,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   MissingCredentialsError,
-  OpenAIResponsesAdapter,
+  MissingProjectError,
+  ProjectAgentChatAdapter,
+  type AssistantAdapter,
 } from "./assistant.ts";
 import { AuthError, DesktopAuthClient } from "./auth-client.ts";
 import { LoopbackApiClient, LoopbackApiError } from "./api-client.ts";
@@ -109,10 +111,7 @@ loadEnvFile(path.join(app.getAppPath(), ".env"));
 let store: ChatStore;
 let authClient: DesktopAuthClient;
 let apiClient: LoopbackApiClient;
-const assistant = new OpenAIResponsesAdapter(
-  () => process.env.OPENAI_API_KEY,
-  process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini",
-);
+let assistant: AssistantAdapter;
 
 const activeRuns = new Map<
   string,
@@ -400,6 +399,7 @@ function wrapIpc<T extends unknown[]>(
       const message =
         error instanceof ChatStoreError ||
         error instanceof MissingCredentialsError ||
+        error instanceof MissingProjectError ||
         error instanceof AuthError ||
         error instanceof LoopbackApiError
           ? error.message
@@ -429,6 +429,7 @@ app.whenReady().then(async () => {
     getBaseUrl: () => authClient.getBaseUrl(),
     request: (path, init) => authClient.fetchHuman(path, init),
   });
+  assistant = new ProjectAgentChatAdapter(apiClient);
 
   wrapIpc("auth:status", async () => authClient.status());
   wrapIpc("auth:signIn", async (_event, email: string, password: string) => {
@@ -519,9 +520,21 @@ app.whenReady().then(async () => {
 
   wrapIpc(
     "assistant:send",
-    async (_event, threadId: string, _userMessageId: string) => {
+    async (
+      _event,
+      threadId: string,
+      _userMessageId: string,
+      options: { projectId: string; agentId?: string },
+    ) => {
       if (activeRuns.has(threadId)) {
         throw new Error("A reply is already in progress for this chat.");
+      }
+
+      const projectId = options?.projectId?.trim() || "";
+      if (!projectId) {
+        throw new MissingProjectError(
+          "Select a project before chatting. Desktop chat talks to that project's agent, not a local OpenAI key.",
+        );
       }
 
       const thread = await store.getThread(threadId);
@@ -580,6 +593,8 @@ app.whenReady().then(async () => {
             }));
 
           await assistant.streamReply({
+            projectId,
+            agentId: options.agentId,
             messages: history,
             signal: controller.signal,
             onDelta: (chunk) => {

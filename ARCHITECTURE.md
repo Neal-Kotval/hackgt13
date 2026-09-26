@@ -55,6 +55,7 @@ For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU 
 | `POST /api/actions` | Alias of the human mutation endpoint |
 | `GET /api/events` | Default SSE messages containing complete state on state changes, including heartbeat expiry; comments keep connection alive |
 | `POST /api/agent` | Bearer-scoped `connect`, `heartbeat`, `context`, `task`, `service`, and `handoff` operations |
+| `POST /api/chat` | Employee session project chat; provisions/binds `desktop-chat` agent identity; streams model tokens server-side (`OPENAI_API_KEY`); never returns model or agent plaintext secrets |
 | `POST /api/resources` | Verified project-member catalog registrations, resource requests, and inference configuration drafts; requests record server-derived employee, organization, and project role at submission, with no allocation or policy approval |
 
 Human mutations accept `{type, projectId, ...fields}` and return `{state, ...result}`. Creating a project returns `id`; creating an agent returns `agentId` and the one-time plaintext `token`. API errors use `{error}` with appropriate 400, 401, 403, 404, or 409 status codes. Internal errors return a generic 500 response.

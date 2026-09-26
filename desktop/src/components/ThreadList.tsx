@@ -31,10 +31,10 @@ export function ThreadList({
   onDelete,
 }: ThreadListProps) {
   return (
-    <aside className="sidebar" aria-label="Local chats">
+    <aside className="sidebar" aria-label="Project chats">
       <div className="sidebar-header">
         <div>
-          <div className="brand">Local chats</div>
+          <div className="brand">Project chats</div>
           <div className="brand-meta">
             On-device only — not AgentCloud tasks
           </div>

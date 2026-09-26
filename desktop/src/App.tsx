@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChatProjectPicker } from "./components/ChatProjectPicker";
 import { Composer } from "./components/Composer";
 import { Conversation } from "./components/Conversation";
 import { ShellNav, type AppSection } from "./components/ShellNav";
@@ -16,7 +17,7 @@ import type {
 
 /**
  * Draft behavior: each thread keeps its own unsent composer text in memory.
- * Switching threads or Tasks ↔ Local chat preserves drafts until send or
+ * Switching threads or Tasks ↔ Project chat preserves drafts until send or
  * explicit clear. With no thread selected, drafts use a landing key so the
  * first Send can auto-create a chat. Drafts are not persisted across relaunch.
  */
@@ -29,6 +30,7 @@ export default function App() {
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
+  const [chatProjectId, setChatProjectId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -46,6 +48,13 @@ export default function App() {
   const clearDeepLink = useCallback(() => {
     setDeepLink(null);
   }, []);
+
+  const updateChatProjectId = useCallback(
+    (updater: (current: string | null) => string | null) => {
+      setChatProjectId((current) => updater(current));
+    },
+    [],
+  );
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -228,6 +237,7 @@ export default function App() {
       setThreads([]);
       setSelectedId(null);
       setActiveThread(null);
+      setChatProjectId(null);
       setDrafts({});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-out failed");
@@ -297,6 +307,12 @@ export default function App() {
 
   async function handleSend() {
     if (!draft.trim() || sending) return;
+    if (!chatProjectId) {
+      setError(
+        "Select a project before chatting. Replies come from that project's agent via AgentCloud — not a local OpenAI key.",
+      );
+      return;
+    }
     const api = desktopApi();
     const content = draft.trim();
     const previousDraftKey = selectedId ?? LANDING_DRAFT_KEY;
@@ -347,7 +363,9 @@ export default function App() {
         };
       });
       await refreshThreads();
-      await api.sendAssistant(threadId, userMessage.id);
+      await api.sendAssistant(threadId, userMessage.id, {
+        projectId: chatProjectId,
+      });
       await loadThread(threadId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Send failed");
@@ -459,15 +477,16 @@ export default function App() {
               <div>
                 <h1>{activeThread?.title ?? "No chat selected"}</h1>
                 <p className="brand-meta">
-                  Local chat only — does not create AgentCloud tasks or sync to
-                  the web dashboard.
+                  Project agent chat — does not create AgentCloud tasks. Threads
+                  stay on this machine; replies come from the selected project
+                  agent via the shared backend.
                 </p>
+                <ChatProjectPicker
+                  selectedId={chatProjectId}
+                  onSelect={updateChatProjectId}
+                />
               </div>
-              {credentials && !credentials.configured ? (
-                <p className="credential-banner" role="status">
-                  {credentials.message}
-                </p>
-              ) : credentials ? (
+              {credentials ? (
                 <p className="brand-meta">{credentials.message}</p>
               ) : null}
             </header>
@@ -479,16 +498,16 @@ export default function App() {
             ) : (
               <div className="conversation">
                 <div className="main-empty" role="status">
-                  Type below to start a local chat. The first send creates a
-                  thread automatically — New chat is optional for another empty
-                  thread. Threads stay on this machine and are not AgentCloud
-                  tasks.
+                  Select a project above, then type below to start. The first
+                  send creates a local thread; replies go through that project’s
+                  agent on AgentCloud. New chat is optional for another empty
+                  thread.
                 </div>
               </div>
             )}
             <Composer
               value={draft}
-              disabled={false}
+              disabled={!chatProjectId}
               sending={sending}
               error={error}
               onChange={(value) => {

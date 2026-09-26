@@ -110,8 +110,8 @@ export function TaskComposer({
       <h2 id="task-composer-title">Create task</h2>
       <p className="brand-meta">
         Submits to the shared backend (<code>POST /api/state</code>{" "}
-        <code>addTask</code>). Local chat is never a substitute for remote agent
-        start.
+        <code>addTask</code>). Project chat is never a substitute for remote
+        agent start.
       </p>
       <form onSubmit={(event) => void submit(event)}>
         <label htmlFor="task-title">
@@ -212,7 +212,7 @@ export function TaskComposer({
         <h3 id="task-start-title">Start agent</h3>
         <p className="brand-meta">
           Request a server-authorized start against a created task and verified
-          environment. Local OpenAI chat does not start AgentCloud agents.
+          environment. Project chat does not start AgentCloud agents.
         </p>
         <label htmlFor="start-task">
           Task

@@ -869,6 +869,18 @@ select.control-select:hover:not(:disabled),
   line-height: var(--leading-normal);
 }
 
+.chat-project-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  max-width: var(--content-narrow);
+}
+
+.chat-project-picker select.control-select {
+  width: 100%;
+}
+
 .composer {
   display: flex;
   flex-direction: column;

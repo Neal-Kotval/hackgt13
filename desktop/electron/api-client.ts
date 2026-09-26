@@ -260,6 +260,14 @@ function summarizeState(payload: unknown): AgentCloudStateSummary {
   };
 }
 
+export type ProjectChatStreamInput = {
+  projectId: string;
+  agentId?: string;
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  signal: AbortSignal;
+  onDelta: (chunk: string) => void;
+};
+
 export class LoopbackApiClient {
   private readonly getBaseUrl: () => string;
   private readonly request: HumanRequest;
@@ -270,6 +278,71 @@ export class LoopbackApiClient {
   }) {
     this.getBaseUrl = options.getBaseUrl;
     this.request = options.request;
+  }
+
+  async streamProjectChat(input: ProjectChatStreamInput): Promise<void> {
+    const baseUrl = this.getBaseUrl();
+    let response: Response;
+    try {
+      response = await this.request("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: input.projectId,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+          messages: input.messages,
+        }),
+        signal: input.signal,
+      });
+    } catch {
+      throw new LoopbackApiError(serverUnreachableMessage(baseUrl));
+    }
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new LoopbackApiError(
+        mapApiFailure(response.status, text, baseUrl),
+        response.status,
+      );
+    }
+
+    if (!response.body) {
+      throw new LoopbackApiError("Project chat response had no body to stream.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let streamError: string | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(5).trim();
+        if (!data || data === "[DONE]") continue;
+        let parsed: { type?: string; text?: string; error?: string };
+        try {
+          parsed = JSON.parse(data) as typeof parsed;
+        } catch {
+          continue;
+        }
+        if (parsed.type === "delta" && typeof parsed.text === "string") {
+          input.onDelta(parsed.text);
+        } else if (parsed.type === "error" && typeof parsed.error === "string") {
+          streamError = parsed.error;
+        }
+      }
+    }
+
+    if (streamError) {
+      throw new LoopbackApiError(streamError, 502);
+    }
   }
 
   async getState(): Promise<AgentCloudStateSummary> {
