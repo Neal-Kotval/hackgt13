@@ -10,6 +10,7 @@ import {
   HardDrives,
   Lightning,
   Plus,
+  Minus,
   ShieldWarning,
   Warning,
 } from "@phosphor-icons/react";
@@ -180,7 +181,7 @@ export function ResourceCatalog({ project, onAction }: ResourceProps) {
           aria-expanded={showForm}
           aria-controls="resource-register-form"
         >
-          <Plus /> {showForm ? "Close form" : "Register resource"}
+          {showForm ? <Minus aria-hidden="true" /> : <Plus aria-hidden="true" />} {showForm ? "Close form" : "Register resource"}
         </button>
       </div>
       <FormFeedback error={error} success={success} />
