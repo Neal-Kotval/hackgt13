@@ -1,4 +1,5 @@
 "use client";
+import { EmployeeMenu } from "./employee-auth";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -223,8 +224,7 @@ export function CloudApp() {
           ))}
         </nav>
         <div className="header-right">
-          <span className="local-label">local workspace</span>
-          <span className="avatar">you</span>
+          <EmployeeMenu />
         </div>
       </header>
       <div className="app-shell">

@@ -465,7 +465,7 @@ export async function resourceAction(input: Record<string, unknown>) {
           status: "requested",
           decision: {
             status: "not_evaluated",
-            reason: "Employee identity and resource policy are not configured.",
+            reason: "Resource policy is not configured.",
           },
           createdAt: now,
         };

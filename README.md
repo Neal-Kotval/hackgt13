@@ -10,11 +10,12 @@ Use Node.js 22 LTS and npm.
 
 ```sh
 npm install
-cp .env.example .env.local
+test -e .env.local || cp .env.example .env.local
+npm run auth:setup
 npm run dev
 ```
 
-With [just](https://github.com/casey/just) installed, the equivalent shortcut is `just setup` once, then `just` (or `just dev`). Run `just --list` to see the other recipes, including `just verify` for all repository checks and a production build. `just setup` preserves an existing `.env.local`.
+With [just](https://github.com/casey/just) installed, the equivalent shortcut is `just setup` once, then `npm run auth:setup`, and run `just` (or `just dev`). Run `just --list` to see the other recipes, including `just verify` for all repository checks and a production build. `just setup` preserves an existing `.env.local`.
 
 Open http://127.0.0.1:3000. For a local production build:
 
@@ -23,7 +24,28 @@ npm run build
 npm start
 ```
 
-The development and production scripts bind to loopback. This is a single-user local application with no human login or tenant isolation; do not expose it publicly as a multi-user service.
+The development and production scripts bind to loopback. This is a local organization-aware demo with employee login, but no production tenant isolation; do not expose it publicly as a multi-user service.
+
+## Employee authentication (HAC-1)
+
+Authentication uses self-hosted Better Auth and local SQLite. `npm run auth:setup` generates a random secret in the ignored, owner-readable `.env.local` if absent and applies auth and organization migrations. Preserve the secret and data directory across restarts. The server fails closed without its secret. The default origin is `http://127.0.0.1:3000`; set `BETTER_AUTH_URL` when changing it.
+
+1. Open `/sign-up`, create an account, and verify your email.
+2. Sign in and create an organization at `/organizations`. Its creator is the owner.
+3. Invite a teammate as a member or admin. They sign in with the invited, verified email and accept the invitation.
+4. Owners and admins can create and manage all organization projects. Members see only projects explicitly assigned to them. Removing a member or leaving the organization clears their project assignments; joining again requires fresh assignments.
+
+Email defaults to local capture: messages are written to private JSON files in `.agentcloud/mail` (or `AGENTCLOUD_DATA_DIR/mail`). Open the verification or invitation link in the message's `text` field. Nothing is sent to a real inbox in this mode, even where the verification screen says to check email. Local capture is restricted to loopback origins. These files contain sensitive links: do not commit or share them.
+
+For real delivery, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_FROM`, and the provider's `SMTP_USER` and `SMTP_PASSWORD` in `.env.local`. Set `SMTP_SECURE=true` for implicit TLS, typically port 465. Restart the server after changing configuration. SMTP submission does not guarantee inbox delivery. Real recipients need a reachable application origin; a localhost link works only on the machine running the app. Public deployment still requires production hardening.
+
+Invitations expire after 48 hours. Reissuing creates a new invitation and cancels the old link; revoked, declined, and expired invitations cannot be accepted. The UI distinguishes locally captured messages from SMTP submissions. Ownership can be assigned separately by an owner; the last owner cannot be removed or demoted.
+
+Existing pre-organization projects remain hidden until their recorded owner moves them into an organization using the organization page. `auth:bootstrap` remains an optional administrative helper for two accounts and legacy project memberships; it does not replace verification or organization membership. Supply its `AGENTCLOUD_EMPLOYEE1_EMAIL`, `AGENTCLOUD_EMPLOYEE2_EMAIL`, and corresponding `_PASSWORD` variables privately; never commit credentials. Existing passwords are preserved.
+
+All human state, event, and resource routes require verified cookie sessions and organization/project access. Agent CLI bearer tokens remain separate and work only on `/api/agent`. Sign-out invalidates the session; open event streams recheck sessions and memberships every tick. Sessions last seven days. SQLite stores users, sessions, organizations, invitations, and memberships; JSON retains coordination data. Back up both stores and the secret together. Project creation spans both stores without a transaction, so an interrupted write can require administrative repair. This is not production tenant isolation, enterprise SSO, resource approval policy, or SSH enforcement.
+
+Run `npm test`, `npm run check`, `npm run tokens:check`, and `npm run build`. Authentication tests use temporary databases and generated passwords; they do not populate the running product. After `npm run build`, run `npm run test:auth:browser` with Google Chrome installed and port 3100 free for headless 375/768/1440px checks. The browser check creates a temporary database, exercises both identities and a server restart, and saves screenshots under ignored `artifacts/`.
 
 ## What works and what remains to build
 
@@ -51,7 +73,7 @@ The proposed backend uses one provider-neutral run-box contract: attach an exist
 - **Graph:** inspect relationships derived from saved tasks, agents, requests, services, and handoffs.
 - **Inference:** save a model, hardware, scope, and lifetime draft without deploying a service.
 
-For a local coordination walkthrough, create a project and two agent identities, connect each CLI with its own credential, assign tasks, register an endpoint you operate, and send a handoff to the second identity. Observe the resulting activity and saved records, then reopen the project. This demonstrates coordination; employee login, real remote execution, and the GPU demo remain pending.
+For a local coordination walkthrough, create a project and two agent identities, connect each CLI with its own credential, assign tasks, register an endpoint you operate, and send a handoff to the second identity. Observe the resulting activity and saved records, then reopen the project. This demonstrates coordination; real remote execution and the GPU demo remain pending.
 
 ## Connect a real coordination client
 
@@ -121,4 +143,4 @@ The token check enforces the visual-system rules; it does not replace visual ins
 
 ## Next implementation milestone
 
-Add transactional run/decision records, employee login and server-side policy, attach or create a real Linux run environment, and execute one real agent GPU task while mirroring its work. Demonstrate an allowed and a denied resource action at the execution boundary. Keep API authorization separate from shell isolation: an unrestricted SSH connection is trusted access until the execution boundary enforces stronger restrictions. Add a second agent and artifact publication in later phases.
+Add transactional run/decision records and server-side resource policy, attach or create a real Linux run environment, and execute one real agent GPU task while mirroring its work. Demonstrate an allowed and a denied resource action at the execution boundary. Keep API authorization separate from shell isolation: an unrestricted SSH connection is trusted access until the execution boundary enforces stronger restrictions. Add a second agent and artifact publication in later phases.
