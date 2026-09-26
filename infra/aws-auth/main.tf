@@ -142,6 +142,19 @@ resource "aws_vpc_security_group_egress_rule" "https" {
   description       = "Outbound HTTPS only"
 }
 
+data "aws_ec2_managed_prefix_list" "cloudfront" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "cloudfront_app" {
+  security_group_id = aws_security_group.instance.id
+  ip_protocol       = "tcp"
+  from_port         = 3000
+  to_port           = 3000
+  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront.id
+  description       = "CloudFront origin-facing servers to the app"
+}
+
 resource "aws_instance" "app" {
   ami                                  = data.aws_ssm_parameter.al2023_ami.value
   instance_type                        = var.instance_type
@@ -202,6 +215,53 @@ resource "aws_instance" "app" {
   ]
 }
 
+resource "aws_eip" "app" {
+  domain   = "vpc"
+  instance = aws_instance.app.id
+  tags     = local.tags
+}
+
+resource "aws_cloudfront_distribution" "app" {
+  enabled         = true
+  is_ipv6_enabled = true
+  price_class     = "PriceClass_100"
+  comment         = "AgentCloud shared hackathon app"
+
+  origin {
+    domain_name = aws_eip.app.public_dns
+    origin_id   = "agentcloud-app"
+
+    custom_origin_config {
+      http_port              = 3000
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  default_cache_behavior {
+    target_origin_id         = "agentcloud-app"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+    origin_request_policy_id = "33f36d7e-f396-46d9-90e0-52428a34d9dc" # AllViewerAndCloudFrontHeaders-2022-06
+    compress                 = true
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+
+  depends_on = [aws_vpc_security_group_ingress_rule.cloudfront_app]
+}
+
 output "instance_id" {
   value = aws_instance.app.id
 }
@@ -216,4 +276,8 @@ output "region" {
 
 output "auth_secret_arn" {
   value = aws_secretsmanager_secret.runtime.arn
+}
+
+output "public_url" {
+  value = "https://${aws_cloudfront_distribution.app.domain_name}"
 }

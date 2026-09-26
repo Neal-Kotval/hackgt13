@@ -28,9 +28,9 @@ CHECKSUM="$(shasum -a 256 "$ARCHIVE" | cut -d ' ' -f1)"
 echo "Uploading committed revision $REVISION to the private staging artifact bucket."
 aws --region "$STAGING_REGION" s3 cp "$ARCHIVE" "s3://$STAGING_BUCKET/releases/app.tar.gz" --only-show-errors
 
-python3 - "$STAGING_BUCKET" "$REVISION" "$CHECKSUM" "$STAGING_SECRET" "$STAGING_REGION" "$WORK_DIR/commands.json" <<'PY'
+python3 - "$STAGING_BUCKET" "$REVISION" "$CHECKSUM" "$STAGING_SECRET" "$STAGING_REGION" "$STAGING_PUBLIC_URL" "$WORK_DIR/commands.json" <<'PY'
 import json, sys
-bucket, revision, checksum, secret, region, destination = sys.argv[1:]
+bucket, revision, checksum, secret, region, public_url, destination = sys.argv[1:]
 command = (
     "set -e\n"
     "mkdir -p /opt/agentcloud/incoming\n"
@@ -38,7 +38,7 @@ command = (
     f"echo '{checksum}  /opt/agentcloud/incoming/app.tar.gz' | sha256sum -c -\n"
     f"mkdir -p /opt/agentcloud/releases/{revision}\n"
     f"tar -xzf /opt/agentcloud/incoming/app.tar.gz -C /opt/agentcloud/releases/{revision}\n"
-    f"bash /opt/agentcloud/releases/{revision}/scripts/aws-auth/remote-deploy.sh {revision} '{secret}' {region}\n"
+    f"bash /opt/agentcloud/releases/{revision}/scripts/aws-auth/remote-deploy.sh {revision} '{secret}' {region} '{public_url}'\n"
 )
 with open(destination, "w", encoding="utf-8") as file:
     json.dump({"commands": [command]}, file)
@@ -56,7 +56,7 @@ for _ in {1..180}; do
     --command-id "$COMMAND_ID" --instance-id "$STAGING_INSTANCE" \
     --query Status --output text 2>/dev/null || true)"
   case "$STATUS" in
-    Success) echo "Deployed $REVISION. Start scripts/aws-auth/tunnel.sh and open http://127.0.0.1:3000/sign-in."; exit 0 ;;
+    Success) echo "Deployed $REVISION. Open $STAGING_PUBLIC_URL/sign-in."; exit 0 ;;
     Failed|Cancelled|TimedOut|Cancelling)
       aws --region "$STAGING_REGION" ssm get-command-invocation \
         --command-id "$COMMAND_ID" --instance-id "$STAGING_INSTANCE" \
