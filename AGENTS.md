@@ -51,6 +51,7 @@ Run the checks appropriate to the change. The repository exposes `npm run check`
 - A saved repository URL is not a completed clone; a branch name is not a created worktree; a registered endpoint is not a verified running service.
 - A transport heartbeat is not evidence that Codex or Claude executed a task.
 - Never expose or log plaintext agent tokens, SSH keys, model credentials, or connection secrets. Preserve credential scope checks and action attribution.
+- Doppler CLI supplies local app secrets through `doppler run`; its experimental MCP server is for assistant-side Doppler management only. Use a config-scoped token, prefer read-only access, and never write a token or secret value to tracked files or tool output. See README.md.
 - Unrestricted SSH is trusted access. Do not claim filesystem restrictions unless enforced at the execution boundary and verified with a denied action.
 - Do not implement destructive merge/reset/provision actions behind controls presented as a preview.
 - Keep the local single-user security boundary explicit. Production authentication and tenant isolation must precede public multi-user deployment.

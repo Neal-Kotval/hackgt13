@@ -1,0 +1,3 @@
+setup:
+  - project: hackgt
+    config: dev_personal
