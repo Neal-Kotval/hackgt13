@@ -219,9 +219,18 @@
   --shadow-focus: 0 0 0 3px var(--color-accent-soft);
   --duration-fast: 120ms;
   --duration-normal: 200ms;
+  --duration-enter: 420ms;
+  --duration-stagger: 65ms;
+  --duration-stagger-max: 260ms;
   --duration-instant: 0ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --opacity-disabled: 0.45;
+  --opacity-reveal-start: 0;
+  --opacity-visible: 1;
+  --motion-rest-distance: 0px;
+  --motion-enter-distance: 24px;
+  --motion-hover-distance: -3px;
+  --motion-drawer-distance: 48px;
 
   /* Layout and component dimensions. */
   --page-max: 90rem;
@@ -277,5 +286,11 @@
   :root {
     --duration-fast: var(--duration-instant);
     --duration-normal: var(--duration-instant);
+    --duration-enter: var(--duration-instant);
+    --duration-stagger: var(--duration-instant);
+    --duration-stagger-max: var(--duration-instant);
+    --motion-hover-distance: var(--motion-rest-distance);
+    --motion-enter-distance: var(--motion-rest-distance);
+    --motion-drawer-distance: var(--motion-rest-distance);
   }
 }
