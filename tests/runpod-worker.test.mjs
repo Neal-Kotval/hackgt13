@@ -85,9 +85,9 @@ test("missing SSH host pin leaves a visible retry without another Pod create", a
   assert.equal(first.retry, true);
   assert.match(db.prepare("SELECT reason FROM runpod_connection_wait WHERE job_id = ?").get(job.id).reason, /pinned host key/);
   assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "verifying");
-  db.prepare("UPDATE run_box_job SET lease_expires_at = ? WHERE id = ?").run(new Date(Date.now() - 1_000).toISOString(), job.id);
   await workOneRunpodJob(db, service, settings);
   assert.equal(service.calls.filter((call) => Array.isArray(call) && call[0] === "create").length, 1);
+  assert.equal(db.prepare("SELECT attempts FROM run_box_job WHERE id = ?").get(job.id).attempts, 2);
   db.close();
 });
 
