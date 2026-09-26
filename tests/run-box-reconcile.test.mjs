@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { claimRunBoxJob, migrateRunBoxJobs, recordRunBoxAllocation, saveRunBoxDecision, transitionRunBoxJob } from "../lib/run-box-jobs.mjs";
+import { claimRunBoxJob, migrateRunBoxJobs, recordRunBoxAllocation, saveRunBoxDecision, requestRunBoxStop, transitionRunBoxJob } from "../lib/run-box-jobs.mjs";
 import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
 
 function setup() {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   migrateRunBoxJobs(db);
-  db.exec("ALTER TABLE run_box_job ADD COLUMN stop_requested_at TEXT");
   migrateRunBoxCleanup(db);
   const { job } = saveRunBoxDecision(db, {
     idempotencyKey: "request-1", resourceRequestId: "resource-1", projectId: "project-1",
@@ -51,15 +50,15 @@ function provider(instances, { failTermination = false, volumeState = "deleted" 
   };
 }
 
-function requestStop(db, jobId) {
-  db.prepare("UPDATE run_box_job SET stop_requested_at = ? WHERE id = ?").run(new Date().toISOString(), jobId);
+function requestStop(db, jobId, actor = "worker") {
+  return requestRunBoxStop(db, jobId, actor);
 }
 
 test("active job remains ready until a deadline or stop request", async () => {
   const { db, job } = setup();
   try {
     const service = provider([instance(job.id)]);
-    const result = await reconcileAwsRunBoxes(db, service, { requestStop });
+    const result = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
     assert.deepEqual(result.map((item) => item.status), ["active"]);
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "ready");
     assert.equal(service.calls.length, 0);
@@ -70,7 +69,7 @@ test("expired job is released only after instance termination and EBS deletion",
   const { db, job } = setup();
   try {
     const service = provider([instance(job.id, Date.now() - 1_000)]);
-    const result = await reconcileAwsRunBoxes(db, service, { requestStop });
+    const result = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
     assert.equal(result[0].status, "stopped");
     assert.equal(db.prepare("SELECT state, stop_requested_at FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
     assert.ok(db.prepare("SELECT stop_requested_at FROM run_box_job WHERE id = ?").get(job.id).stop_requested_at);
@@ -86,15 +85,15 @@ test("termination or EBS failure remains visible and retries", async () => {
   try {
     requestStop(db, job.id);
     const current = instance(job.id);
-    const first = await reconcileAwsRunBoxes(db, provider([current], { failTermination: true }), { requestStop });
+    const first = await reconcileAwsRunBoxes(db, provider([current], { failTermination: true }), { workerId: "worker", requestStop });
     assert.equal(first[0].status, "retry");
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
     assert.match(db.prepare("SELECT last_error FROM run_box_cleanup WHERE instance_id = 'i-abc123'").get().last_error, /unavailable/);
-    const second = await reconcileAwsRunBoxes(db, provider([current], { volumeState: "in-use" }), { requestStop });
+    const second = await reconcileAwsRunBoxes(db, provider([current], { volumeState: "in-use" }), { workerId: "worker", requestStop });
     assert.equal(second[0].status, "retry");
     assert.match(db.prepare("SELECT last_error FROM run_box_cleanup WHERE instance_id = 'i-abc123'").get().last_error, /EBS deletion unconfirmed/);
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
-    const third = await reconcileAwsRunBoxes(db, provider([current]), { requestStop });
+    const third = await reconcileAwsRunBoxes(db, provider([current]), { workerId: "worker", requestStop });
     assert.equal(third[0].status, "stopped");
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
   } finally { db.close(); }
@@ -104,7 +103,7 @@ test("tagged orphan is detected and released without assigning it to another job
   const { db, job } = setup();
   try {
     const orphan = { ...instance("unknown-job", Date.now() - 1_000), InstanceId: "i-orphan" };
-    const result = await reconcileAwsRunBoxes(db, provider([orphan]), { requestStop });
+    const result = await reconcileAwsRunBoxes(db, provider([orphan]), { workerId: "worker", requestStop });
     assert.equal(result[0].status, "orphan-released");
     assert.equal(db.prepare("SELECT job_id, status FROM run_box_cleanup WHERE instance_id = 'i-orphan'").get().job_id, null);
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
@@ -115,12 +114,12 @@ test("restart cannot mark an absent instance stopped until captured EBS volumes 
   const { db, job } = setup();
   try {
     requestStop(db, job.id);
-    const first = await reconcileAwsRunBoxes(db, provider([instance(job.id)], { volumeState: "in-use" }), { requestStop });
+    const first = await reconcileAwsRunBoxes(db, provider([instance(job.id)], { volumeState: "in-use" }), { workerId: "worker", requestStop });
     assert.equal(first[0].status, "retry");
-    const second = await reconcileAwsRunBoxes(db, provider([], { volumeState: "in-use" }), { requestStop });
+    const second = await reconcileAwsRunBoxes(db, provider([], { volumeState: "in-use" }), { workerId: "worker", requestStop });
     assert.equal(second[0].status, "retry");
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
-    const third = await reconcileAwsRunBoxes(db, provider([]), { requestStop });
+    const third = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
     assert.equal(third[0].status, "stopped");
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
   } finally { db.close(); }
@@ -130,7 +129,7 @@ test("an unrecorded duplicate with a valid job tag is released as an orphan", as
   const { db, job } = setup();
   try {
     const duplicate = { ...instance(job.id), InstanceId: "i-def456", volumeIds: ["vol-def456"] };
-    const result = await reconcileAwsRunBoxes(db, provider([instance(job.id), duplicate]), { requestStop });
+    const result = await reconcileAwsRunBoxes(db, provider([instance(job.id), duplicate]), { workerId: "worker", requestStop });
     assert.deepEqual(result.map((item) => item.status), ["active", "orphan-released"]);
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "ready");
     assert.equal(db.prepare("SELECT job_id FROM run_box_cleanup WHERE instance_id = 'i-def456'").get().job_id, null);
@@ -142,10 +141,27 @@ test("missing EBS identity leaves a visible retry rather than stopped", async ()
   try {
     requestStop(db, job.id);
     const service = provider([{ ...instance(job.id), volumeIds: [], BlockDeviceMappings: [] }]);
-    const result = await reconcileAwsRunBoxes(db, service, { requestStop });
+    const result = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
     assert.equal(result[0].status, "retry");
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
     assert.match(db.prepare("SELECT last_error FROM run_box_cleanup WHERE instance_id = 'i-abc123'").get().last_error, /No EBS volume IDs/);
     assert.equal(service.calls.length, 0);
+  } finally { db.close(); }
+});
+
+test("another worker's active lease defers the stopped transition after release", async () => {
+  const { db, job } = setup();
+  try {
+    requestStop(db, job.id);
+    const service = provider([instance(job.id)]);
+    const first = await reconcileAwsRunBoxes(db, service, { workerId: "reconciler", requestStop });
+    assert.equal(first[0].status, "retry");
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "ready");
+    assert.match(db.prepare("SELECT last_error FROM run_box_cleanup WHERE instance_id = 'i-abc123'").get().last_error, /worker lease/);
+    db.prepare("UPDATE run_box_job SET lease_expires_at = ? WHERE id = ?")
+      .run(new Date(Date.now() - 1_000).toISOString(), job.id);
+    const second = await reconcileAwsRunBoxes(db, service, { workerId: "reconciler", requestStop });
+    assert.equal(second[0].status, "stopped");
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
   } finally { db.close(); }
 });
