@@ -1,0 +1,9 @@
+# EC2 run-box cleanup and reconciliation
+
+The worker calls `migrateRunBoxCleanup(db)` during setup and `reconcileAwsRunBoxes(db, provider, { requestStop })` on startup and on each poll. The `requestStop` argument is the job-store `requestRunBoxStop` operation. The reconciler is internal to the backend and requires the scoped EC2 worker role; it is not a browser endpoint.
+
+Each pass compares approved SQLite jobs with EC2 instances tagged `Project=AgentCloudDemo`, `AgentCloudAutoExpire=true`, and `AgentCloudJobId`. A missing or invalid deadline, an expired deadline, a stop request, or a failed job starts termination. A tagged instance with no matching job is recorded as an orphan and terminated. Job IDs, instance IDs, and EBS volume IDs are persisted in `run_box_cleanup` before termination so a worker restart can continue checking release.
+
+`stopped` is recorded only after EC2 reports the instance terminated or absent **and** every previously observed EBS volume is deleted. EC2 instance absence without known volume IDs leaves a visible `retry` cleanup record and failed job for operator investigation. A provider or EBS error leaves the cleanup record in `retry`; the next worker pass tries again. The Terraform EventBridge/Lambda expiry guard independently requests termination for expired tagged instances, but it does not update the job database or prove EBS deletion. Reconciliation supplies that evidence.
+
+The worker should run this pass before claiming a new allocation, then repeat it on each poll. Only the worker/provider may issue AWS calls. The local SQLite contract supports one worker; shared production workers need a transactional reconciliation lease to prevent concurrent termination attempts.
