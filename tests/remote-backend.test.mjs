@@ -82,6 +82,12 @@ test("remote bridge isolates sessions and guards the loopback browser boundary",
   globalThis.fetch = async () => new Response(null, { status: 302, headers: { location: "https://evil.test/stolen" } });
   assert.equal((await proxyRemoteRequest(request())).status, 502);
 
+  globalThis.fetch = async () => { throw new Error("upstream offline"); };
+  const unavailable = await proxyRemoteRequest(request());
+  assert.equal(unavailable.status, 502);
+  assert.deepEqual(await unavailable.json(), { error: "Shared backend is unavailable" });
+  await assert.rejects(remoteFetch("/api/employee", incoming), /upstream offline/);
+
   let cancelled = false;
   let upstreamSignal;
   globalThis.fetch = async (_url, init) => {
