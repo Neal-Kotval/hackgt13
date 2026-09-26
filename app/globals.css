@@ -2127,7 +2127,7 @@ dialog::backdrop {
     grid-column: 1 / -1;
     max-width: none;
   }
-  .header-right .organization-switcher > span {
+  .header-right .organization-switcher > span:not(.select-field) {
     display: none;
   }
   .header-right .button {
