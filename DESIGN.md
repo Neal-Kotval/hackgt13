@@ -74,7 +74,9 @@ Verify explicit viewport widths of **375px**, **768px**, and **1440px** using Pl
 
 Use semantic headings, real links for navigation, buttons for actions, and labels for every input. Active navigation needs `aria-current`. Dialogs need an accessible name, focus handling, Escape behavior, and a visible close control. Status updates should be available to assistive technology without announcing every background event. All controls need a visible keyboard focus indicator using `--focus-width`, `--focus-offset`, and an accent token. Disabled controls must explain an unavailable capability when the reason is not obvious.
 
-Motion communicates a user action. Avoid looping decorative animation. The central reduced-motion media query changes duration tokens to zero; any future animation must also respect reduced motion. Do not claim accessibility or responsive behavior is verified until it has been exercised.
+Motion communicates navigation and user actions without delaying interaction. Framer Motion reveals newly entered page content, dialogs, menus, notifications, and the mobile navigation drawer with a brief fade and translation. Use `--duration-enter` for reveals, `--duration-fast` / `--duration-normal` for control feedback, and `--ease-standard` for easing. `--motion-enter-distance` gives content a small vertical entrance; `--motion-drawer-distance` gives navigation a short horizontal entrance; `--motion-rest-distance` is the settled position. Fade endpoints use `--opacity-reveal-start` and `--opacity-visible`. Do not animate layout dimensions or add looping decorative animation.
+
+Hover and focus transitions interpolate semantic surface, border, and shadow tokens. Keyboard focus outlines appear immediately. The central reduced-motion media query sets durations and travel to zero; runtime animations must also skip motion when this preference is active and cancel on cleanup. Content remains visible when JavaScript animation is unavailable. Do not claim accessibility or responsive behavior is verified until it has been exercised.
 
 ## Explicit exceptions
 
@@ -83,6 +85,8 @@ Structural CSS values are allowed: `0`, `1`, percentages, viewport units, grid f
 CSS custom properties cannot be used as ordinary media-query breakpoints. Literal breakpoints are therefore restricted to **375px**, **768px**, and **1440px** outside the token file. Keep responsive overrides of token values inside the token file. Content data such as a port, timestamp, task count, or command argument is not a design value.
 
 The Radix Select primitive computes menu positioning and native hidden-field geometry at runtime. Its library-generated inline positioning, focus/scroll management, and `--radix-select-*` measurements are permitted; fallback measurements live in the token file. This exception covers computed behavior only, not authored colors, spacing, typography, radii, or shadows. Application JSX still must not contain inline style objects.
+
+Framer Motion may generate runtime inline opacity and transform values for animation. Every authored appearance value, duration, and easing must be read from the central motion tokens; numeric unit conversion and interpolation are implementation details, not new visual scales. This exception does not permit authored JSX inline styles or arbitrary component animation values.
 
 The supplied reference files are immutable source material and exempt from enforcement. They are not production components.
 
