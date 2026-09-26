@@ -73,6 +73,22 @@ const api: DesktopApi = {
       state: AgentCloudStateSummary;
       raw: unknown;
     }>,
+  takePendingDeepLink: () =>
+    ipcRenderer.invoke("deepLink:takePending") as Promise<
+      import("../src/lib/deep-link.ts").DeepLinkParseResult | null
+    >,
+  onDeepLink: (handler) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      payload: import("../src/lib/deep-link.ts").DeepLinkParseResult,
+    ) => {
+      handler(payload);
+    };
+    ipcRenderer.on("deep-link", listener);
+    return () => {
+      ipcRenderer.removeListener("deep-link", listener);
+    };
+  },
 };
 
 contextBridge.exposeInMainWorld("agentcloudDesktop", api);

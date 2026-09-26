@@ -90,9 +90,36 @@ Renderer helpers: `desktop/src/lib/server-api.ts` → `getState()` / `postAction
 
 The **Tasks** panel loads live projects via `getState` (project picker). Empty servers show a connect-on-web CTA; resource statuses are shown as returned (`registered`, `verified`, `not_evaluated`, …) without inventing `ready`.
 
-## Task authoring (HAC-33 / HAC-34)
+## Task authoring (HAC-33 / HAC-34 / HAC-64)
 
-On **Tasks**, pick a project, then use **Create task** (title, instructions, agent, optional environment). Submit calls main-process `postAction` → `POST /api/state` `{ type: "addTask", projectId, title, owner }`. Instructions are folded into `title` (≤200) because the server has no instructions field yet. Environment is UI context only; Start agent stays disabled. Created tasks appear in the server task list and the web dashboard — not in Local chat `threads.json`.
+On **Tasks**, pick a project, then use **Create task** (title, instructions, agent, optional environment). Submit calls main-process `postAction` → `POST /api/state`:
+
+```json
+{
+  "type": "addTask",
+  "projectId": "…",
+  "title": "…",
+  "owner": "<agentId>",
+  "instructions": "…",
+  "environmentId": "<verified resource id, optional>"
+}
+```
+
+`instructions` and `environmentId` round-trip in `GET /api/state`. Binding `environmentId` requires a project resource with status `verified`; unknown or unverified ids are rejected.
+
+### Start agent (HAC-35)
+
+The Tasks panel includes a **Start agent** control that selects a created task + verified environment. It stays **disabled** with an explicit reason: “Agent start requires remote runner — not implemented.” Desktop does not call Local chat / OpenAI as a substitute, and it never marks a task running without server evidence. When a start endpoint lands, wire it here with `taskId` + `environmentId` + agent owner and surface the server decision only.
+
+## Deep links (HAC-54)
+
+Desktop registers the `agentcloud://` URL scheme (dev + packaged). Open Tasks with:
+
+```text
+agentcloud://open?projectId=<id>&environmentId=<verified-resource-id>
+```
+
+`environmentId` is optional. On cold start or a second-instance handoff, the existing window is focused (no duplicate shell). Valid IDs switch to **Tasks** and preselect the project/environment. Missing projects, unknown resources, or unverified environments show an honest error — desktop never invents a ready box. Website “Open in desktop” UI is a separate ticket.
 
 ## Persistence
 
@@ -106,9 +133,10 @@ From the repository root:
 
 ```sh
 just desktop-check   # TypeScript
+just desktop-tokens  # design token contract (desktop + web)
 just desktop-test    # local chat store tests
 just desktop-build   # production renderer + electron bundles
-just desktop-verify  # all three
+just desktop-verify  # check + tokens + test + build
 ```
 
 ## Limitations (intentional for D1 + D2.0)
@@ -122,4 +150,13 @@ just desktop-verify  # all three
 
 ## Design tokens
 
-Renderer CSS imports the shared AgentCloud token file from `app/tokens.css`. Do not invent a parallel palette in this package.
+Renderer CSS imports the shared AgentCloud token file from `app/tokens.css`
+(Hanken Grotesk / JetBrains Mono via `/fonts/*`). Vite serves the repo
+`public/` directory as the desktop `publicDir`, so Electron resolves the same
+font URLs as the Next app.
+
+Do not invent a parallel palette in this package. Use semantic tokens only
+(`.button`, `.eyebrow`, `.tag`, compact selects). `just desktop-verify` runs
+`npm run tokens:check`, which scans `desktop/src/**/*.{css,tsx}` alongside web
+surfaces and fails on raw colors, inline styles, or undefined tokens.
+

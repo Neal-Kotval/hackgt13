@@ -7,7 +7,8 @@ let electronStarted = false;
 
 export default defineConfig({
   root: ".",
-  publicDir: "public",
+  // Serve the same self-hosted font files Next uses so /fonts/* resolves in Electron.
+  publicDir: path.resolve(__dirname, "../public"),
   resolve: {
     alias: {
       "@agentcloud-tokens": path.resolve(__dirname, "../app/tokens.css"),

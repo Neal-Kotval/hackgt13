@@ -70,5 +70,9 @@ desktop-test:
 desktop-build:
     npm --prefix desktop run build
 
-# Typecheck, test, and build the desktop package.
-desktop-verify: desktop-check desktop-test desktop-build
+# Typecheck, token-check desktop surfaces, test, and build the desktop package.
+desktop-verify: desktop-check desktop-tokens desktop-test desktop-build
+
+# Enforce design tokens on desktop CSS/TSX (same contract as web).
+desktop-tokens:
+    npm run tokens:check

@@ -602,6 +602,14 @@ export function CloudApp() {
                               <div className="task-card" key={t.id}>
                                 <span className="muted">{t.id}</span>
                                 <h4>{t.title}</h4>
+                                {t.instructions ? (
+                                  <p className="muted">{t.instructions}</p>
+                                ) : null}
+                                {t.environmentId ? (
+                                  <small>
+                                    Environment {t.environmentId}
+                                  </small>
+                                ) : null}
                                 <p
                                   className={
                                     agentTone(ownerName(project, t.owner)) +
@@ -948,6 +956,14 @@ function TaskTable({
                   {String(i + 1).padStart(2, "0")}
                 </span>
                 <span>{t.title}</span>
+                {t.instructions ? (
+                  <p className="muted">{t.instructions}</p>
+                ) : null}
+                {t.environmentId ? (
+                  <span className="dependency" title="Bound environment">
+                    env {t.environmentId.slice(0, 8)}
+                  </span>
+                ) : null}
                 {t.dependency && (
                   <span
                     className="dependency"

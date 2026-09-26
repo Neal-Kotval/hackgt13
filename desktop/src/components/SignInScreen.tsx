@@ -37,47 +37,51 @@ export function SignInScreen({
   }
 
   return (
-    <div className="auth-screen">
+    <div className="auth-page">
       <section className="auth-panel" aria-labelledby="desktop-sign-in-title">
-        <p className="auth-eyebrow">agentcloud</p>
+        <p className="eyebrow">agentcloud</p>
         <h1 id="desktop-sign-in-title">Sign in</h1>
-        <p className="auth-copy">
+        <p>
           Use the same employee account as the web app at{" "}
           <code>{baseUrl}</code>. Agent CLI tokens are not accepted here.
         </p>
-        <form className="auth-form" onSubmit={(event) => void submit(event)}>
-          <label htmlFor="desktop-auth-email">Email</label>
-          <input
-            id="desktop-auth-email"
-            name="email"
-            type="email"
-            autoComplete="username"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            disabled={pending}
-          />
-          <label htmlFor="desktop-auth-password">Password</label>
-          <input
-            id="desktop-auth-password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            disabled={pending}
-          />
+        <form onSubmit={(event) => void submit(event)}>
+          <label htmlFor="desktop-auth-email">
+            Email
+            <input
+              id="desktop-auth-email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              disabled={pending}
+            />
+          </label>
+          <label htmlFor="desktop-auth-password">
+            Password
+            <input
+              id="desktop-auth-password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              disabled={pending}
+            />
+          </label>
           <button
             type="submit"
-            className="btn btn-primary"
+            className="button primary"
             disabled={pending || !email.trim() || !password}
           >
             {pending ? "Signing in…" : "Sign in"}
           </button>
         </form>
         {error ? (
-          <p className="error-banner" role="alert">
+          <p className="auth-error" role="alert">
             {error}
           </p>
         ) : null}

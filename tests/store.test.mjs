@@ -440,3 +440,87 @@ test("stale heartbeat becomes disconnected in public state and SSE without a mut
     await reader.cancel();
   }
 });
+
+test("addTask persists instructions and verified environmentId", async () => {
+  const created = await action({
+    type: "createProject",
+    name: "Task fields",
+    repo: "https://github.com/example/task-fields",
+    template: "blank",
+    compute: "Hosted Linux",
+  });
+  const projectId = created.id;
+  const agent = await action({
+    type: "addAgent",
+    projectId,
+    client: "Codex",
+    role: "backend",
+  });
+  const diskPath = path.join(temporary, "data", "state.json");
+  const disk = JSON.parse(await readFile(diskPath, "utf8"));
+  const verifiedId = "11111111-1111-4111-8111-111111111111";
+  const registeredId = "22222222-2222-4222-8222-222222222222";
+  const now = new Date().toISOString();
+  const project = disk.state.projects.find((row) => row.id === projectId);
+  project.resources.push(
+    {
+      id: verifiedId,
+      name: "Verified box",
+      kind: "run-box",
+      capability: "ssh",
+      owner: "admin",
+      status: "verified",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: registeredId,
+      name: "Registered only",
+      kind: "run-box",
+      capability: "ssh",
+      owner: "admin",
+      status: "registered",
+      createdAt: now,
+      updatedAt: now,
+    },
+  );
+  await writeFile(diskPath, JSON.stringify(disk));
+
+  await assert.rejects(
+    action({
+      type: "addTask",
+      projectId,
+      title: "Bad env",
+      owner: agent.agentId,
+      environmentId: "missing-env",
+    }),
+    { status: 404 },
+  );
+  await assert.rejects(
+    action({
+      type: "addTask",
+      projectId,
+      title: "Unverified env",
+      owner: agent.agentId,
+      environmentId: registeredId,
+    }),
+    (error) =>
+      error.status === 400 &&
+      /verified/i.test(error.message),
+  );
+
+  await action({
+    type: "addTask",
+    projectId,
+    title: "Smoke",
+    owner: agent.agentId,
+    instructions: "Run nvidia-smi and paste output",
+    environmentId: verifiedId,
+  });
+  const task = (await getState()).projects
+    .find((row) => row.id === projectId)
+    .tasks.at(-1);
+  assert.equal(task.title, "Smoke");
+  assert.equal(task.instructions, "Run nvidia-smi and paste output");
+  assert.equal(task.environmentId, verifiedId);
+});

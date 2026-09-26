@@ -11,6 +11,7 @@ import type {
   ChatThread,
   ChatThreadSummary,
   CredentialStatus,
+  DeepLinkParseResult,
 } from "./lib/types";
 
 /**
@@ -36,14 +37,48 @@ export default function App() {
   const [credentials, setCredentials] = useState<CredentialStatus | null>(
     null,
   );
+  const [deepLink, setDeepLink] = useState<DeepLinkParseResult | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const sending =
     activeThread?.messages.some((message) => message.status === "streaming") ??
     false;
 
+  const clearDeepLink = useCallback(() => {
+    setDeepLink(null);
+  }, []);
+
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let stop: (() => void) | undefined;
+    try {
+      const api = desktopApi();
+      void (async () => {
+        try {
+          const pending = await api.takePendingDeepLink();
+          if (!cancelled && pending) {
+            setSection("tasks");
+            setDeepLink(pending);
+          }
+        } catch {
+          // Ignore bridge races during boot.
+        }
+      })();
+      stop = api.onDeepLink((result) => {
+        setSection("tasks");
+        setDeepLink(result);
+      });
+    } catch {
+      // Non-Electron preview.
+    }
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, []);
 
   const refreshThreads = useCallback(async () => {
     const api = desktopApi();
@@ -351,7 +386,7 @@ export default function App() {
 
   if (!auth) {
     return (
-      <div className="auth-screen" role="status">
+      <div className="auth-page" role="status">
         <p className="auth-loading">Checking employee session…</p>
       </div>
     );
@@ -398,7 +433,11 @@ export default function App() {
       }}
     >
       {section === "tasks" ? (
-        <ProjectPicker webBaseUrl={auth.baseUrl} />
+        <ProjectPicker
+          webBaseUrl={auth.baseUrl}
+          deepLink={deepLink}
+          onDeepLinkHandled={clearDeepLink}
+        />
       ) : (
         <div className="app-shell">
           <ThreadList

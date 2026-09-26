@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { TaskComposer } from "./TaskComposer";
+import type { DeepLinkParseResult } from "../lib/deep-link";
 import { getState } from "../lib/server-api";
 import type { AgentCloudStateSummary, ProjectSnapshot } from "../lib/types";
 
 type ProjectPickerProps = {
   webBaseUrl: string;
+  deepLink?: DeepLinkParseResult | null;
+  onDeepLinkHandled?: () => void;
 };
 
 type LoadState =
@@ -16,9 +19,17 @@ function hasVerifiedResource(project: ProjectSnapshot): boolean {
   return project.resources.some((resource) => resource.status === "verified");
 }
 
-export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
+export function ProjectPicker({
+  webBaseUrl,
+  deepLink = null,
+  onDeepLinkHandled,
+}: ProjectPickerProps) {
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [preferredEnvironmentId, setPreferredEnvironmentId] = useState<
+    string | undefined
+  >();
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoad({ kind: "loading" });
@@ -46,6 +57,54 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!deepLink || load.kind !== "ok") return;
+    if (!deepLink.ok) {
+      setDeepLinkError(deepLink.error);
+      setPreferredEnvironmentId(undefined);
+      onDeepLinkHandled?.();
+      return;
+    }
+    const project = load.state.projects.find(
+      (row) => row.id === deepLink.target.projectId,
+    );
+    if (!project) {
+      setDeepLinkError(
+        `Deep link project ${deepLink.target.projectId} was not found. Create or join it on the web, then retry.`,
+      );
+      setPreferredEnvironmentId(undefined);
+      onDeepLinkHandled?.();
+      return;
+    }
+    if (deepLink.target.environmentId) {
+      const resource = project.resources.find(
+        (row) => row.id === deepLink.target.environmentId,
+      );
+      if (!resource) {
+        setDeepLinkError(
+          `Deep link environment ${deepLink.target.environmentId} was not found on project ${project.name}.`,
+        );
+        setPreferredEnvironmentId(undefined);
+        onDeepLinkHandled?.();
+        return;
+      }
+      if (resource.status !== "verified") {
+        setDeepLinkError(
+          `Environment “${resource.name}” is ${resource.status}, not verified. Verify it on the web before continuing in desktop.`,
+        );
+        setPreferredEnvironmentId(undefined);
+        onDeepLinkHandled?.();
+        return;
+      }
+      setPreferredEnvironmentId(resource.id);
+    } else {
+      setPreferredEnvironmentId(undefined);
+    }
+    setDeepLinkError(null);
+    setSelectedId(project.id);
+    onDeepLinkHandled?.();
+  }, [deepLink, load, onDeepLinkHandled]);
+
   const selected =
     load.kind === "ok"
       ? load.state.projects.find((project) => project.id === selectedId) ?? null
@@ -64,7 +123,7 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
         </div>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="button ghost"
           onClick={() => {
             void refresh();
           }}
@@ -73,6 +132,12 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
           {load.kind === "loading" ? "Refreshing…" : "Refresh"}
         </button>
       </div>
+
+      {deepLinkError ? (
+        <p className="error-banner" role="alert">
+          {deepLinkError}
+        </p>
+      ) : null}
 
       {load.kind === "error" ? (
         <div className="app-error" role="alert">
@@ -111,6 +176,7 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
           <label className="picker-select">
             <span>Project</span>
             <select
+              className="control-select"
               aria-label="Project"
               value={selectedId ?? ""}
               onChange={(event) => setSelectedId(event.target.value || null)}
@@ -132,9 +198,10 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
             <>
               <ProjectDetail project={selected} webBaseUrl={webBaseUrl} />
               <TaskComposer
-                key={selected.id}
+                key={`${selected.id}:${preferredEnvironmentId ?? ""}`}
                 project={selected}
                 webBaseUrl={webBaseUrl}
+                preferredEnvironmentId={preferredEnvironmentId}
                 onCreated={() => refresh()}
               />
             </>
@@ -152,6 +219,28 @@ export function ProjectPicker({ webBaseUrl }: ProjectPickerProps) {
       </div>
     </main>
   );
+}
+
+function statusTagClass(status: string): string {
+  switch (status) {
+    case "verified":
+      return "tag green";
+    case "registered":
+    case "pending":
+    case "in_progress":
+      return "tag cyan";
+    case "failed":
+    case "denied":
+    case "blocked":
+      return "tag pink";
+    case "not_evaluated":
+    default:
+      return "tag yellow";
+  }
+}
+
+function readableStatus(status: string): string {
+  return status.replaceAll("_", " ");
 }
 
 function ProjectDetail({
@@ -202,7 +291,8 @@ function ProjectDetail({
         items={project.resources.map((resource) => ({
           id: resource.id,
           primary: resource.name,
-          secondary: `${resource.kind} · status ${resource.status}`,
+          secondary: resource.kind,
+          status: resource.status,
         }))}
       />
 
@@ -212,9 +302,10 @@ function ProjectDetail({
         items={project.resourceRequests.map((request) => ({
           id: request.id,
           primary: request.purpose,
-          secondary: `request ${request.status} · decision ${request.decisionStatus}${
+          secondary: `decision ${request.decisionStatus}${
             request.decisionReason ? ` — ${request.decisionReason}` : ""
           }`,
+          status: request.status,
         }))}
       />
 
@@ -224,9 +315,8 @@ function ProjectDetail({
         items={project.agents.map((agent) => ({
           id: agent.id,
           primary: `${agent.name} (${agent.role})`,
-          secondary: `status ${agent.status}${
-            agent.lastSeen ? ` · last seen ${agent.lastSeen}` : ""
-          }`,
+          secondary: agent.lastSeen ? `last seen ${agent.lastSeen}` : undefined,
+          status: agent.status,
         }))}
       />
 
@@ -236,7 +326,18 @@ function ProjectDetail({
         items={project.tasks.map((task) => ({
           id: task.id,
           primary: task.title,
-          secondary: `owner ${task.owner} · ${task.status}`,
+          secondary: [
+            `owner ${task.owner}`,
+            task.environmentId ? `env ${task.environmentId}` : null,
+            task.instructions
+              ? `instructions: ${task.instructions.slice(0, 120)}${
+                  task.instructions.length > 120 ? "…" : ""
+                }`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          status: task.status,
         }))}
       />
     </section>
@@ -250,7 +351,12 @@ function DetailList({
 }: {
   title: string;
   empty: string;
-  items: { id: string; primary: string; secondary: string }[];
+  items: {
+    id: string;
+    primary: string;
+    secondary?: string;
+    status?: string;
+  }[];
 }) {
   return (
     <div className="detail-list">
@@ -261,8 +367,20 @@ function DetailList({
         <ul>
           {items.map((item) => (
             <li key={item.id}>
-              <span className="detail-primary">{item.primary}</span>
-              <span className="detail-secondary">{item.secondary}</span>
+              <div className="detail-row">
+                <span className="detail-primary">{item.primary}</span>
+                {item.status ? (
+                  <span
+                    className={statusTagClass(item.status)}
+                    title={item.status}
+                  >
+                    {readableStatus(item.status)}
+                  </span>
+                ) : null}
+              </div>
+              {item.secondary ? (
+                <span className="detail-secondary">{item.secondary}</span>
+              ) : null}
             </li>
           ))}
         </ul>
