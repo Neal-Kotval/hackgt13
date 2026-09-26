@@ -46,6 +46,14 @@ The Compose volume keeps accounts, sessions, projects, mail, and an automaticall
 
 [Local Terraform](infra/local/README.md) describes the same backend as an alternative to Compose. Its Docker resources use separate names and data. Existing [AWS app Terraform](infra/aws-auth/README.md) and [AWS GPU Terraform](infra/aws/README.md) remain separate roots. Validation is not provisioning; this workflow does not run any AWS apply or deploy command.
 
+### Local Docker sandbox worker (no cloud spend)
+
+The `docker-local` provider with server-owned profile `local-docker-sandbox` runs a CPU-only Linux container with sshd on the machine running the worker. It has no GPU and costs nothing. SSH access is trusted shell access as the non-root `agentcloud` user; it is not a filesystem or command sandbox.
+
+Run `just sandbox-image` once (the worker also builds `agentcloud-sandbox:dev` from `infra/sandbox/` when it is absent), then `just worker-docker` alongside `just dev`. The worker loads `.env.local` with `node --env-file-if-exists`, so it opens the same `AGENTCLOUD_DATA_DIR` (default `.agentcloud/auth.sqlite` in the repository root) as the app; with Doppler use `doppler run -- just worker-docker`. Every 3 seconds it removes containers for stopped, failed, or unknown jobs, requests stop for expired sandboxes, and processes one queued or stopping job.
+
+For each job the worker generates a pinned ed25519 host key and a one-time verification key in a private temporary directory, starts `agentcloud-sandbox-<jobId>` with a random `127.0.0.1` port, 2 GB memory, 2 CPUs, a PID limit, and dropped capabilities, and records the SSH endpoint. The job becomes `ready` only after SSH with strict host-key checking confirms the account and `~/workspace` (and, when the approved job has a repository URL, clones it to `~/workspace/repo` and records the revision), the verification key has been removed, and that key is refused. Only registered device keys of project members at allocation time remain authorized; with none registered, the job fails with a clear reason. Keys registered later need a new sandbox. The host private key is passed to Docker through the environment, so anyone with Docker access on the worker machine can read it with `docker inspect`. At most one active local sandbox per project is allowed.
+
 ### Local frontend with shared AWS data
 
 Run `just dev-aws` (or `doppler run --project hackgt --config dev -- npm run dev:aws`) to serve the local frontend at `http://127.0.0.1:3001` against the shared `AGENTCLOUD_URL`. Sign in with an existing verified AWS account. Authentication, organizations, projects, resource requests, run-box controls, and live events go to that backend; mutations affect shared data. No AWS credentials, local auth setup, or copied database are required.
