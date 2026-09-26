@@ -1,12 +1,12 @@
 # AgentCloud design system
 
-AgentCloud is a shared working room for human-directed agents. The interface should make ownership, dependencies, running services, and handoffs legible at a glance. The dashboard is the central product experience; infrastructure detail supports that collaboration.
+AgentCloud is a shared working room for human-directed agents. The interface should make ownership, dependencies, running services, and handoffs legible at a glance. The web dashboard is the environment setup and monitoring surface: prioritize environment readiness, operational analytics, and agent progress. Task creation and agent instructions belong in the desktop app.
 
 ## Source and direction
 
 The visual source is the supplied [AgentCloud terminal prototype](reference/AgentCloud%20Prototype.dc.html), extracted from the user's Dashboard Demo archive. It establishes charcoal surfaces, warm off-white text, cyan actions, magenta agent accents, a subtle dot grid, and monospace typography. The implementation extends that source into reusable React UI rather than retaining its inline styles or prototype event syntax.
 
-The visual emphasis is the collaboration itself: agents own work, publish a service, and hand work to another agent. Keep the chrome quiet. Use cyan for a primary action or selected destination and magenta for a secondary agent identity. Avoid decorative gradients, oversized metrics, and repeated decorative labels. Align content left. Borders define genuine panels and groups; spacing defines the hierarchy inside them.
+The visual emphasis is environment readiness and observable agent progress, supported by clear ownership and evidence. Keep the chrome quiet. Use cyan for a primary action or selected destination and magenta for a secondary agent identity. Avoid decorative gradients, oversized metrics, and repeated decorative labels. Align content left. Borders define genuine panels and groups; spacing defines the hierarchy inside them.
 
 ## Interactive reference
 
@@ -56,7 +56,7 @@ Use `--font-body` and `--font-heading`: JetBrains Mono when installed, with expl
 
 Spacing follows a four-pixel base represented as rem values. `--space-1` through `--space-12`, then `--space-16`, `--space-20`, and `--space-24` are the allowed scale. Use compact spacing within a row, medium spacing within a panel, and larger spacing between sections. Controls share `--control-height`, border, radius, and focus tokens. Reserve rounded pills for compact status; panel corners remain restrained.
 
-The desktop layout uses a stable header and project navigation, with the main workspace expanding to the page maximum. The project dashboard prioritizes agent ownership and work before the activity timeline. Service endpoints and handoff details must remain readable and selectable. Long commands and paths should wrap or scroll locally instead of widening the page.
+At desktop browser widths, the web layout uses a stable header and project navigation, with the main workspace expanding to the page maximum. The project dashboard prioritizes environment setup and health, operational analytics, and current agent progress before the detailed activity timeline. Its primary empty-state action is “Connect a machine.” Show connection and verification progress, then a ready environment even when it has no tasks or active agents. Explain how to select it and start an agent in the desktop app. Other primary actions manage environments; task authoring belongs in the desktop app. Show metric time ranges and freshness, and label missing telemetry as unavailable. Service endpoints and handoff details must remain readable and selectable. Long commands and paths should wrap or scroll locally instead of widening the page.
 
 ## Responsive and accessibility rules
 

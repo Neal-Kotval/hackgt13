@@ -10,6 +10,12 @@ Projects persist metadata. A generated token lets an external process connect to
 
 `lib/workspace.ts` now provides an isolated **local** Git implementation that can clone a credential-free HTTPS repository, create per-agent worktrees, and inspect their on-disk identity. Its tests use a temporary repository; no fixture is bundled into application state. This provider is not yet connected to project setup, API actions, CLI commands, or the dashboard. A saved project therefore still represents metadata only, and no remote execution is implied.
 
+## Target client responsibilities
+
+The desktop app owns task creation, instructions, agent assignment, and follow-ups. The web app owns project/environment configuration, access and resource management, operational analytics, and viewing progress/results. Both consume the same authenticated backend records; the desktop app does not keep a separate authoritative task store. Environment attachment/allocation requests are project-scoped and can precede task creation. After the machine is verified, the desktop app creates a task and requests an agent start against that environment. The server checks permission at both stages. A ready environment can have zero agent runs; connecting a machine does not start an agent.
+
+This is a target responsibility split. The current web task controls, human task mutation API, and handoff acceptance behavior remain implemented until migrated. Moving authoring includes follow-up task creation through handoffs; do not silently remove the shared backend task contract. Analytics must derive from persisted run events or explicit telemetry and identify missing data.
+
 ## Components and data flow
 
 ```mermaid
@@ -83,7 +89,7 @@ The planned path is employee OIDC login → server-side resource policy → prov
 4. Add a second independent agent and private development service discovery, then artifact homes with independent storage and serving lifecycles. See [FEATURE_SPEC.md](FEATURE_SPEC.md) for temporary-service and publication behavior.
 5. Add integration review, diffs, explicit merges, and stronger execution-boundary restrictions where needed. Enforce approvals, expiry, budgets, and any advertised access restrictions at the boundary that controls the resource.
 
-The desired desktop shell should wrap the CLI after remote adapters work. It should not duplicate project state or own coordination logic.
+The planned desktop app owns the task-authoring workflow and may reuse the CLI transport and remote adapters. Its task creation integration is required for the target user journey; it should not duplicate project state or backend coordination logic. The web app sets up environments and monitors analytics and progress.
 
 ## Verification
 

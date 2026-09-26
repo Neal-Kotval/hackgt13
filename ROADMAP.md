@@ -2,6 +2,12 @@
 
 Ship one governed remote GPU task before expanding into multiple agents or an infrastructure catalog. This is a dependency-ordered roadmap, not a claim that the remote MVP already works. [MVP_SPEC.md](MVP_SPEC.md) defines the HackGT acceptance gates.
 
+## Client responsibility and migration
+
+The desktop app owns task creation, instructions, agent assignment, and follow-ups. The web app owns environment setup and lifecycle management, operational analytics, and progress/results viewing. Existing web task controls are part of the local foundation, not the target product responsibility.
+
+Before declaring the target workflow complete, connect desktop task creation to the shared authenticated backend, migrate web task/follow-up authoring to that desktop flow, and preserve existing task records and agent updates. Connect or allocate and verify the environment before a task exists. Then create the task in the desktop app and authorize an agent start against that ready environment; environment readiness must not depend on an active task. Web analytics initially summarize recorded run outcomes, durations, failures, and environment state with time range/freshness; mark missing telemetry unavailable.
+
 ## Next implementation increments
 
 These are reviewable slices within phases 1–4, in the order they should land. [BACKEND_PLAN.md](BACKEND_PLAN.md) defines the proposed records and worker/provider contract.
@@ -71,7 +77,7 @@ Implement one actual Codex adapter or supported client integration against the r
 
 Acceptance:
 
-- A user invokes a documented connect/launch flow and a real agent edits a file remotely.
+- A user creates and assigns a task in the desktop app against a ready project environment previously connected and verified on the web; a documented connect/launch flow lets a real agent edit a file remotely.
 - A command runs in the intended workspace and emits attributed start, completion, and error events.
 - Disconnect and reconnect preserve the project and do not create duplicate ownership.
 - The dashboard distinguishes transport connection, model execution, and idle state.
@@ -79,13 +85,13 @@ Acceptance:
 
 ## 4 — Governed GPU task and control surface (HackGT MVP)
 
-Complete the end-to-end scenario in [MVP_SPEC.md](MVP_SPEC.md). The web app acts as a Codex-like control plane talking to the remote box and mirrors real agent and command activity; it does not need a new model loop or a simulated terminal.
+Complete the end-to-end scenario in [MVP_SPEC.md](MVP_SPEC.md). The desktop app creates tasks and directs agents. The web app configures environments and displays operational analytics, progress, and real agent/command activity from the remote box; it does not need a task composer, a new model loop, or a simulated terminal.
 
 Acceptance:
 
-- An authorized employee requests a GPU run environment and a real agent completes a representative GPU task there. Record why the local environment cannot run the same workload and the remote device/result evidence.
+- An authorized employee connects and verifies the GPU environment on the web first, then creates the task and starts an authorized agent inside it from the desktop app; a real agent completes a representative GPU task there. Record why the local environment cannot run the same workload and the remote device/result evidence.
 - A second identity is denied by both the resource API and the SSH/execution boundary being claimed; an allowed command still works.
-- The dashboard displays actual session, command, output, and resource states with attribution. Transport connection and model execution are distinct.
+- The web dashboard displays actual session, command, output, and resource states with attribution, plus analytics derived from recorded events with an explicit time range and freshness. Transport connection and model execution are distinct.
 - Reconnect to the same project work, then stop or release the run environment and show its actual state.
 - Show one traceable chain from authenticated employee and decision through provider box, agent session, GPU result, and stop evidence.
 - Do not claim SSH path or command restrictions, credential revocation, or cost shutdown without demonstrating each at its enforcement boundary.
