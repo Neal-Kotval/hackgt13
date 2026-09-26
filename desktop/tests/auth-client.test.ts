@@ -157,6 +157,9 @@ describe("DesktopAuthClient", () => {
         /must not carry Authorization/i.test(error.message),
     );
 
+    for (const destination of ["https://attacker.example/api/state", "//attacker.example/api/state", "http://user:pass@127.0.0.1:3000/api/state"]) {
+      await assert.rejects(() => client.fetchHuman(destination), /configured AgentCloud server/);
+    }
     await client.signOut();
     assert.equal(client.hasLocalSession(), false);
     assert.equal(store.load(), null);
@@ -189,4 +192,14 @@ describe("DesktopAuthClient", () => {
     assert.equal(response.status, 401);
     assert.equal(client.hasLocalSession(), false);
   });
+});
+
+ it("authenticated human API requests cannot follow redirects", async () => {
+  let redirect: RequestRedirect | undefined;
+  const client = new DesktopAuthClient(new SessionStore(tempDir(), plainCrypto), {
+    baseUrl: "http://127.0.0.1:3000", encryptionAvailable: false,
+    fetchImpl: async (_url, init) => { redirect = init?.redirect; return new Response("{}"); },
+  });
+  await client.fetchHuman("/api/codex-sessions?projectId=p1", { redirect: "follow" });
+  assert.equal(redirect, "error");
 });

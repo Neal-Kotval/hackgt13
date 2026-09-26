@@ -184,3 +184,9 @@ sidebar, icon navigation, an account card, and a keyboard-accessible drawer on
 narrow windows. Flat dark surfaces, rounded controls, and semantic action colors
 consume the same tokens. Project and task dropdowns reuse the web Radix Select
 primitive directly, including keyboard navigation and accessible names.
+
+## Codex in a local Docker box
+
+The **Codex agents** section connects to sessions initialized on the AgentCloud website. Select the same project and session, send instructions, inspect attributed assistant and Docker command events, and stop generation or reconnect a stopped session. The website owns initialization and authentication setup. `agentcloud://open?projectId=…&codexSessionId=…` selects that session after employee sign-in; session data always comes from the authenticated server, never the link.
+
+This view polls bounded event snapshots and replaces events by stable IDs. Unsent drafts survive navigation during the current app session; failed sends retain text and reuse the request ID when retried unchanged. Project chat remains an independent local scratchpad. Docker provides a local execution box, not an AWS deployment or GPU verification. Authenticated renderer requests are restricted to the configured server origin and do not follow redirects.

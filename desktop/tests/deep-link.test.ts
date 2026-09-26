@@ -76,3 +76,12 @@ describe("findDeepLinkUrl", () => {
     assert.equal(findDeepLinkUrl(["/path/to/electron"]), null);
   });
 });
+
+ describe("Codex deep links", () => {
+  it("opens a session only with a project and safe session identifier", () => {
+    assert.deepEqual(parseAgentCloudDeepLink("agentcloud://open?projectId=p1&codexSessionId=codex-42"), { ok: true, target: { projectId: "p1", codexSessionId: "codex-42" } });
+    for (const query of ["codexSessionId=s1", "projectId=p1&codexSessionId=..%2Fsecret", "projectId=p1&codexSessionId=s1&runBoxId=r1", "projectId=p1&codexSessionId=s1&environmentId=e1"]) {
+      assert.equal(parseAgentCloudDeepLink(`agentcloud://open?${query}`).ok, false);
+    }
+  });
+});
