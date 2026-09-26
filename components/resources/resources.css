@@ -177,19 +177,27 @@
 .resource-badge--registered,
 .resource-badge--requested,
 .resource-badge--approved,
-.resource-badge--allocated {
+.resource-badge--allocated,
+.resource-badge--queued,
+.resource-badge--allocating,
+.resource-badge--connecting,
+.resource-badge--verifying,
+.resource-badge--stopping {
   color: var(--color-warning);
   background: var(--color-warning-soft);
 }
 
 .resource-badge--verified,
-.resource-badge--running {
+.resource-badge--running,
+.resource-badge--ready,
+.resource-badge--stopped {
   color: var(--color-success);
   background: var(--color-success-soft);
 }
 
 .resource-badge--unavailable,
-.resource-badge--denied {
+.resource-badge--denied,
+.resource-badge--failed {
   color: var(--color-danger);
   background: var(--color-danger-soft);
 }
@@ -393,6 +401,20 @@
 .resource-decision--denied {
   color: var(--color-danger);
   background: var(--color-danger-soft);
+}
+
+.resource-job {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  border-top: var(--border-width) solid var(--color-border);
+  padding-top: var(--space-4);
+}
+
+.resource-job > .resource-facts {
+  width: 100%;
+  margin-top: 0;
 }
 
 .resource-inference-summary {

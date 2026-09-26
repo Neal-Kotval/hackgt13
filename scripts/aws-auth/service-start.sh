@@ -10,7 +10,8 @@ SECRET="$(aws secretsmanager get-secret-value \
 (( ${#SECRET} >= 32 )) || { echo 'Staging auth secret is not initialized.' >&2; exit 1; }
 export BETTER_AUTH_SECRET="$SECRET"
 unset SECRET
-export BETTER_AUTH_URL=http://127.0.0.1:3000
+: "${AGENTCLOUD_PUBLIC_ORIGIN:?Missing public application origin}"
+export BETTER_AUTH_URL="$AGENTCLOUD_PUBLIC_ORIGIN"
 export AGENTCLOUD_DATA_DIR=/var/lib/agentcloud
 export AGENTCLOUD_MAIL_MODE=local
 export NODE_ENV=production
@@ -20,4 +21,4 @@ cd /opt/agentcloud/current
 if [[ "$MODE" == setup ]]; then
   exec /usr/bin/npm-22 run auth:setup
 fi
-exec /usr/bin/npm-22 start
+exec /usr/bin/node-22 node_modules/next/dist/bin/next start --hostname 0.0.0.0

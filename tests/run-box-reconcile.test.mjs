@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { claimRunBoxJob, migrateRunBoxJobs, recordRunBoxAllocation, saveRunBoxDecision, requestRunBoxStop, transitionRunBoxJob } from "../lib/run-box-jobs.mjs";
+import { claimRunBoxJob, migrateRunBoxJobs, recordRunBoxAllocation, recordRunBoxRevision, saveRunBoxDecision, requestRunBoxStop, transitionRunBoxJob } from "../lib/run-box-jobs.mjs";
 import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
 
 function setup() {
@@ -12,11 +12,12 @@ function setup() {
   const { job } = saveRunBoxDecision(db, {
     idempotencyKey: "request-1", resourceRequestId: "resource-1", projectId: "project-1",
     employeeId: "employee-1", organizationId: "organization-1", projectRole: "owner",
-    provider: "aws-ec2", maxDurationMinutes: 60,
+    provider: "aws-ec2", maxDurationMinutes: 60, repoUrl: "https://example.com/repo.git",
   });
   claimRunBoxJob(db, "worker");
   recordRunBoxAllocation(db, job.id, "worker", "aws-ec2", "i-abc123");
   transitionRunBoxJob(db, job.id, "verifying", "worker");
+  recordRunBoxRevision(db, job.id, "worker", "a".repeat(40));
   transitionRunBoxJob(db, job.id, "ready", "worker", { evidenceRef: "ssm:gpu-pass" });
   return { db, job };
 }
