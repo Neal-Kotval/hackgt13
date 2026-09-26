@@ -36,6 +36,12 @@ A fresh checkout can run the web app, API, and Better Auth locally with the shar
 
 For the shared account, open the `AGENTCLOUD_URL` from Doppler in a browser, or run `just desktop-doppler` after `just desktop-setup`. The local Next.js server started by `just dev-doppler` still uses its own database; setting `AGENTCLOUD_URL` does not redirect that server's routes to AWS. The CloudFront hostname remains stable through EC2 restarts but must be updated in Doppler if the Terraform distribution is replaced.
 
+### Local frontend with shared AWS data
+
+Run `just dev-aws` (or `doppler run --project hackgt --config dev -- npm run dev:aws`) to serve the local frontend at `http://127.0.0.1:3001` against the shared `AGENTCLOUD_URL`. Sign in with an existing verified AWS account. Authentication, organizations, projects, resource requests, run-box controls, and live events go to that backend; mutations affect shared data. No AWS credentials, local auth setup, or copied database are required.
+
+The launcher explicitly enables `AGENTCLOUD_REMOTE_BACKEND_URL`; ordinary `just dev` and `just dev-doppler` remain self-hosted. The loopback-only bridge forwards API requests and server-rendered identity checks together, with backend-scoped session cookies separate from local self-hosted sessions. It rejects nonlocal hosts and cross-origin browser requests and fails closed on upstream errors. It does not enable public proxy hosting. Verification email links belong to the AWS origin; public signup still requires SMTP there. The public AWS website needs a separate deployment of the committed frontend revision via `scripts/aws-auth/deploy.sh` by an AWS operator.
+
 Email defaults to local capture with no Doppler mail keys. For SMTP, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_FROM`, and, if required by the provider, `SMTP_USER` and `SMTP_PASSWORD`. `SMTP_PORT` defaults to 587; set `SMTP_SECURE=true` for implicit TLS, usually on port 465. Keep all secret values and Doppler tokens out of Git. The existing `.env.local` setup remains available.
 
 ### Doppler MCP for coding assistants

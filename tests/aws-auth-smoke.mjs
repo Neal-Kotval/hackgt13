@@ -5,7 +5,10 @@ import { promisify } from "node:util";
 import path from "node:path";
 
 const execFileAsync = promisify(execFile);
-const base = "http://127.0.0.1:3000";
+const base = (process.env.AGENTCLOUD_AUTH_SMOKE_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
+const baseURL = new URL(base);
+if (baseURL.protocol !== "https:" && !(baseURL.protocol === "http:" && ["localhost", "127.0.0.1"].includes(baseURL.hostname)))
+  throw Error("Auth smoke target must use HTTPS or loopback HTTP");
 const mode = process.env.AGENTCLOUD_AUTH_SMOKE_MODE || "signup";
 if (!["signup", "signin"].includes(mode)) throw Error("Choose signup or signin smoke mode");
 const email = process.env.AGENTCLOUD_AUTH_SMOKE_EMAIL || `smoke-${randomUUID()}@example.test`;
@@ -16,9 +19,9 @@ if (mode === "signin" && (!process.env.AGENTCLOUD_AUTH_SMOKE_EMAIL || !process.e
 
 let browser;
 try {
-  // This is a live check of the SSM tunnel, not an isolated fixture server.
+  // This is a live check of the configured endpoint, not an isolated fixture server.
   const ready = await fetch(`${base}/sign-in`, { signal: AbortSignal.timeout(5000) });
-  if (!ready.ok) throw Error("The localhost tunnel is not serving the app");
+  if (!ready.ok) throw Error("The configured endpoint is not serving the app");
   browser = await chromium.launch({ channel: "chrome", headless: true });
   const context = await browser.newContext({ viewport: { width: 375, height: 900 } });
   const page = await context.newPage();
@@ -29,6 +32,7 @@ try {
   await page.goto(`${base}/projects`);
   await page.waitForURL(`${base}/sign-in`);
   if (mode === "signup") {
+    if (base !== "http://127.0.0.1:3000") throw Error("Captured-mail signup smoke requires the local SSM tunnel; use signin mode for other endpoints");
     await page.goto(`${base}/sign-up`);
     await page.getByLabel("Your name").fill(name);
     await page.getByLabel("Email", { exact: true }).fill(email);
@@ -62,7 +66,7 @@ try {
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.waitForURL(`${base}/sign-in`);
   if ((await page.request.get(`${base}/api/employee`)).status() !== 401) throw Error("Session remained valid after signout");
-  console.log(`PASS live localhost auth: ${mode}, verified identity, session refresh, signout`);
+  console.log(`PASS live endpoint auth: ${mode}, verified identity, session refresh, signout`);
 } finally {
   await browser?.close();
 }
