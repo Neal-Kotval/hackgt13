@@ -1,0 +1,9 @@
+# Development handoff
+
+AgentCloud now has local control-plane views at `/projects/:id/resources`, `/requests`, `/runs`, `/graph`, and `/inference`. A validated `POST /api/resources` persists catalog registrations, requests, and inference configuration drafts. Requests remain `requested` with policy `not_evaluated`; the API cannot mark them approved, allocated, running, or verified. The graph projects saved relationships and standalone records. Runs separates coordination heartbeat from model execution and shows no fabricated commands.
+
+The app starts empty, with no bundled fixture or replay. The main `.agentcloud/state.json` held zero projects during this pass. Headless Playwright QA used a separate temporary data directory and a loopback production server; that server was stopped after testing. No existing untracked files were removed.
+
+`npm run check`, `npm test` (15 tests), `npm run tokens:check` (122 tokens), and `npm run build` passed. Headless Playwright MCP exercised resource registration, request persistence and server-error feedback, inference draft persistence, run empty states, and graph relationships. At 375, 768, and 1440 pixels the five new routes had no page-level overflow, clipped project navigation, browser console errors, or page errors; keyboard focus was visibly outlined. See [VERIFICATION.md](VERIFICATION.md).
+
+The next backend step toward a real GPU run is to bind requests to authenticated employee identity and a server-side allow/deny policy, then attach one specified SSH GPU host through a provider that verifies host identity, remote execution identity, GPU visibility, and a small workload. An SSH host, account/host-key trust details, repository, and identity-provider choice are still required. The current product has no employee login, remote provisioner, agent execution adapter, enforceable SSH restriction, or verified GPU operation.

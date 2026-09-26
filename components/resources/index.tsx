@@ -1,0 +1,804 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
+import {
+  ArrowRight,
+  CheckCircle,
+  Clock,
+  Database,
+  HardDrives,
+  Lightning,
+  Plus,
+  ShieldWarning,
+  Warning,
+} from "@phosphor-icons/react";
+import type {
+  Project,
+  ResourceDefinition,
+  ResourceKind,
+  ResourceRequest,
+  ResourceStatus,
+} from "@/lib/types";
+import "./resources.css";
+
+type ResourceAction = (input: Record<string, unknown>) => Promise<unknown>;
+type ResourceProps = { project: Project; onAction: ResourceAction };
+
+const resourceKinds: { value: ResourceKind; label: string }[] = [
+  { value: "run-box", label: "Run box" },
+  { value: "gpu", label: "GPU" },
+  { value: "data-source", label: "Data source" },
+  { value: "service", label: "Service" },
+  { value: "inference-api", label: "Inference API" },
+];
+
+function kindLabel(kind: ResourceKind) {
+  return resourceKinds.find((entry) => entry.value === kind)?.label ?? kind;
+}
+
+function readableDate(value?: string) {
+  if (!value) return "No timestamp recorded";
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? value : date.toLocaleString();
+}
+
+function statusDescription(status: ResourceStatus) {
+  switch (status) {
+    case "draft":
+      return "Configuration only. No service has been deployed.";
+    case "registered":
+      return "Saved in the local catalog. Availability has not been checked.";
+    case "verified":
+      return "Marked verified in the record. Verification evidence is not available in this local catalog.";
+    case "unavailable":
+      return "This resource is not currently available.";
+  }
+}
+
+function ResourceSymbol({ kind }: { kind: ResourceKind }) {
+  const icon =
+    kind === "gpu" ? (
+      <Lightning />
+    ) : kind === "data-source" ? (
+      <Database />
+    ) : kind === "inference-api" ? (
+      <ArrowRight />
+    ) : (
+      <HardDrives />
+    );
+  return (
+    <span className="resource-symbol" aria-hidden="true">
+      {icon}
+    </span>
+  );
+}
+
+function ResourceBadge({ status }: { status: ResourceStatus }) {
+  return (
+    <span className={`resource-badge resource-badge--${status}`}>{status}</span>
+  );
+}
+
+function FormFeedback({ error, success }: { error: string; success: string }) {
+  return (
+    <>
+      {error && (
+        <p className="resource-feedback resource-feedback--error" role="alert">
+          <Warning />
+          {error}
+        </p>
+      )}
+      {success && (
+        <p
+          className="resource-feedback resource-feedback--success"
+          role="status"
+        >
+          <CheckCircle />
+          {success}
+        </p>
+      )}
+    </>
+  );
+}
+
+export function ResourceCatalog({ project, onAction }: ResourceProps) {
+  const resources = project.resources ?? [];
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<ResourceKind>("run-box");
+  const [capability, setCapability] = useState("");
+  const [owner, setOwner] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const selected =
+    resources.find((item) => item.id === selectedId) ?? resources[0];
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      const response = (await onAction({
+        type: "registerResource",
+        projectId: project.id,
+        name: name.trim(),
+        kind,
+        capability: capability.trim(),
+        owner: owner.trim(),
+      })) as { resource?: ResourceDefinition } | null;
+      if (!response)
+        throw new Error("The server did not confirm the registration.");
+      if (response.resource?.id) setSelectedId(response.resource.id);
+      setName("");
+      setCapability("");
+      setOwner("");
+      setShowForm(false);
+      setSuccess(
+        "Resource registered. Connection and availability remain unverified.",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not register resource.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="resource-page" aria-labelledby="resource-catalog-title">
+      <div className="resource-page-heading">
+        <div>
+          <p className="resource-eyebrow">Project inventory</p>
+          <h2 id="resource-catalog-title">Resources</h2>
+          <p>
+            Record intended compute, data, and service resources. Registration
+            does not connect a box or verify a capability.
+          </p>
+        </div>
+        <button
+          className="button primary"
+          type="button"
+          onClick={() => setShowForm((value) => !value)}
+          aria-expanded={showForm}
+          aria-controls="resource-register-form"
+        >
+          <Plus /> {showForm ? "Close form" : "Register resource"}
+        </button>
+      </div>
+      <FormFeedback error={error} success={success} />
+      {showForm && (
+        <form
+          id="resource-register-form"
+          className="resource-form resource-panel"
+          onSubmit={submit}
+        >
+          <div>
+            <h3>Register a resource</h3>
+            <p className="resource-note">
+              This saves a catalog record only. It does not allocate, connect,
+              or verify the resource.
+            </p>
+          </div>
+          <div className="resource-form-grid">
+            <label>
+              Name
+              <input
+                required
+                maxLength={100}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Descriptive resource name"
+              />
+            </label>
+            <label>
+              Type
+              <select
+                value={kind}
+                onChange={(event) =>
+                  setKind(event.target.value as ResourceKind)
+                }
+              >
+                {resourceKinds
+                  .filter((entry) => entry.value !== "inference-api")
+                  .map((entry) => (
+                    <option key={entry.value} value={entry.value}>
+                      {entry.label}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              Capability
+              <input
+                required
+                maxLength={500}
+                value={capability}
+                onChange={(event) => setCapability(event.target.value)}
+                placeholder="What this resource is intended to provide"
+              />
+            </label>
+            <label>
+              Recorded owner
+              <input
+                required
+                maxLength={100}
+                value={owner}
+                onChange={(event) => setOwner(event.target.value)}
+                placeholder="Team or person responsible"
+              />
+            </label>
+          </div>
+          <button className="button primary" type="submit" disabled={busy}>
+            {busy ? "Registering…" : "Save registration"}
+          </button>
+        </form>
+      )}
+      {resources.length === 0 ? (
+        <div className="resource-empty resource-panel">
+          <HardDrives aria-hidden="true" />
+          <h3>No resources registered</h3>
+          <p>
+            There is no known compute, data source, or service for this project.
+            Register an intended resource to start an inventory.
+          </p>
+        </div>
+      ) : (
+        <div className="resource-layout">
+          <div
+            className="resource-list"
+            role="list"
+            aria-label="Project resources"
+          >
+            {resources.map((resource) => (
+              <div
+                className="resource-list-row"
+                role="listitem"
+                key={resource.id}
+              >
+                <button
+                  className={`resource-card${selected?.id === resource.id ? " resource-card--selected" : ""}`}
+                  type="button"
+                  onClick={() => setSelectedId(resource.id)}
+                  aria-pressed={selected?.id === resource.id}
+                >
+                  <ResourceSymbol kind={resource.kind} />
+                  <span className="resource-card-copy">
+                    <strong>{resource.name}</strong>
+                    <span>
+                      {kindLabel(resource.kind)} · {resource.owner}
+                    </span>
+                  </span>
+                  <ResourceBadge status={resource.status} />
+                </button>
+              </div>
+            ))}
+          </div>
+          {selected && <ResourceDetail resource={selected} />}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ResourceDetail({ resource }: { resource: ResourceDefinition }) {
+  return (
+    <section
+      className="resource-detail resource-panel"
+      aria-labelledby="resource-detail-title"
+    >
+      <p className="resource-eyebrow">Resource record</p>
+      <div className="resource-detail-title">
+        <h3 id="resource-detail-title">{resource.name}</h3>
+        <ResourceBadge status={resource.status} />
+      </div>
+      <p className="resource-state-explanation">
+        {statusDescription(resource.status)}
+      </p>
+      <dl className="resource-facts">
+        <div>
+          <dt>Type</dt>
+          <dd>{kindLabel(resource.kind)}</dd>
+        </div>
+        <div>
+          <dt>Capability</dt>
+          <dd>{resource.capability}</dd>
+        </div>
+        <div>
+          <dt>Recorded owner</dt>
+          <dd>{resource.owner}</dd>
+        </div>
+        <div>
+          <dt>Availability</dt>
+          <dd>
+            {resource.status === "verified"
+              ? "Marked verified; evidence unavailable"
+              : "Not verified available"}
+          </dd>
+        </div>
+        <div>
+          <dt>Last updated</dt>
+          <dd>{readableDate(resource.updatedAt)}</dd>
+        </div>
+      </dl>
+      {resource.inference && (
+        <div className="resource-inference-summary">
+          <h4>Inference configuration draft</h4>
+          <p>
+            {resource.inference.model} · {resource.inference.hardware}
+          </p>
+          <p>
+            Scope: {resource.inference.accessScope} · Lifetime:{" "}
+            {resource.inference.lifetime}
+          </p>
+        </div>
+      )}
+      {resource.status !== "verified" && (
+        <p className="resource-caution">
+          <ShieldWarning />
+          No provider connection or execution evidence is attached to this
+          record.
+        </p>
+      )}
+    </section>
+  );
+}
+
+export function ResourceRequests({ project, onAction }: ResourceProps) {
+  const resources = project.resources ?? [];
+  const requests = [...(project.resourceRequests ?? [])].reverse();
+  const [resourceId, setResourceId] = useState("");
+  const [kind, setKind] = useState<ResourceKind>("gpu");
+  const [taskId, setTaskId] = useState("");
+  const [agentId, setAgentId] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const selectedResource = resources.find(
+    (resource) => resource.id === resourceId,
+  );
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      const response = (await onAction({
+        type: "requestResource",
+        projectId: project.id,
+        ...(resourceId ? { resourceId } : {}),
+        kind: selectedResource?.kind ?? kind,
+        ...(taskId ? { taskId } : {}),
+        ...(agentId ? { agentId } : {}),
+        purpose: purpose.trim(),
+      })) as { request?: ResourceRequest } | null;
+      if (!response?.request?.id)
+        throw new Error("The server did not confirm the request.");
+      setPurpose("");
+      setSuccess(
+        "Request saved. No policy decision or allocation has occurred.",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not save request.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section
+      className="resource-page"
+      aria-labelledby="resource-requests-title"
+    >
+      <div className="resource-page-heading">
+        <div>
+          <p className="resource-eyebrow">Access and allocation</p>
+          <h2 id="resource-requests-title">Requests</h2>
+          <p>
+            Ask for a resource in the project record. Employee policy and remote
+            allocation are not connected.
+          </p>
+        </div>
+      </div>
+      <div className="resource-request-layout">
+        <form className="resource-form resource-panel" onSubmit={submit}>
+          <div>
+            <h3>New request</h3>
+            <p className="resource-note">
+              A saved request remains pending policy evaluation. It cannot start
+              a machine.
+            </p>
+          </div>
+          <label>
+            Catalog resource
+            <select
+              value={resourceId}
+              onChange={(event) => setResourceId(event.target.value)}
+            >
+              <option value="">No specific resource</option>
+              {resources.map((resource) => (
+                <option key={resource.id} value={resource.id}>
+                  {resource.name} ({resource.status})
+                </option>
+              ))}
+            </select>
+          </label>
+          {!resourceId && (
+            <label>
+              Resource type
+              <select
+                value={kind}
+                onChange={(event) =>
+                  setKind(event.target.value as ResourceKind)
+                }
+              >
+                {resourceKinds.map((entry) => (
+                  <option key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            Task
+            <select
+              value={taskId}
+              onChange={(event) => setTaskId(event.target.value)}
+            >
+              <option value="">No task selected</option>
+              {project.tasks.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Agent
+            <select
+              value={agentId}
+              onChange={(event) => setAgentId(event.target.value)}
+            >
+              <option value="">No agent selected</option>
+              {project.agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name} · {agent.role}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Purpose
+            <textarea
+              required
+              maxLength={1000}
+              rows={3}
+              value={purpose}
+              onChange={(event) => setPurpose(event.target.value)}
+              placeholder="What work requires this resource?"
+            />
+          </label>
+          <FormFeedback error={error} success={success} />
+          <button className="button primary" type="submit" disabled={busy}>
+            {busy ? "Saving request…" : "Save request"}
+          </button>
+        </form>
+        <section
+          className="resource-request-history"
+          aria-label="Resource request history"
+        >
+          <h3>
+            Request history{" "}
+            <span className="resource-count">{requests.length}</span>
+          </h3>
+          {requests.length === 0 ? (
+            <div className="resource-empty resource-panel">
+              <Clock aria-hidden="true" />
+              <h4>No requests yet</h4>
+              <p>
+                Create a request to record the needed resource and purpose. No
+                capacity is reserved by this form.
+              </p>
+            </div>
+          ) : (
+            requests.map((request) => (
+              <RequestCard
+                key={request.id}
+                project={project}
+                request={request}
+              />
+            ))
+          )}
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function RequestCard({
+  request,
+  project,
+}: {
+  request: ResourceRequest;
+  project: Project;
+}) {
+  const resource = (project.resources ?? []).find(
+    (entry) => entry.id === request.resourceId,
+  );
+  const task = project.tasks.find((entry) => entry.id === request.taskId);
+  const agent = project.agents.find((entry) => entry.id === request.agentId);
+  const decision = request.decision;
+  return (
+    <article className="resource-request-card resource-panel">
+      <div className="resource-detail-title">
+        <h4>{resource?.name ?? kindLabel(request.kind)}</h4>
+        <span className={`resource-badge resource-badge--${request.status}`}>
+          {request.status}
+        </span>
+      </div>
+      <p>{request.purpose}</p>
+      <dl className="resource-facts resource-facts--compact">
+        <div>
+          <dt>Task</dt>
+          <dd>{task?.title ?? "Not linked"}</dd>
+        </div>
+        <div>
+          <dt>Agent</dt>
+          <dd>{agent?.name ?? "Not linked"}</dd>
+        </div>
+        <div>
+          <dt>Requested</dt>
+          <dd>{readableDate(request.createdAt)}</dd>
+        </div>
+      </dl>
+      <div
+        className={`resource-decision resource-decision--${decision.status}`}
+      >
+        <ShieldWarning aria-hidden="true" />
+        <div>
+          <strong>Permission: {decision.status.replace("_", " ")}</strong>
+          <p>{decision.reason}</p>
+        </div>
+      </div>
+      {request.status === "requested" && (
+        <p className="resource-note">
+          No resource has been allocated or started.
+        </p>
+      )}
+    </article>
+  );
+}
+
+export function InferenceDraft({ project, onAction }: ResourceProps) {
+  const drafts = (project.resources ?? []).filter(
+    (resource) => resource.kind === "inference-api",
+  );
+  const [name, setName] = useState("");
+  const [model, setModel] = useState("");
+  const [hardware, setHardware] = useState("");
+  const [accessScope, setAccessScope] = useState("Project agents");
+  const [lifetime, setLifetime] = useState("One run");
+  const [owner, setOwner] = useState("");
+  const [capability, setCapability] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      const response = (await onAction({
+        type: "saveInferenceDraft",
+        projectId: project.id,
+        name: name.trim(),
+        capability: capability.trim(),
+        owner: owner.trim(),
+        inference: {
+          model: model.trim(),
+          hardware: hardware.trim(),
+          accessScope,
+          lifetime,
+        },
+      })) as { resource?: ResourceDefinition } | null;
+      if (!response?.resource?.id)
+        throw new Error("The server did not confirm the draft.");
+      setName("");
+      setModel("");
+      setHardware("");
+      setOwner("");
+      setCapability("");
+      setSuccess(
+        "Configuration draft saved. No inference service was deployed.",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not save configuration draft.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="resource-page" aria-labelledby="inference-title">
+      <div className="resource-page-heading">
+        <div>
+          <p className="resource-eyebrow">Planned service resource</p>
+          <h2 id="inference-title">Inference API</h2>
+          <p>
+            Capture a desired model endpoint configuration. Serving, private
+            access, and GPU allocation require a future provider.
+          </p>
+        </div>
+      </div>
+      <div className="resource-inference-banner">
+        <ShieldWarning />
+        <div>
+          <strong>Deployment unavailable</strong>
+          <p>
+            A saved draft does not start a model, reserve hardware, expose an
+            endpoint, or enforce access scope.
+          </p>
+        </div>
+      </div>
+      <div className="resource-request-layout">
+        <form className="resource-form resource-panel" onSubmit={submit}>
+          <h3>New configuration draft</h3>
+          <div className="resource-form-grid">
+            <label>
+              Name
+              <input
+                required
+                maxLength={100}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Endpoint draft name"
+              />
+            </label>
+            <label>
+              Model
+              <input
+                required
+                maxLength={200}
+                value={model}
+                onChange={(event) => setModel(event.target.value)}
+                placeholder="Model identifier and version"
+              />
+            </label>
+            <label>
+              Hardware
+              <input
+                required
+                maxLength={200}
+                value={hardware}
+                onChange={(event) => setHardware(event.target.value)}
+                placeholder="Desired GPU or capacity"
+              />
+            </label>
+            <label>
+              Recorded owner
+              <input
+                required
+                maxLength={100}
+                value={owner}
+                onChange={(event) => setOwner(event.target.value)}
+                placeholder="Team or person responsible"
+              />
+            </label>
+            <label>
+              Access scope
+              <select
+                value={accessScope}
+                onChange={(event) => setAccessScope(event.target.value)}
+              >
+                <option>Project agents</option>
+                <option>Project members</option>
+                <option>Named identities</option>
+              </select>
+              <small>Intent only; no access rule is enforced.</small>
+            </label>
+            <label>
+              Lifetime
+              <select
+                value={lifetime}
+                onChange={(event) => setLifetime(event.target.value)}
+              >
+                <option>One run</option>
+                <option>Project session</option>
+                <option>Persistent service</option>
+              </select>
+              <small>Intent only; no expiry is enforced.</small>
+            </label>
+          </div>
+          <label>
+            Intended capability
+            <textarea
+              required
+              maxLength={500}
+              rows={2}
+              value={capability}
+              onChange={(event) => setCapability(event.target.value)}
+              placeholder="What should consuming agents use this endpoint for?"
+            />
+          </label>
+          <FormFeedback error={error} success={success} />
+          <button className="button primary" type="submit" disabled={busy}>
+            {busy ? "Saving draft…" : "Save configuration draft"}
+          </button>
+        </form>
+        <section
+          className="resource-request-history"
+          aria-label="Inference drafts"
+        >
+          <h3>
+            Saved configurations{" "}
+            <span className="resource-count">{drafts.length}</span>
+          </h3>
+          {drafts.length === 0 ? (
+            <div className="resource-empty resource-panel">
+              <Lightning aria-hidden="true" />
+              <h4>No inference drafts</h4>
+              <p>
+                Configuration plans will appear here after you save one.
+                Deployment is not available.
+              </p>
+            </div>
+          ) : (
+            drafts.map((draft) => (
+              <article
+                key={draft.id}
+                className="resource-request-card resource-panel"
+              >
+                <div className="resource-detail-title">
+                  <h4>{draft.name}</h4>
+                  <ResourceBadge status={draft.status} />
+                </div>
+                <p>{draft.capability}</p>
+                <dl className="resource-facts resource-facts--compact">
+                  <div>
+                    <dt>Model</dt>
+                    <dd>{draft.inference?.model ?? "Not specified"}</dd>
+                  </div>
+                  <div>
+                    <dt>Hardware</dt>
+                    <dd>{draft.inference?.hardware ?? "Not specified"}</dd>
+                  </div>
+                  <div>
+                    <dt>Access intent</dt>
+                    <dd>{draft.inference?.accessScope ?? "Not specified"}</dd>
+                  </div>
+                  <div>
+                    <dt>Lifetime intent</dt>
+                    <dd>{draft.inference?.lifetime ?? "Not specified"}</dd>
+                  </div>
+                  <div>
+                    <dt>Owner</dt>
+                    <dd>{draft.owner}</dd>
+                  </div>
+                </dl>
+                <p className="resource-note">
+                  No deployed endpoint or verified GPU allocation.
+                </p>
+              </article>
+            ))
+          )}
+        </section>
+      </div>
+    </section>
+  );
+}

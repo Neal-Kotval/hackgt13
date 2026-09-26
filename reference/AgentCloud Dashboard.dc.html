@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/broadsheet-1b3e9e24-2152-47fa-8ccf-541a217b18b8/styles.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css">
+<script src="_ds/broadsheet-1b3e9e24-2152-47fa-8ccf-541a217b18b8/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--color-bg)}
+a{color:var(--color-accent)} a:hover{color:var(--color-accent-600)}
+</style>
+</helmet>
+<div style="min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)">
+  <nav class="nav" style="padding:var(--space-4) var(--space-8)">
+    <span class="nav-brand" style="display:flex;align-items:center;gap:var(--space-2)"><i class="ph-duotone ph-cloud" style="color:var(--color-accent);font-size:22px"></i>AgentCloud</span>
+    <a href="#">Projects</a>
+    <a href="#" aria-current="{{ dashCurrent }}" onClick="{{ showDash }}">Dashboard</a>
+    <a href="#" aria-current="{{ reviewCurrent }}" onClick="{{ showReview }}">Review</a>
+    <a href="#">Agents</a>
+    <span class="text-muted" style="font-size:13px">Priya N.</span>
+  </nav>
+
+  <header style="padding:var(--space-6) var(--space-8) 0">
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--space-4) var(--space-8)">
+      <div style="flex:1 1 480px;min-width:0">
+        <div class="text-muted" style="font-size:13px;margin-bottom:var(--space-2)">Project · hosted Linux workspace · saved automatically</div>
+        <h1 style="font-size:64px;margin:0;letter-spacing:-0.025em">Campus Market</h1>
+      </div>
+      <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap">
+        <button class="btn btn-secondary" onClick="{{ restart }}"><i class="ph-duotone ph-arrow-counter-clockwise"></i>Replay</button>
+        <button class="btn btn-primary" onClick="{{ togglePlay }}"><i class="{{ playIcon }}"></i>{{ playLabel }}</button>
+      </div>
+    </div>
+    <div style="margin-top:var(--space-6);border-top:3px solid var(--color-text);border-bottom:1px solid var(--color-text);padding:var(--space-2) 0;margin-bottom:0">
+      <div style="display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-6);font-size:13px">
+        <span><i class="ph-duotone ph-git-branch"></i> github.com/hackgt-team/campus-market · main</span>
+        <span>2 agents · {{ connectedCount }} connected</span>
+        <span>{{ serviceCount }} services live</span>
+        <span>{{ openTaskCount }} open tasks</span>
+        <span style="margin-left:auto" class="text-muted">Event {{ step }} of {{ lastStep }}</span>
+      </div>
+    </div>
+  </header>
+
+  <sc-if value="{{ isDash }}" hint-placeholder-val="{{ true }}">
+  <main style="display:flex;flex-wrap:wrap;gap:var(--space-8) 72px;padding:var(--space-8) var(--space-8) 96px">
+    <div style="flex:1 1 600px;min-width:0;display:flex;flex-direction:column;gap:64px">
+
+      <section>
+        <h6 class="text-muted" style="margin-bottom:var(--space-4)">Agents</h6>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--space-8) 64px">
+          <sc-for list="{{ agents }}" as="a" hint-placeholder-count="2">
+            <div style="flex:1 1 260px;min-width:0;opacity:{{ a.opacity }}">
+              <div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-1)">
+                <span style="width:10px;height:10px;border-radius:50%;background:{{ a.color }}"></span>
+                <span style="font-size:13px" class="text-muted">{{ a.vendor }} · {{ a.role }}</span>
+              </div>
+              <h2 style="font-size:36px;margin-bottom:var(--space-2)">{{ a.name }}</h2>
+              <div style="display:flex;gap:var(--space-2);align-items:center;margin-bottom:var(--space-3)">
+                <span class="{{ a.tagClass }}">{{ a.status }}</span>
+                <span style="font-family:ui-monospace,Menlo,monospace;font-size:12px" class="text-muted">{{ a.worktree }}</span>
+              </div>
+              <div style="font-size:12px" class="text-muted">Current task</div>
+              <div style="font-size:18px;margin-bottom:var(--space-3);text-wrap:pretty">{{ a.task }}</div>
+              <div style="font-size:12px" class="text-muted">Last action</div>
+              <div style="font-size:14px;text-wrap:pretty">{{ a.last }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <section>
+        <div style="display:flex;align-items:baseline;gap:var(--space-4);margin-bottom:var(--space-3)">
+          <h6 class="text-muted" style="margin:0">Tasks</h6>
+          <button class="btn btn-ghost" style="margin-left:auto"><i class="ph-duotone ph-plus"></i>New task</button>
+        </div>
+        <table class="table">
+          <thead><tr><th>Task</th><th>Owner</th><th>Worktree</th><th>Status</th></tr></thead>
+          <tbody>
+            <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="4">
+              <tr>
+                <td style="font-size:15px">{{ t.title }}</td>
+                <td><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:{{ t.color }}"></span>{{ t.owner }}</span></td>
+                <td style="font-family:ui-monospace,Menlo,monospace;font-size:12px" class="text-muted">{{ t.worktree }}</td>
+                <td><span class="{{ t.tagClass }}">{{ t.status }}</span></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h6 class="text-muted" style="margin-bottom:var(--space-3)">Shared services</h6>
+        <table class="table">
+          <thead><tr><th>Service</th><th>Endpoint</th><th>Published by</th><th>Used by</th><th>Status</th></tr></thead>
+          <tbody>
+            <sc-for list="{{ services }}" as="s" hint-placeholder-count="2">
+              <tr>
+                <td style="font-size:15px">{{ s.name }}</td>
+                <td style="font-family:ui-monospace,Menlo,monospace;font-size:12px"><a href="#">{{ s.url }}</a></td>
+                <td>{{ s.owner }}</td>
+                <td class="text-muted">{{ s.users }}</td>
+                <td><span class="tag tag-accent">{{ s.status }}</span></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <aside style="flex:1 1 340px;max-width:460px;min-width:0;display:flex;flex-direction:column;gap:56px">
+      <sc-if value="{{ hasRequest }}" hint-placeholder-val="{{ false }}">
+        <section>
+          <h6 style="margin-bottom:var(--space-3);color:var(--color-accent-2-700)">Needs you</h6>
+          <div class="card elev-md" style="padding:var(--space-4)">
+            <div class="card-kicker" style="color:var(--color-accent-2-700)">Handoff · Claude → Codex</div>
+            <div class="card-title" style="font-size:20px">Add pagination to GET /listings</div>
+            <p class="card-body" style="font-size:14px">The listings grid needs page and limit params. Response should include a total count. Frontend currently fetches all 240 rows.</p>
+            <div class="card-meta">From agent/claude-web · attached: ListingsGrid.tsx, api-contract.md</div>
+            <div style="display:flex;gap:var(--space-2);margin-top:var(--space-2)">
+              <button class="btn btn-primary" onClick="{{ assign }}">Assign to Codex</button>
+              <button class="btn btn-secondary">Edit first</button>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <section>
+        <div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-3)">
+          <h6 class="text-muted" style="margin:0">Activity</h6>
+          <span class="tag tag-accent" style="margin-left:auto"><i class="ph-duotone ph-broadcast" style="margin-right:4px"></i>Live</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+          <sc-for list="{{ events }}" as="e" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:44px minmax(0,1fr);gap:var(--space-3)">
+              <span class="text-muted" style="font-size:12px;padding-top:2px;font-variant-numeric:tabular-nums">{{ e.time }}</span>
+              <div>
+                <div style="font-size:13px;color:{{ e.color }};font-weight:600">{{ e.actor }}</div>
+                <div style="font-size:15px;line-height:1.45;text-wrap:pretty">{{ e.text }}</div>
+                <sc-if value="{{ e.hasCode }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:4px" class="text-muted">{{ e.code }}</div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </aside>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+  <main style="padding:var(--space-8) var(--space-8) 96px;display:flex;flex-direction:column;gap:64px">
+    <section style="display:flex;flex-wrap:wrap;gap:var(--space-8) 72px">
+      <sc-for list="{{ worktrees }}" as="w" hint-placeholder-count="2">
+        <div style="flex:1 1 420px;min-width:0">
+          <div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-1)">
+            <span style="width:10px;height:10px;border-radius:50%;background:{{ w.color }}"></span>
+            <span class="text-muted" style="font-size:13px">{{ w.agent }} · {{ w.summary }}</span>
+          </div>
+          <h2 style="font-family:ui-monospace,Menlo,monospace;font-size:24px;font-weight:600;letter-spacing:-0.02em">{{ w.branch }}</h2>
+          <table class="table" style="margin:var(--space-3) 0 var(--space-4)">
+            <tbody>
+              <sc-for list="{{ w.files }}" as="f" hint-placeholder-count="4">
+                <tr>
+                  <td style="font-family:ui-monospace,Menlo,monospace;font-size:12px">{{ f.path }}</td>
+                  <td style="text-align:right;font-size:13px;color:var(--color-accent-700);font-variant-numeric:tabular-nums">+{{ f.add }}</td>
+                  <td style="text-align:right;font-size:13px;color:var(--color-accent-2-700);font-variant-numeric:tabular-nums;width:48px">−{{ f.del }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <div style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap">
+            <span class="{{ w.testTag }}">{{ w.tests }}</span>
+            <button class="btn btn-secondary" style="margin-left:auto"><i class="ph-duotone ph-code"></i>Open in editor</button>
+            <button class="btn btn-primary" onClick="{{ w.merge }}" disabled="{{ w.merged }}">{{ w.mergeLabel }}</button>
+          </div>
+        </div>
+      </sc-for>
+    </section>
+
+    <section style="max-width:760px">
+      <h6 class="text-muted" style="margin-bottom:var(--space-3)">Handoffs</h6>
+      <sc-for list="{{ handoffs }}" as="h" hint-placeholder-count="2">
+        <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:var(--space-4);margin-bottom:var(--space-6)">
+          <span class="text-muted" style="font-size:13px">{{ h.route }}</span>
+          <div>
+            <h4 style="margin-bottom:4px">{{ h.title }}</h4>
+            <p style="margin:0;font-size:15px;text-wrap:pretty">{{ h.body }}</p>
+          </div>
+        </div>
+      </sc-for>
+    </section>
+
+    <section>
+      <div style="display:flex;align-items:baseline;gap:var(--space-4);margin-bottom:var(--space-3)">
+        <h6 class="text-muted" style="margin:0">Combined preview</h6>
+        <a href="#" style="font-family:ui-monospace,Menlo,monospace;font-size:12px">web-preview.campus-market.agentcloud.run</a>
+      </div>
+      <div class="halftone" style="max-width:980px;aspect-ratio:16/9;background:var(--color-surface);display:grid;place-items:center;border-radius:var(--radius-md)">
+        <span class="text-muted" style="font-size:14px;position:relative">Live preview of agent/claude-web against listings-api</span>
+      </div>
+    </section>
+  </main>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;autoplay&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;secondsPerEvent&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:2,&quot;min&quot;:0.5,&quot;max&quot;:6,&quot;step&quot;:0.5,&quot;unit&quot;:&quot;s&quot;,&quot;tsType&quot;:&quot;number&quot;},&quot;initialView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;dashboard&quot;,&quot;options&quot;:[&quot;dashboard&quot;,&quot;review&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+const CODEX = 'var(--color-accent)', CLAUDE = 'var(--color-accent-2)', YOU = 'var(--color-text)', SYS = 'var(--color-neutral-600)';
+const EVENTS = [
+  { t: '14:02', a: 'Priya', c: YOU, x: 'Created project and imported the repository.', code: 'hackgt-team/campus-market → main' },
+  { t: '14:03', a: 'Workspace', c: SYS, x: 'Provisioned hosted Linux machine and started Postgres.', code: '4 vCPU · 8 GB · /workspace persisted' },
+  { t: '14:05', a: 'Codex', c: CODEX, x: 'Connected from Priya’s laptop in its own worktree.', code: 'session cx-41 · agent/codex-api' },
+  { t: '14:05', a: 'Codex', c: CODEX, x: 'Claimed “Build listings API”.' },
+  { t: '14:11', a: 'Codex', c: CODEX, x: 'Ran the test suite — 12 passed.', code: '$ npm test' },
+  { t: '14:12', a: 'Codex', c: CODEX, x: 'Published listings-api to the service registry.', code: ':8080 → listings-api.campus-market.agentcloud.run' },
+  { t: '14:14', a: 'Claude', c: CLAUDE, x: 'Connected from Marcus’s laptop in a separate worktree.', code: 'session cl-07 · agent/claude-web' },
+  { t: '14:14', a: 'Claude', c: CLAUDE, x: 'Claimed “Build listings frontend”.' },
+  { t: '14:15', a: 'Claude', c: CLAUDE, x: 'Discovered listings-api in the registry and read its schema.', code: 'GET /listings · GET /listings/:id · POST /listings' },
+  { t: '14:22', a: 'Claude', c: CLAUDE, x: 'Published web-preview, wired to listings-api.', code: ':5173 → web-preview.campus-market.agentcloud.run' },
+  { t: '14:24', a: 'Claude', c: CLAUDE, x: 'Sent a handoff to Codex: pagination needed on /listings.' },
+  { t: '14:25', a: 'Priya', c: YOU, x: 'Assigned the pagination follow-up to Codex.' },
+];
+const LAST = EVENTS.length;
+
+class Component extends DCLogic {
+  state = { step: this.props.autoplay === false ? LAST - 1 : 0, playing: this.props.autoplay !== false, view: this.props.initialView || 'dashboard', merged: {} };
+  componentDidMount() { this.timer = setInterval(() => this.tick(), (this.props.secondsPerEvent ?? 2) * 1000); }
+  componentWillUnmount() { clearInterval(this.timer); }
+  tick() {
+    const { step, playing } = this.state;
+    if (!playing) return;
+    if (step === LAST - 2) return this.setState({ playing: false }); // wait for the human at the handoff
+    if (step >= LAST) return this.setState({ playing: false });
+    this.setState({ step: step + 1 });
+  }
+  renderVals() {
+    const s = this.state.step;
+    const agents = [
+      { name: 'Codex', vendor: 'OpenAI Codex CLI', role: 'Backend', color: CODEX, worktree: 'agent/codex-api',
+        ...(s < 3 ? { status: s < 2 ? 'Not connected' : 'Connected', task: '—', last: s < 2 ? 'Waiting for agentcloud connect' : 'Joined the project' }
+          : s < 5 ? { status: 'Working', task: 'Build listings API', last: s < 4 ? 'Editing src/routes/listings.ts' : 'npm test — 12 passed' }
+          : s < 10 ? { status: 'Idle', task: 'Build listings API — done', last: 'Published listings-api :8080' }
+          : s < 11 ? { status: 'Idle', task: 'Handoff waiting on your approval', last: 'Published listings-api :8080' }
+          : { status: 'Working', task: 'Add pagination to GET /listings', last: 'Read handoff from Claude' }) },
+      { name: 'Claude', vendor: 'Claude Code', role: 'Frontend', color: CLAUDE, worktree: 'agent/claude-web',
+        ...(s < 6 ? { status: 'Not connected', task: '—', last: 'Waiting for agentcloud connect' }
+          : s < 7 ? { status: 'Connected', task: '—', last: 'Joined the project' }
+          : s < 9 ? { status: 'Working', task: 'Build listings frontend', last: s < 8 ? 'Scaffolding web/src/pages' : 'Read listings-api schema' }
+          : { status: s < 10 ? 'Working' : 'In review', task: 'Build listings frontend', last: s < 10 ? 'Published web-preview :5173' : 'Sent handoff to Codex' }) },
+    ].map(a => ({ ...a, opacity: a.status === 'Not connected' ? 0.45 : 1,
+      tagClass: 'tag ' + (a.status === 'Working' ? 'tag-accent' : a.status === 'In review' ? 'tag-accent-2' : 'tag-neutral') }));
+    const st = (label) => ({ status: label, tagClass: 'tag ' + (label === 'In progress' ? 'tag-accent' : label === 'In review' || label === 'Proposed' ? 'tag-accent-2' : label === 'Done' ? 'tag-outline' : 'tag-neutral') });
+    const tasks = [
+      { title: 'Build listings API', owner: 'Codex', color: CODEX, worktree: 'agent/codex-api', ...st(s < 3 ? 'To do' : s < 5 ? 'In progress' : 'Done') },
+      { title: 'Build listings frontend', owner: 'Claude', color: CLAUDE, worktree: 'agent/claude-web', ...st(s < 7 ? 'To do' : s < 10 ? 'In progress' : 'In review') },
+      ...(s >= 10 ? [{ title: 'Add pagination to GET /listings', owner: 'Codex', color: CODEX, worktree: 'agent/codex-api', ...st(s < 11 ? 'Proposed' : 'In progress') }] : []),
+      { title: 'Seed demo listings', owner: 'Unassigned', color: 'var(--color-neutral-400)', worktree: '—', ...st('To do') },
+    ];
+    const services = [
+      ...(s >= 1 ? [{ name: 'postgres', url: 'db.internal:5432', owner: 'Workspace', users: s >= 5 ? 'Codex' : '—', status: 'Running' }] : []),
+      ...(s >= 5 ? [{ name: 'listings-api', url: 'listings-api.campus-market.agentcloud.run', owner: 'Codex', users: s >= 8 ? 'Claude' : '—', status: 'Live' }] : []),
+      ...(s >= 9 ? [{ name: 'web-preview', url: 'web-preview.campus-market.agentcloud.run', owner: 'Claude', users: 'Priya', status: 'Live' }] : []),
+    ];
+    const events = EVENTS.slice(0, s + 1).map(e => ({ time: e.t, actor: e.a, color: e.c, text: e.x, code: e.code || '', hasCode: !!e.code })).reverse();
+    const mk = (id, agent, color, branch, summary, files, tests, ok) => ({ agent, color, branch, summary, files, tests, testTag: 'tag ' + (ok ? 'tag-accent' : 'tag-accent-2'),
+      merged: !!this.state.merged[id], mergeLabel: this.state.merged[id] ? 'Merged' : 'Merge into main',
+      merge: () => this.setState(p => ({ merged: { ...p.merged, [id]: true } })) });
+    const worktrees = [
+      mk('cx', 'Codex', CODEX, 'agent/codex-api', '4 files · 3 commits', [
+        { path: 'src/routes/listings.ts', add: 142, del: 0 }, { path: 'src/db/schema.sql', add: 38, del: 2 },
+        { path: 'src/server.ts', add: 11, del: 3 }, { path: 'test/listings.test.ts', add: 96, del: 0 }], '12 of 12 tests passed', true),
+      mk('cl', 'Claude', CLAUDE, 'agent/claude-web', '5 files · 4 commits', [
+        { path: 'web/src/pages/Listings.tsx', add: 118, del: 0 }, { path: 'web/src/components/ListingsGrid.tsx', add: 84, del: 0 },
+        { path: 'web/src/api/client.ts', add: 41, del: 0 }, { path: 'web/src/App.tsx', add: 9, del: 4 }, { path: 'docs/api-contract.md', add: 27, del: 0 }], '7 of 8 tests passed · 1 awaiting pagination', false),
+    ];
+    const handoffs = [
+      { route: 'Claude → Codex', title: 'Add pagination to GET /listings', body: 'Accept page and limit; return a total count. The grid currently fetches all 240 rows.' },
+      { route: 'Codex → Claude', title: 'listings-api is live', body: 'Schema and example responses are in docs/api-contract.md. Auth is off inside the workspace.' },
+    ];
+    const isDash = this.state.view === 'dashboard';
+    const go = (view) => (e) => { e.preventDefault(); this.setState({ view }); };
+    return {
+      step: Math.min(s + 1, LAST), lastStep: LAST, agents, tasks, services, events, worktrees, handoffs,
+      connectedCount: agents.filter(a => a.status !== 'Not connected').length,
+      serviceCount: services.length, openTaskCount: tasks.filter(t => t.status !== 'Done').length,
+      hasRequest: s === LAST - 2,
+      assign: () => this.setState({ step: LAST - 1, playing: false }),
+      isDash, isReview: !isDash, dashCurrent: isDash ? 'page' : 'false', reviewCurrent: isDash ? 'false' : 'page',
+      showDash: go('dashboard'), showReview: go('review'),
+      playing: this.state.playing,
+      playLabel: this.state.playing ? 'Pause' : 'Play', playIcon: this.state.playing ? 'ph-duotone ph-pause' : 'ph-duotone ph-play',
+      togglePlay: () => this.setState(p => ({ playing: !p.playing, step: !p.playing && p.step >= LAST - 1 ? 0 : p.step })),
+      restart: () => this.setState({ step: 0, playing: true }),
+    };
+  }
+}
+</script>
+</body>
+</html>

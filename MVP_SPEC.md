@@ -1,0 +1,51 @@
+# AgentCloud HackGT MVP: governed remote agent work
+
+## Demo promise
+
+An employee signs in, asks an agent to do work that needs a GPU, and watches the agent use a real remote run environment. AgentCloud provisions that environment on known capacity, grants access according to a server-enforced policy, streams actual agent and command activity to a Codex-like control surface, and records the GPU result. A second employee or agent without permission is denied at the resource boundary.
+
+The GPU machine used in the demo may be a pre-existing host named “Cresix.” Creating a run environment on that host is provisioning; merely saving its SSH address is not. The demo must identify exactly which machine, account, container, worktree, and credential boundary it actually creates or attaches. It must not claim to have procured a new GPU if the host already exists.
+
+## User flow
+
+1. **Employee login:** A human signs in through one working identity provider. AgentCloud creates a server-side session and associates that employee with a project role. The unauthenticated dashboard/API used by the current local prototype cannot serve this flow.
+2. **Request and policy:** The employee requests a run environment with a GPU for a named project and task. A server-side policy checks employee identity and role, agent identity, requested resource, and allowed action. The UI shows the decision and reason.
+3. **Provision and verify:** A provider creates a real run environment on known remote capacity. AgentCloud verifies host identity, the remote execution identity, the worktree or working directory, GPU visibility, and a small representative GPU operation before showing `ready`.
+4. **Run the agent:** One real coding-agent adapter starts or connects to an agent session on the remote environment. The agent executes a task whose local environment lacks the required GPU capacity. The exact local limitation and remote result are recorded, rather than asserting that a terminal agent is inherently unable to do the work.
+5. **Mirror actual work:** The control surface displays the agent session, command start/result, output or bounded logs, task status, resource state, and attribution. A transport heartbeat and a running model session have separate labels. The UI does not invent commands or results.
+6. **Deny and release:** An unauthorized identity attempts the same resource action and is denied by the backend and by the SSH/execution boundary being claimed. The authorized run can be stopped or disconnected; the project record and selected output remain available for review.
+
+## Planned components
+
+| Component | MVP responsibility |
+| --- | --- |
+| Web control surface | Employee login, request/approval state, run status, real output, and review; terminal interaction only if backed by a real remote session |
+| Identity and policy | One OIDC-compatible employee login, project roles, server-side decisions, separate agent/run credentials, and attributed audit events |
+| Resource provider | Create/attach/stop a run environment on one known Linux host or provider, verify capability, and report failures honestly |
+| Remote runner | Start the selected agent and commands in the intended environment, stream bounded events, and preserve the project worktree across reconnects |
+| GPU target | One actual GPU reachable from the run environment; verify device and workload rather than trusting a label |
+
+The control plane talks to the box; the box performs the work. The MVP may run an existing agent CLI on the box and stream its real events. It does not need to implement a new model loop. An MCP interface or Coder integration can be added to the same policy and resource API later; neither is required to prove the first remote run.
+
+## Permission boundary
+
+- Human login authorizes control-plane actions. Agent identity and remote execution identity are separate and linked to the human-approved task.
+- Resource checks happen before allocation and again at the SSH/execution boundary. The demo includes a successful authorized operation and a failed unauthorized operation against the actual boundary.
+- A dedicated non-root account, short-lived credential, command gateway, or equivalent mechanism may narrow SSH access. State which one is implemented. An unrestricted SSH shell is trusted access; an API role toggle alone does not restrict its filesystem or commands.
+- Do not expose plaintext SSH keys, model credentials, or connection secrets in model context, browser state, activity events, or logs. Revocation is claimed only if an existing session and a new connection are both shown to lose access.
+- One organization and one trusted GPU host are sufficient for the HackGT demonstration. Production tenant isolation, device attestation, generalized SSH policy, and cost enforcement remain separate work.
+
+## Acceptance evidence
+
+1. Two employee identities log in and receive different server-enforced resource decisions.
+2. A real run environment is created or attached, with recorded host and execution identity. Restart/reconnect returns to its actual working files.
+3. The authorized agent performs a real GPU task remotely. Capture the command, device evidence, output, and a precise explanation of why the local environment could not run the same task.
+4. The dashboard mirrors real agent and command events with timestamps and attribution; killing or disconnecting the agent changes its execution state without inventing work.
+5. An unauthorized identity cannot obtain the resource through the API and fails at the claimed SSH/execution boundary. Allowed work still succeeds.
+6. Stop or release the run environment and show the resulting state. Claim cost shutdown or credential revocation only if those effects are independently verified.
+
+## Deliberately later
+
+Two-agent service handoffs, a broad CPU/GPU marketplace, managed GPU purchasing, low-latency data connectors, artifact homes, wikis, production multi-tenant SSO, hardware device attestation, and a full interactive terminal emulator are extensions. The MVP should make one remote GPU task and one real permission denial undeniable before adding them.
+
+The current repository is a local single-user coordination foundation. It has no employee login, remote resource provisioner, agent execution adapter, enforced SSH boundary, or GPU workload. This file specifies the next demonstrated capability, not current behavior.
