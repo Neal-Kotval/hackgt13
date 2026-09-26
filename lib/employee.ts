@@ -17,18 +17,18 @@ export async function requireEmployee(request: Request) {
     activeOrganization: active,
     memberships: (active ? memberships(session.user.id, active.id) : []) as {
       projectId: string;
-      role: string;
+      role: "owner" | "member";
     }[],
   };
 }
 export type Employee = Awaited<ReturnType<typeof requireEmployee>>;
 export function requireMembership(employee: Employee, projectId: unknown) {
-  if (
-    !employee.memberships.some(
-      (membership) => membership.projectId === projectId,
-    )
-  )
+  const membership = employee.memberships.find(
+    (item) => item.projectId === projectId,
+  );
+  if (!membership)
     throw new InputError("Project membership required", 403);
+  return membership;
 }
 export function employeeState<T extends { projects: { id: string }[] }>(
   state: T,

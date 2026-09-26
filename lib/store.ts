@@ -307,7 +307,15 @@ function optionalReference(
   if (!exists(reference)) throw new InputError(`${name} not found`, 404);
   return reference;
 }
-export async function resourceAction(input: Record<string, unknown>) {
+export interface ResourceActor {
+  employeeId: string;
+  organizationId: string;
+  projectRole: "owner" | "member";
+}
+export async function resourceAction(
+  input: Record<string, unknown>,
+  actor: ResourceActor,
+) {
   return transaction((disk) => {
     const p = project(disk, input.projectId);
     const now = new Date().toISOString();
@@ -444,6 +452,11 @@ export async function resourceAction(input: Record<string, unknown>) {
           ...(taskId ? { taskId } : {}),
           ...(agentId ? { agentId } : {}),
           purpose: str(input.purpose, "purpose", 2000),
+          requestedBy: {
+            employeeId: actor.employeeId,
+            organizationId: actor.organizationId,
+            projectRoleAtRequest: actor.projectRole,
+          },
           ...(hasGpuPreference
             ? {
                 computePreference: {

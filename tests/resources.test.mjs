@@ -26,8 +26,14 @@ for (const name of ["store", "http", "resource-profiles"]) {
     .outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'");
   await writeFile(path.join(temporary, `${name}.js`), output);
 }
-const { action, resourceAction, getState } = await import(path.join(temporary, "store.js"));
+const { action, resourceAction: rawResourceAction, getState } = await import(path.join(temporary, "store.js"));
 const authFixture = await prepareAuth(temporary);
+const testActor = {
+  employeeId: authFixture.users[0].id,
+  organizationId: authFixture.organization.id,
+  projectRole: "owner",
+};
+const resourceAction = (input) => rawResourceAction(input, testActor);
 after(() => rm(temporary, { recursive: true, force: true }));
 
 test("resource records persist without implying allocation or policy approval", async () => {
@@ -59,6 +65,11 @@ test("resource records persist without implying allocation or policy approval", 
   });
   assert.equal(requested.request.kind, "gpu");
   assert.equal(requested.request.status, "requested");
+  assert.deepEqual(requested.request.requestedBy, {
+    employeeId: testActor.employeeId,
+    organizationId: testActor.organizationId,
+    projectRoleAtRequest: "owner",
+  });
   assert.deepEqual(requested.request.decision, {
     status: "not_evaluated",
     reason: "Resource policy is not configured.",
@@ -251,6 +262,10 @@ test("resource route returns persisted records and denies cross-origin mutations
   const projectId = (await getState()).projects[0].id;
   authFixture.grantMembership(authFixture.users[0].id, projectId, "owner");
   const payload = JSON.stringify({ type: "requestResource", projectId, kind: "run-box", purpose: "Use remote compute" });
+  const unsigned = await POST(new Request("http://localhost/api/resources", {
+    method: "POST", body: payload,
+  }));
+  assert.equal(unsigned.status, 401);
   const blocked = await POST(new Request("http://localhost/api/resources", {
     method: "POST", headers: { origin: "https://elsewhere.example", cookie: authFixture.users[0].cookie }, body: payload,
   }));
@@ -259,6 +274,37 @@ test("resource route returns persisted records and denies cross-origin mutations
   assert.equal(accepted.status, 200);
   const response = await accepted.json();
   assert.equal(response.request.status, "requested");
+  assert.deepEqual(response.request.requestedBy, {
+    employeeId: authFixture.users[0].id,
+    organizationId: authFixture.organization.id,
+    projectRoleAtRequest: "owner",
+  });
+  const forged = await POST(new Request("http://localhost/api/resources", {
+    method: "POST",
+    headers: { cookie: authFixture.users[0].cookie },
+    body: JSON.stringify({
+      type: "requestResource", projectId, kind: "gpu", purpose: "Forge identity",
+      requestedBy: { employeeId: authFixture.users[1].id },
+    }),
+  }));
+  assert.equal(forged.status, 400);
+  authFixture.grantMembership(authFixture.users[1].id, projectId, "member");
+  const memberRequest = await POST(new Request("http://localhost/api/resources", {
+    method: "POST",
+    headers: { cookie: authFixture.users[1].cookie },
+    body: JSON.stringify({
+      type: "requestResource", projectId, kind: "gpu", purpose: "Request a GPU",
+      gpuProfileId: "g6-l4-small", durationHours: 1,
+    }),
+  }));
+  assert.equal(memberRequest.status, 200);
+  const memberRecord = (await memberRequest.json()).request;
+  assert.deepEqual(memberRecord.requestedBy, {
+    employeeId: authFixture.users[1].id,
+    organizationId: authFixture.organization.id,
+    projectRoleAtRequest: "member",
+  });
+  assert.equal(memberRecord.decision.status, "not_evaluated");
   assert.equal(
     response.state.projects.find((p) => p.id === projectId).resourceRequests
       .length,

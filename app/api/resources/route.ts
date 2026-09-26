@@ -14,8 +14,12 @@ export async function POST(request: Request) {
     const employee = await requireEmployee(request);
     sameOrigin(request);
     const input = await body(request);
-    requireMembership(employee, input.projectId);
-    const result = await resourceAction(input);
+    const membership = requireMembership(employee, input.projectId);
+    const result = await resourceAction(input, {
+      employeeId: employee.id,
+      organizationId: employee.activeOrganization!.id,
+      projectRole: membership.role,
+    });
     return Response.json({
       ...result,
       state: employeeState(result.state, employee),
