@@ -77,7 +77,10 @@ try {
 
   const credits = plan.accountPlanRemainingCredits;
   const expiration = Date.parse(plan.accountPlanExpirationDate);
-  check("Free plan active", plan.accountId === accountId && plan.accountPlanType === "FREE" && plan.accountPlanStatus === "ACTIVE" && credits?.unit === "USD" && credits.amount > 0 && expiration > Date.now() + 3 * 60 * 60 * 1000, `${plan.accountPlanStatus}, ${credits?.amount} ${credits?.unit}, expires ${plan.accountPlanExpirationDate}`);
+  check("Paid plan required for G6", plan.accountId === accountId && plan.accountPlanType === "PAID" && plan.accountPlanStatus === "ACTIVE",
+    `${plan.accountPlanType || "unknown"} (${plan.accountPlanStatus || "unknown"}); Free plan cannot launch g6.xlarge`);
+  check("Credits and runtime window", credits?.unit === "USD" && credits.amount > 0 && expiration > Date.now() + 3 * 60 * 60 * 1000,
+    `${credits?.amount ?? "unknown"} ${credits?.unit || "unknown"}, expires ${plan.accountPlanExpirationDate || "unknown"}`);
   const price = JSON.parse(pricing.PriceList?.[0] || "{}");
   const onDemand = Object.values(price.terms?.OnDemand || {})[0];
   const dimension = Object.values(onDemand?.priceDimensions || {}).find((value) => value.unit === "Hrs");
