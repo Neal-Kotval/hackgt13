@@ -57,7 +57,7 @@
 
 .site-nav-label {
   margin: 0;
-  padding: 0 0 var(--space-2);
+  padding: 0;
   color: var(--color-text);
   font-family: var(--font-heading);
   font-size: var(--text-lg);
@@ -91,6 +91,8 @@
 
 .site-project-picker {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
   min-width: 0;
   gap: var(--field-label-gap);
   padding: 0 var(--space-3);
