@@ -1,6 +1,7 @@
 "use client";
 import { Select } from "@/components/ui/select";
 import Link from "next/link";
+import { SignOut, User } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
 import { authClient as client } from "@/lib/auth-client";
 export function SignIn({ signup = false, invite = "", verified = false, verificationError = false }: { signup?: boolean; invite?: string; verified?: boolean; verificationError?: boolean }) {
@@ -55,6 +56,8 @@ export function EmployeeMenu({ navigation = true }: { navigation?: boolean }) {
   const { data } = client.useSession();
   const { data: organizations } = client.useListOrganizations();
   const { data: active } = client.useActiveOrganization();
+  const name = data?.user?.name?.trim() || "employee";
+  const initials = name.split(/\s+/).slice(0, 2).map(part => Array.from(part)[0]).join("").toLocaleUpperCase();
   const [error, setError] = useState("");
   return <>
     {organizations && organizations.length > 0 && <label className="organization-switcher"><span className="visually-hidden"><span>Organization</span></span><Select aria-label="Active organization" value={active?.id || ""} onChange={async e => {
@@ -62,8 +65,8 @@ export function EmployeeMenu({ navigation = true }: { navigation?: boolean }) {
       if (result.error) setError("Could not switch organization"); else window.location.assign("/projects");
     }}><option value="" disabled>Select organization</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</Select></label>}
     {navigation && <Link className="button ghost" href="/organizations">People & organizations</Link>}
-    <span className="local-label">{data?.user?.name || "employee"}</span>
-    <button className="button ghost" onClick={async () => {try {const result=await client.signOut();if(result.error)setError("Sign-out failed");else window.location.assign("/sign-in");}catch{setError("Sign-out failed");}}}>Sign out</button>
+    <div className="account-identity"><span className="account-avatar" aria-hidden="true">{data?.user ? initials : <User />}</span><div className="account-details"><strong className="local-label">{name}</strong>{data?.user?.email && <span className="account-email" title={data.user.email}>{data.user.email}</span>}</div></div>
+    <button className="button ghost" onClick={async () => {try {const result=await client.signOut();if(result.error)setError("Sign-out failed");else window.location.assign("/sign-in");}catch{setError("Sign-out failed");}}}><SignOut aria-hidden="true" />Sign out</button>
     {error && <span role="alert">{error}</span>}
   </>;
 }
