@@ -209,6 +209,11 @@
   --modal-width: 36rem;
   --control-height: 2.5rem;
   --control-height-small: 2rem;
+  /* Dropdowns share comfortable label separation and text insets. */
+  --field-label-gap: var(--space-3);
+  --select-padding-block: var(--space-3);
+  --select-padding-inline: var(--space-4);
+  --select-min-height: var(--space-12);
   --panel-min-height: 15rem;
   --card-min-width: 18rem;
   --agent-card-min-width: 15rem;
