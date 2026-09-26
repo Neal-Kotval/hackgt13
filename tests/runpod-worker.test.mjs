@@ -5,6 +5,7 @@ import { migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
 import { migrateRunpodCleanup } from "../lib/runpod-reconcile.mjs";
 import { preflightRunpod, workOneRunpodJob } from "../lib/runpod-worker.mjs";
+import { runpodPodName } from "../lib/runpod-provider.mjs";
 
 function setup() {
   const db = new Database(":memory:");
@@ -28,9 +29,10 @@ function setup() {
   return { db, job };
 }
 
-function provider(jobId, overrides = {}) {
+function provider(job, overrides = {}) {
   const calls = [];
-  const pod = { id: "pod123", name: `agentcloud-${jobId}`, status: "RUNNING",
+  const expiresAt = new Date(Date.parse(job.created_at) + job.max_duration_minutes * 60_000);
+  const pod = { id: "pod123", name: runpodPodName(job.id, expiresAt), status: "RUNNING",
     ssh: { direct: { host: "203.0.113.10", port: 30222, username: "root" } } };
   return { calls,
     async listGpuTypes() { calls.push("catalog"); return [{ id: "NVIDIA GeForce RTX 4090", availability: "HIGH", secureHourlyUsd: .49 }]; },
@@ -48,12 +50,12 @@ function proof(jobId) {
 
 test("Runpod preflight requires catalog price, availability, and no other managed Pod", async () => {
   const { db, job } = setup();
-  const service = provider(job.id);
+  const service = provider(job);
   assert.equal((await preflightRunpod(service, job)).hourlyUsd, .49);
-  await assert.rejects(preflightRunpod(provider(job.id, { async listGpuTypes() {
+  await assert.rejects(preflightRunpod(provider(job, { async listGpuTypes() {
     return [{ id: "NVIDIA GeForce RTX 4090", availability: "HIGH", secureHourlyUsd: null }];
   } }), job), /price unavailable/);
-  await assert.rejects(preflightRunpod(provider(job.id, { async listPods() {
+  await assert.rejects(preflightRunpod(provider(job, { async listPods() {
     return [{ name: "agentcloud-another-job", id: "other" }];
   } }), job), /Another managed Runpod Pod/);
   db.close();
@@ -61,7 +63,7 @@ test("Runpod preflight requires catalog price, availability, and no other manage
 
 test("approved Runpod job reaches ready only after SSH and durable GPU proof", async () => {
   const { db, job } = setup();
-  const service = provider(job.id);
+  const service = provider(job);
   const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker",
     connection: { keyFile: "/private/key", knownHostsFile: "/private/hosts", publicKey: "ssh-ed25519 AAAA" },
     checkSshConfig() {}, checkCleanupGuard: async () => true, verify: async (approved, connection) => {
@@ -73,12 +75,14 @@ test("approved Runpod job reaches ready only after SSH and durable GPU proof", a
   assert.equal(db.prepare("SELECT repo_revision FROM run_box_job WHERE id = ?").get(job.id).repo_revision, "a".repeat(40));
   assert.equal(db.prepare("SELECT gpu_device FROM runpod_gpu_verification WHERE job_id = ?").get(job.id).gpu_device, "NVIDIA GeForce RTX 4090");
   assert.equal(service.calls.filter((call) => Array.isArray(call) && call[0] === "create").length, 1);
+  assert.equal(service.calls.find((call) => Array.isArray(call) && call[0] === "create")[1].expiresAt,
+    new Date(Date.parse(job.created_at) + job.max_duration_minutes * 60_000).toISOString());
   db.close();
 });
 
 test("missing SSH host pin leaves a visible retry without another Pod create", async () => {
   const { db, job } = setup();
-  const service = provider(job.id);
+  const service = provider(job);
   const settings = { workerId: "runpod-worker", connection: {}, checkSshConfig() {},
     checkCleanupGuard: async () => true,
     verify: async () => { throw new Error("Host key verification failed"); } };
@@ -95,7 +99,7 @@ test("missing SSH host pin leaves a visible retry without another Pod create", a
 
 test("missing independent cleanup guard blocks Runpod POST before catalog checks", async () => {
   const { db, job } = setup();
-  const service = provider(job.id);
+  const service = provider(job);
   const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker",
     verify: async () => { throw new Error("must not verify"); } });
   assert.equal(result.state, "allocating");
@@ -108,7 +112,7 @@ test("missing independent cleanup guard blocks Runpod POST before catalog checks
 test("stop request before allocation does not create a Pod", async () => {
   const { db, job } = setup();
   requestRunBoxStop(db, job.id, "owner");
-  const service = provider(job.id);
+  const service = provider(job);
   const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker", verify: async () => {} });
   assert.equal(result.state, "stopping");
   assert.equal(service.calls.length, 0);
