@@ -11,12 +11,16 @@ import { verifyRunpodSsh } from "../lib/runpod-ssh-proof.mjs";
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
 import { migrateRunpodCleanup, reconcileRunpodJobs } from "../lib/runpod-reconcile.mjs";
 import { workOneRunpodJob } from "../lib/runpod-worker.mjs";
+import { migrateSshKeys } from "../lib/ssh-keys.mjs";
+import { migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
+import { createDockerSandboxProvider } from "../lib/docker-sandbox-provider.mjs";
+import { reconcileDockerSandboxes, workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
 
 const mode = process.argv[2];
 const providerName = process.argv[3] || "aws-ec2";
 const workerId = `${providerName}-worker-${process.pid}`;
-if (process.argv.length > 4 || !["--once", "--loop"].includes(mode) || !["aws-ec2", "runpod"].includes(providerName)) {
-  console.error("Usage: node scripts/run-box-worker.mjs --once|--loop [aws-ec2|runpod]");
+if (process.argv.length > 4 || !["--once", "--loop"].includes(mode) || !["aws-ec2", "runpod", "docker-local"].includes(providerName)) {
+  console.error("Usage: node scripts/run-box-worker.mjs --once|--loop [aws-ec2|runpod|docker-local]");
   process.exit(2);
 }
 
@@ -55,14 +59,33 @@ async function runpodCycle() {
   return result;
 }
 
-const cycle = providerName === "runpod" ? runpodCycle : awsCycle;
+let dockerProvider;
+async function dockerLocalCycle() {
+  if (!dockerProvider) {
+    dockerProvider = createDockerSandboxProvider();
+    // Builds infra/sandbox as agentcloud-sandbox:dev once when the image is absent.
+    if ((await dockerProvider.ensureImage()).built) console.log("Built sandbox image agentcloud-sandbox:dev");
+  }
+  const db = getDatabase();
+  migrateRunBoxJobs(db);
+  migrateSshKeys(db);
+  migrateRunBoxSsh(db);
+  for (const item of await reconcileDockerSandboxes(db, dockerProvider))
+    console.log(`Reconciled sandbox ${item.jobId || item.containerId}: ${item.status}`);
+  const result = await workOneDockerSandboxJob(db, dockerProvider, { workerId });
+  if (result) console.log(`Processed sandbox job ${result.jobId}: ${result.state}${result.port ? ` (ssh 127.0.0.1:${result.port})` : ""}`);
+  return result;
+}
+
+const cycle = { "runpod": runpodCycle, "docker-local": dockerLocalCycle }[providerName] || awsCycle;
+const interval = providerName === "docker-local" ? 3_000 : 15_000;
 
 async function execute() {
   if (mode === "--once") return cycle();
   while (true) {
     try { await cycle(); }
     catch (error) { console.error(`${providerName} worker cycle failed: ${String(error.message).slice(0, 256)}`); }
-    await new Promise((resolve) => setTimeout(resolve, 15_000));
+    await new Promise((resolve) => setTimeout(resolve, interval));
   }
 }
 
