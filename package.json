@@ -12,7 +12,9 @@
     "auth:setup": "node scripts/auth-setup.mjs",
     "auth:bootstrap": "node scripts/auth-bootstrap.mjs",
     "test:auth:browser": "node tests/auth.browser.mjs",
-    "test:select:browser": "node tests/select.browser.mjs"
+    "test:select:browser": "node tests/select.browser.mjs",
+    "test:aws-auth:smoke": "node tests/aws-auth-smoke.mjs",
+    "aws:gpu:preflight": "node scripts/aws-gpu-preflight.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
