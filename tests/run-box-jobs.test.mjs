@@ -8,6 +8,7 @@ import {
   claimRunBoxJob,
   migrateRunBoxJobs,
   recordRunBoxAllocation,
+  requestRunBoxStop,
   saveRunBoxDecision,
   transitionRunBoxJob,
 } from "../lib/run-box-jobs.mjs";
@@ -45,6 +46,48 @@ test("member denial persists a decision without a billable job", () => {
   } finally {
     db.close();
   }
+});
+
+test("stop request survives queued and active jobs, and provider claim stays scoped", () => {
+  const db = database();
+  try {
+    const first = saveRunBoxDecision(db, request({ provider: "ssh-host" }));
+    const queuedStop = requestRunBoxStop(db, first.job.id, "owner-1");
+    assert.equal(queuedStop.state, "stopping");
+    assert.equal(queuedStop.stop_requested_by, "owner-1");
+    assert.equal(requestRunBoxStop(db, first.job.id, "owner-2").stop_requested_by, "owner-1");
+    assert.equal(claimRunBoxJob(db, "gpu-worker", new Date(), 60_000, "aws-ec2"), null);
+    assert.equal(claimRunBoxJob(db, "ssh-worker", new Date(), 60_000, "ssh-host").id, first.job.id);
+    const second = saveRunBoxDecision(db, request({ idempotencyKey: "request-2", resourceRequestId: "resource-2" }));
+    claimRunBoxJob(db, "gpu-worker-2", new Date(), 60_000, "aws-ec2");
+    recordRunBoxAllocation(db, second.job.id, "gpu-worker-2", "aws-ec2", "i-456");
+    const activeStop = requestRunBoxStop(db, second.job.id, "owner-1");
+    assert.equal(activeStop.state, "connecting");
+    assert.ok(activeStop.stop_requested_at);
+    transitionRunBoxJob(db, second.job.id, "verifying", "gpu-worker-2");
+    assert.throws(() => transitionRunBoxJob(db, second.job.id, "ready", "gpu-worker-2", { evidenceRef: "check" }), /Cannot mark a stopping job ready/);
+  } finally {
+    db.close();
+  }
+});
+
+test("migration upgrades existing job tables and stale workers cannot transition", () => {
+  const old = new Database(":memory:");
+  old.exec(`CREATE TABLE run_box_job (
+    id TEXT PRIMARY KEY, decision_id TEXT NOT NULL UNIQUE, project_id TEXT NOT NULL,
+    provider TEXT NOT NULL, max_duration_minutes INTEGER NOT NULL, state TEXT NOT NULL,
+    provider_resource_id TEXT, worker_id TEXT, lease_expires_at TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    UNIQUE(provider, provider_resource_id))`);
+  migrateRunBoxJobs(old);
+  const columns = old.prepare("PRAGMA table_info(run_box_job)").all().map((item) => item.name);
+  assert.ok(columns.includes("stop_requested_at"));
+  assert.ok(columns.includes("stop_requested_by"));
+  const { job } = saveRunBoxDecision(old, request());
+  claimRunBoxJob(old, "worker-owner");
+  assert.throws(() => transitionRunBoxJob(old, job.id, "failed", "stale-worker"), /active job lease/);
+  assert.equal(transitionRunBoxJob(old, job.id, "failed", "worker-owner").state, "failed");
+  old.close();
 });
 
 test("approved request is atomic and idempotent across retries", () => {
