@@ -211,6 +211,17 @@ test("ambiguous launch error remains failed with visible retry evidence", async 
   } finally { db.close(); }
 });
 
+test("historical unstructured Free Tier rejection is not reclassified from instance absence", async () => {
+  const { db, job } = failedBeforeAllocation(
+    "An error occurred (Client.InvalidParameterCombination) when calling the RunInstances operation: Free Tier ineligible",
+  );
+  try {
+    const result = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+    assert.deepEqual(result.map((item) => item.status), ["retry"]);
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+  } finally { db.close(); }
+});
+
 test("deterministic rejection still waits if any managed EBS volume exists", async () => {
   const { db, job } = failedBeforeAllocation("AWS ec2:run-instances Client.InvalidParameterCombination: Free Tier ineligible");
   try {
