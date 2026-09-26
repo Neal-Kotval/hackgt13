@@ -11,14 +11,14 @@ function statusLabel(message: ChatMessage): {
   tone: "warning" | "danger" | "success" | "muted";
 } | null {
   if (message.status === "streaming") {
-    return { text: "Assistant reply in progress…", tone: "warning" };
+    return { text: "Responding…", tone: "warning" };
   }
   if (message.status === "cancelled") {
-    return { text: "Generation stopped.", tone: "warning" };
+    return { text: "Stopped", tone: "warning" };
   }
   if (message.status === "failed") {
     return {
-      text: message.error || "Assistant turn failed.",
+      text: message.error || "Response failed.",
       tone: "danger",
     };
   }
@@ -46,18 +46,14 @@ export function Conversation({ messages, emptyLabel }: ConversationProps) {
     node.scrollTop = node.scrollHeight;
   }, [messages]);
 
-  if (messages.length === 0) {
-    return (
-      <div className="conversation">
-        <div className="main-empty" role="status">
-          {emptyLabel}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="conversation" ref={scrollerRef} aria-live="polite">
+      {messages.length === 0 ? (
+        <div className="main-empty chat-empty" role="status">
+          <h2 className="chat-empty-title">What can I help with?</h2>
+          {emptyLabel ? <p>{emptyLabel}</p> : null}
+        </div>
+      ) : null}
       {messages.map((message) => {
         const status = statusLabel(message);
         return (
@@ -66,13 +62,13 @@ export function Conversation({ messages, emptyLabel }: ConversationProps) {
             className="message"
             data-role={message.role}
           >
-            <div className="message-role">
+            <div
+              className={message.role === "user" ? "visually-hidden" : "message-role"}
+            >
               {message.role === "user" ? "You" : "Assistant"}
             </div>
             {message.content ? (
               <p className="message-body">{message.content}</p>
-            ) : message.status === "streaming" ? (
-              <p className="message-body">…</p>
             ) : null}
             {status ? (
               <div className="message-status" data-tone={status.tone}>

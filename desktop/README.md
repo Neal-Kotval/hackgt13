@@ -190,3 +190,13 @@ primitive directly, including keyboard navigation and accessible names.
 The **Codex agents** section connects to sessions initialized on the AgentCloud website. Select the same project and session, send instructions, inspect attributed assistant and Docker command events, and stop generation or reconnect a stopped session. The website owns initialization and authentication setup. `agentcloud://open?projectId=…&codexSessionId=…` selects that session after employee sign-in; session data always comes from the authenticated server, never the link.
 
 This view polls bounded event snapshots and replaces events by stable IDs. Unsent drafts survive navigation during the current app session; failed sends retain text and reuse the request ID when retried unchanged. If a turn start is ambiguous, the draft stays intact and ordinary send is disabled; inspect the recovered history, then explicitly choose **Send as a new turn** only if another execution is intended. Unavailable deep-link projects or sessions never select a different agent automatically. Project chat remains an independent local scratchpad. Docker provides a local execution box, not an AWS deployment or GPU verification. Authenticated renderer requests are restricted to the configured server origin and do not follow redirects.
+
+### Project chat presentation
+
+Chat history lives in the shared navigation sidebar (or its drawer on narrow
+windows). New chats open with a centered greeting and composer; conversations use
+a restrained reading column, user bubbles, and unboxed assistant turns. Enter
+sends, Shift+Enter adds a line, and composing text with an IME does not send early.
+Send and Stop have accessible labels. Removed routine message counts and explanatory
+banners do not change storage or execution: chat history is still saved on this
+device, and missing configuration and failed turns remain visible.

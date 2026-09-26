@@ -227,7 +227,7 @@ export default function App() {
     : "";
 
   useEffect(() => {
-    if (section !== "local-chat" || selectedId) return;
+    if (section !== "local-chat") return;
     queueMicrotask(() => {
       document.getElementById("composer-input")?.focus();
     });
@@ -358,8 +358,7 @@ export default function App() {
         if (!current || current.id !== threadId) {
           return {
             id: threadId!,
-            title:
-              content.length > 48 ? `${content.slice(0, 45)}…` : content,
+            title: content.length > 48 ? `${content.slice(0, 45)}…` : content,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             messages: [userMessage],
@@ -400,7 +399,9 @@ export default function App() {
     try {
       await desktopApi().cancelAssistant(selectedId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not stop generation");
+      setError(
+        err instanceof Error ? err.message : "Could not stop generation",
+      );
     }
   }
 
@@ -441,8 +442,8 @@ export default function App() {
         <h1>Chat storage error</h1>
         <p>{bootError}</p>
         <p>
-          Project chat lives under the app userData chat directory. Fix or remove
-          the corrupt file, then relaunch.
+          Project chat lives under the app userData chat directory. Fix or
+          remove the corrupt file, then relaunch.
         </p>
       </div>
     );
@@ -454,6 +455,28 @@ export default function App() {
       employeeName={auth.user?.name || "Signed in"}
       employeeEmail={auth.user?.email || ""}
       busy={busy || sending || signingOut}
+      renderHistory={
+        section === "local-chat"
+          ? (closeNavigation) => (
+              <ThreadList
+                threads={threads}
+                selectedId={selectedId}
+                busy={busy || sending || signingOut}
+                onSelect={(id) => {
+                  closeNavigation();
+                  void handleSelect(id);
+                }}
+                onCreate={() => {
+                  closeNavigation();
+                  void handleCreate();
+                }}
+                onDelete={(id) => {
+                  void handleDelete(id);
+                }}
+              />
+            )
+          : undefined
+      }
       onSectionChange={setSection}
       onSignOut={() => {
         void handleSignOut();
@@ -477,70 +500,48 @@ export default function App() {
         />
       ) : (
         <div className="app-shell">
-          <ThreadList
-            threads={threads}
-            selectedId={selectedId}
-            busy={busy || sending || signingOut}
-            onSelect={(id) => {
-              void handleSelect(id);
-            }}
-            onCreate={() => {
-              void handleCreate();
-            }}
-            onDelete={(id) => {
-              void handleDelete(id);
-            }}
-          />
-          <main className="main">
+          <main className="main" data-empty={!activeThread?.messages.length}>
             <header className="main-header">
-              <div>
-                <h1>{activeThread?.title ?? "No chat selected"}</h1>
-                <p className="brand-meta">
-                  Project chat only — does not create AgentCloud tasks or sync to
-                  the web dashboard.
-                </p>
-              </div>
+              <h1 title={activeThread?.title}>
+                {activeThread?.title ?? "Project chat"}
+              </h1>
+              <span
+                className="chat-storage-note"
+                title="Chat history is saved on this device and does not sync to the web dashboard."
+              >
+                Saved on this device
+              </span>
+            </header>
+            <Conversation
+              key={selectedId ?? LANDING_DRAFT_KEY}
+              messages={activeThread?.messages ?? []}
+              emptyLabel=""
+            />
+            <div className="chat-compose-area">
               {credentials && !credentials.configured ? (
                 <p className="credential-banner" role="status">
                   {credentials.message}
                 </p>
-              ) : credentials ? (
-                <p className="brand-meta">{credentials.message}</p>
               ) : null}
-            </header>
-            {activeThread ? (
-              <Conversation
-                messages={activeThread.messages}
-                emptyLabel="This chat has no messages yet. Type below to send the first turn."
+              <Composer
+                value={draft}
+                disabled={false}
+                sending={sending}
+                error={error}
+                onChange={(value) => {
+                  setDrafts((current) => ({
+                    ...current,
+                    [draftKey]: value,
+                  }));
+                }}
+                onSend={() => {
+                  void handleSend();
+                }}
+                onStop={() => {
+                  void handleStop();
+                }}
               />
-            ) : (
-              <div className="conversation">
-                <div className="main-empty" role="status">
-                  Type below to start a project chat. The first send creates a
-                  thread automatically — New chat is optional for another empty
-                  thread. Threads stay on this machine and are not AgentCloud
-                  tasks.
-                </div>
-              </div>
-            )}
-            <Composer
-              value={draft}
-              disabled={false}
-              sending={sending}
-              error={error}
-              onChange={(value) => {
-                setDrafts((current) => ({
-                  ...current,
-                  [draftKey]: value,
-                }));
-              }}
-              onSend={() => {
-                void handleSend();
-              }}
-              onStop={() => {
-                void handleStop();
-              }}
-            />
+            </div>
           </main>
         </div>
       )}
