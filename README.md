@@ -165,6 +165,7 @@ The token check enforces the visual-system rules; it does not replace visual ins
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Application, storage, API, CLI, and future infrastructure boundaries |
 | [BACKEND_PLAN.md](BACKEND_PLAN.md) | Proposed identity, worker, run-box provider, events, and EC2 implementation contract |
 | [AWS_SETUP.md](AWS_SETUP.md) | Live AWS GPU demo preflight, Terraform workflow, spending policy, quota request, and launch gates |
+| [AWS_AUTH_STAGING.md](AWS_AUTH_STAGING.md) | Private EC2 staging deployment, SSM tunnel, and Better Auth verification workflow |
 | [ROADMAP.md](ROADMAP.md) | Dependency-ordered delivery phases and acceptance gates |
 | [VERIFICATION.md](VERIFICATION.md) | Recorded check results, remaining verification, and browser-tool limitations |
 | [AGENTS.md](AGENTS.md) | Contributor rules for design, testing, collaboration, and truthful capabilities |
