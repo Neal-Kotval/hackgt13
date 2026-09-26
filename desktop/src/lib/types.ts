@@ -1,5 +1,8 @@
 export type MessageRole = "user" | "assistant";
 
+export type { DeepLinkParseResult, DeepLinkTarget } from "./deep-link";
+import type { DeepLinkParseResult } from "./deep-link";
+
 export type MessageStatus =
   | "complete"
   | "streaming"
@@ -166,4 +169,6 @@ export type DesktopApi = {
   postAction: (
     body: Record<string, unknown>,
   ) => Promise<{ state: AgentCloudStateSummary; raw: unknown }>;
+  takePendingDeepLink: () => Promise<DeepLinkParseResult | null>;
+  onDeepLink: (handler: (result: DeepLinkParseResult) => void) => () => void;
 };

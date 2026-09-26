@@ -1,0 +1,63 @@
+export type DeepLinkTarget = {
+  projectId: string;
+  environmentId?: string;
+};
+
+export type DeepLinkParseResult =
+  | { ok: true; target: DeepLinkTarget }
+  | { ok: false; error: string };
+
+const SCHEME = "agentcloud:";
+
+/**
+ * Parse `agentcloud://open?projectId=…&environmentId=…` (environment optional).
+ */
+export function parseAgentCloudDeepLink(raw: string): DeepLinkParseResult {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { ok: false, error: "Deep link URL is empty." };
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return { ok: false, error: "Deep link URL is malformed." };
+  }
+  if (url.protocol !== SCHEME) {
+    return {
+      ok: false,
+      error: `Expected agentcloud:// link, got ${url.protocol}//`,
+    };
+  }
+  const hostOrPath = (url.hostname || url.pathname.replace(/^\//, "")).toLowerCase();
+  if (hostOrPath !== "open") {
+    return {
+      ok: false,
+      error: "Unsupported agentcloud link. Use agentcloud://open?projectId=…",
+    };
+  }
+  const projectId = url.searchParams.get("projectId")?.trim() || "";
+  if (!projectId) {
+    return {
+      ok: false,
+      error: "Deep link is missing projectId.",
+    };
+  }
+  const environmentId = url.searchParams.get("environmentId")?.trim() || undefined;
+  return {
+    ok: true,
+    target: {
+      projectId,
+      ...(environmentId ? { environmentId } : {}),
+    },
+  };
+}
+
+export function findDeepLinkUrl(argv: string[]): string | null {
+  for (const arg of argv) {
+    if (typeof arg === "string" && arg.startsWith("agentcloud://")) {
+      return arg;
+    }
+  }
+  return null;
+}
