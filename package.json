@@ -15,7 +15,8 @@
     "test:select:browser": "node tests/select.browser.mjs",
     "test:aws-auth:smoke": "node tests/aws-auth-smoke.mjs",
     "aws:gpu:preflight": "node scripts/aws-gpu-preflight.mjs",
-    "dev:aws": "node scripts/dev-aws.mjs"
+    "dev:aws": "node scripts/dev-aws.mjs",
+    "dev:docker": "node scripts/dev-docker.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
