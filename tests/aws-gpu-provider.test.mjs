@@ -53,7 +53,7 @@ test("Paid plan still requires credits and a sufficient runtime window", () => {
 
 test("AWS CLI errors preserve only operation, code, and known Free Tier rejection", async () => {
   const run = async () => { const error = new Error("aws --cli-input-json secret-value");
-    error.stderr = "An error occurred (Client.InvalidParameterCombination) when calling the RunInstances operation: g6.xlarge is not eligible for Free Tier; secret-value";
+    error.stderr = "An error occurred (Client.InvalidParameterCombination) when calling the RunInstances operation: The instance type 'g6.xlarge' is not eligible for Free Tier; secret-value";
     throw error; };
   const aws = createAwsCli({ run, env: {} });
   await assert.rejects(aws("ec2", "run-instances", "--cli-input-json", "secret-value"), (error) => {
