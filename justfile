@@ -40,3 +40,31 @@ tokens:
 
 # Run all repository checks and create a production build.
 verify: check test tokens build
+
+# Install desktop package dependencies once.
+desktop-setup:
+    npm --prefix desktop install
+    @if [ ! -e desktop/.env ]; then cp desktop/.env.example desktop/.env; fi
+
+# Launch the desktop chat shell (Electron + Vite).
+desktop:
+    npm --prefix desktop run dev
+
+# Launch desktop with docked DevTools (AGENTCLOUD_DESKTOP_DEVTOOLS=1).
+desktop-devtools:
+    AGENTCLOUD_DESKTOP_DEVTOOLS=1 npm --prefix desktop run dev
+
+# Typecheck the desktop package.
+desktop-check:
+    npm --prefix desktop run check
+
+# Run desktop unit tests.
+desktop-test:
+    npm --prefix desktop test
+
+# Production-build the desktop package.
+desktop-build:
+    npm --prefix desktop run build
+
+# Typecheck, test, and build the desktop package.
+desktop-verify: desktop-check desktop-test desktop-build
