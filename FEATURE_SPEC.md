@@ -27,7 +27,7 @@ An artifact record includes project, name, type, version, source revision, produ
 
 ## Core workflow
 
-1. The human creates a project and assigns a task. AgentCloud starts or attaches a run box for the assigned agent and records the actual machine and worktree identity.
+1. The human first connects a machine or allocates a project environment in the web app. AgentCloud verifies and records the actual machine and workspace identity before any task is required. The human then selects that ready environment in the desktop app, creates/assigns a task, and starts an authorized agent inside it. The web app monitors environment state, operational analytics, task progress, and outputs; task instructions and follow-ups stay in the desktop app.
 2. The agent builds and tests in its run box. It may register a temporary, organization-private development service for another authorized project agent to consume. The registry limits discovery to that project, labels the endpoint as temporary, and reports observed reachability separately from client claims. Human preview, if offered, uses authenticated private access rather than exposing the endpoint publicly.
 3. The agent proposes an output for publication. The human or a scoped automation selects the artifact type, source revision, build or content package, destination home, and access mode. Publishing is an explicit action with an attributed result.
 4. AgentCloud copies or builds the selected version into the artifact home, starts or updates serving when needed, and verifies the result. The artifact catalog links the live version to its source and publish evidence.
