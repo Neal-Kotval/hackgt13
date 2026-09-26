@@ -2,7 +2,7 @@ import { getDatabase } from "../../../lib/auth.mjs";
 import { requireEmployee, requireMembership, type Employee } from "../../../lib/employee";
 import { body, failure, sameOrigin } from "../../../lib/http";
 import { InputError, getState, resourceAction } from "../../../lib/store";
-import { demoGpuProfile, localDockerSandboxProfile, runpodGpuProfile } from "../../../lib/resource-profiles";
+import { demoGpuProfile, findRunpodProfile, localDockerSandboxProfile, runpodBudgetGpuProfile, runpodGpuProfile } from "../../../lib/resource-profiles";
 import { listRunBoxJobs, migrateRunBoxJobs, saveRunBoxDecision } from "../../../lib/run-box-jobs.mjs";
 import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../../../lib/run-box-ssh.mjs";
 
@@ -20,6 +20,7 @@ function identifier(value: unknown, name: string): string {
 const environmentProfiles = {
   [localDockerSandboxProfile.id]: { provider: localDockerSandboxProfile.provider, kind: "run-box", label: localDockerSandboxProfile.label },
   [runpodGpuProfile.id]: { provider: runpodGpuProfile.provider, kind: "gpu", label: runpodGpuProfile.label },
+  [runpodBudgetGpuProfile.id]: { provider: runpodBudgetGpuProfile.provider, kind: "gpu", label: runpodBudgetGpuProfile.label },
   [demoGpuProfile.id]: { provider: demoGpuProfile.provider, kind: "gpu", label: `AWS EC2 · ${demoGpuProfile.label}` },
 } as const;
 type EnvironmentProfileId = keyof typeof environmentProfiles;
@@ -151,9 +152,10 @@ export async function POST(request: Request) {
     const awsEligible = preference?.provider === "aws-ec2" &&
       preference.profileId === demoGpuProfile.id && preference.region === demoGpuProfile.region &&
       preference.instanceType === demoGpuProfile.instanceType;
-    const runpodEligible = preference?.provider === "runpod" &&
-      preference.profileId === runpodGpuProfile.id && preference.gpuId === runpodGpuProfile.gpuId &&
-      preference.cloud === runpodGpuProfile.cloud && preference.maxHourlyUsd === runpodGpuProfile.maxHourlyUsd;
+    const runpodProfile = preference?.provider === "runpod" ? findRunpodProfile(preference.profileId) : null;
+    const runpodEligible = preference?.provider === "runpod" && runpodProfile !== null &&
+      preference.gpuId === runpodProfile.gpuId &&
+      preference.cloud === runpodProfile.cloud && preference.maxHourlyUsd === runpodProfile.maxHourlyUsd;
     if (resourceRequest.kind !== "gpu" || resourceRequest.status !== "requested" ||
         resourceRequest.decision.status !== "not_evaluated" ||
         !preference || (!awsEligible && !runpodEligible) ||

@@ -279,3 +279,13 @@ test("an operator-pinned host key overrides the injected key only for its exact 
   assert.equal(operatorPinnedHostKey(`${dir}/missing`, "203.0.113.10", 30222), null);
   assert.equal(operatorPinnedHostKey(undefined, "203.0.113.10", 30222), null);
 });
+
+test("budget RTX 4000 Ada profile preflights its own GPU and $0.50 ceiling", async () => {
+  const job = { id: "11111111-1111-4111-8111-111111111111", provider: "runpod", profile_id: "runpod-rtx-4000-ada",
+    max_duration_minutes: 60, created_at: new Date().toISOString() };
+  const catalog = (price) => ({ async listGpuTypes() { return [{ id: "NVIDIA RTX 4000 Ada Generation", availability: "LOW", secureHourlyUsd: price }]; },
+    async listPods() { return []; } });
+  assert.deepEqual(await preflightRunpod(catalog(0.28), job), { hourlyUsd: 0.28 });
+  await assert.rejects(preflightRunpod(catalog(0.6), job), /above \$0.5 ceiling/);
+  await assert.rejects(preflightRunpod(catalog(0.28), { ...job, profile_id: "runpod-a100" }), /Unapproved Runpod profile/);
+});

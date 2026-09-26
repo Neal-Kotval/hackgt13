@@ -17,6 +17,7 @@ import {
   demoGpuDurations,
   demoGpuProfile,
   localDockerSandboxProfile,
+  runpodBudgetGpuProfile,
   runpodGpuProfile,
 } from "@/lib/resource-profiles";
 import "../resources/resources.css";
@@ -65,6 +66,14 @@ const profiles = [
     summary: "CPU-only Linux container · no GPU · no provider cost",
     detail:
       "Runs with sshd on the machine that runs the AgentCloud worker. Suitable for local development and demos. It has no GPU.",
+  },
+  {
+    id: runpodBudgetGpuProfile.id,
+    label: "Runpod RTX 4000 Ada",
+    icon: <Lightning aria-hidden="true" />,
+    summary: `Runpod Secure Cloud · budget GPU · up to $${runpodBudgetGpuProfile.maxHourlyUsd.toFixed(2)}/hour`,
+    detail:
+      "Billable, for short smoke tests. The worker checks live price and availability against the hourly ceiling before creating a Pod, and marks it ready only after an SSH and GPU probe succeeds.",
   },
   {
     id: runpodGpuProfile.id,

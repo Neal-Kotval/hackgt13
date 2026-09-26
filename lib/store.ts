@@ -14,7 +14,7 @@ import {
   demoGpuDurations,
   demoGpuProfile,
   localDockerSandboxProfile,
-  runpodGpuProfile,
+  findRunpodProfile,
 } from "./resource-profiles";
 interface Credential {
   hash: string;
@@ -463,7 +463,7 @@ export async function resourceAction(
           (resourceId ||
             kind !== (isLocalSandbox ? "run-box" : "gpu") ||
             (input.gpuProfileId !== demoGpuProfile.id &&
-              input.gpuProfileId !== runpodGpuProfile.id &&
+              !findRunpodProfile(input.gpuProfileId) &&
               !isLocalSandbox) ||
             typeof input.durationHours !== "number" ||
             !demoGpuDurations.some((hours) => hours === input.durationHours))
@@ -493,13 +493,13 @@ export async function resourceAction(
                   provider: localDockerSandboxProfile.provider,
                   profileId: localDockerSandboxProfile.id,
                   durationHours: input.durationHours as number,
-                } : input.gpuProfileId === runpodGpuProfile.id ? {
-                  provider: runpodGpuProfile.provider,
-                  profileId: runpodGpuProfile.id,
-                  gpuId: runpodGpuProfile.gpuId,
-                  cloud: runpodGpuProfile.cloud,
+                } : findRunpodProfile(input.gpuProfileId) ? {
+                  provider: "runpod",
+                  profileId: findRunpodProfile(input.gpuProfileId)!.id,
+                  gpuId: findRunpodProfile(input.gpuProfileId)!.gpuId,
+                  cloud: "SECURE",
                   durationHours: input.durationHours as number,
-                  maxHourlyUsd: runpodGpuProfile.maxHourlyUsd,
+                  maxHourlyUsd: findRunpodProfile(input.gpuProfileId)!.maxHourlyUsd,
                 } : {
                   provider: demoGpuProfile.provider,
                   profileId: demoGpuProfile.id,

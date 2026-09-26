@@ -22,6 +22,23 @@ export const runpodGpuProfile = {
   label: "Runpod Secure Cloud · RTX 4090",
 } as const;
 
+// Cheapest in-stock Secure Cloud GPU for short smoke tests (live catalog ~$0.28/hr).
+export const runpodBudgetGpuProfile = {
+  id: "runpod-rtx-4000-ada",
+  provider: "runpod",
+  gpuId: "NVIDIA RTX 4000 Ada Generation",
+  image: "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
+  cloud: "SECURE",
+  diskGb: 50,
+  maxHourlyUsd: 0.5,
+  label: "Runpod Secure Cloud · RTX 4000 Ada",
+} as const;
+
+export const runpodGpuProfiles = [runpodBudgetGpuProfile, runpodGpuProfile] as const;
+export function findRunpodProfile(id: unknown) {
+  return runpodGpuProfiles.find((profile) => profile.id === id) ?? null;
+}
+
 // CPU-only Linux container on the machine running the docker-local worker.
 // Never present it as GPU capacity.
 export const localDockerSandboxProfile = {
