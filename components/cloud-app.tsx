@@ -223,6 +223,7 @@ export function CloudApp() {
           </div>
         ) : (
           <>
+            {page === "dashboard" ? <>
             <section className="project-heading">
               <div>
                 <div className="eyebrow">
@@ -231,15 +232,15 @@ export function CloudApp() {
                 </div>
                 <h1>{project.name}</h1>
                 <p>
-                  {page === "environments" ? "Manage machines, resource requests, and approvals." : page === "settings" ? "Set up agent connections for this project." : "Follow your project’s progress and results."}
+                  Follow your project’s progress and results.
                 </p>
               </div>
-              {page !== "environments" && <div className="heading-actions">
+              <div className="heading-actions">
                 <Link className="button primary" href={base + "/environments"}>
                   <Plus />
                   Manage environments
                 </Link>
-              </div>}
+              </div>
             </section>
             <div className="project-meta">
               <span>
@@ -256,6 +257,7 @@ export function CloudApp() {
               </span>
               <span className="meta-right">Project workspace pending</span>
             </div>
+            </> : <h1 className="visually-hidden project-section-title">{({board: "Task board", desktop: "CLI connection"} as Record<string, string>)[page] ?? page.charAt(0).toUpperCase() + page.slice(1)}</h1>}
             {page === "environments" ? (
               <div className="project-sections">
                 <ResourceRequests project={project} onAction={resourceAction} />

@@ -2300,3 +2300,11 @@ select {
 .project-disclosure > .resource-page {
   padding-bottom: 0;
 }
+
+/* The breadcrumb supplies the gap on pages without the Overview summary. */
+.project-section-title + .setup-layout {
+  padding-top: 0;
+}
+.project-section-title + .standalone {
+  margin-top: 0;
+}
