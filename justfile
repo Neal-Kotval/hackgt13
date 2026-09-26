@@ -89,6 +89,18 @@ sim-up:
 sim-down:
     docker compose down
 
+# Show container health and the loopback port used by the simulation.
+sim-status:
+    docker compose ps
+
+# Follow recent backend logs.
+sim-logs:
+    docker compose logs --tail=100 --follow backend
+
+# Probe the running backend without creating an account or project.
+sim-check:
+    curl --fail --silent --show-error --output /dev/null http://127.0.0.1:${AGENTCLOUD_SIM_PORT:-3002}/sign-in
+
 # Local frontend on port 3001, connected only to the Docker backend.
 dev-docker:
     npm run dev:docker
