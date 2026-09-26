@@ -5,13 +5,13 @@ import { chromium } from "@playwright/test";
 
 // Live, billable smoke test. Run explicitly after Terraform, the private app,
 // and the scoped worker service are deployed. It is never part of npm test.
-const base = process.env.AGENTCLOUD_GPU_E2E_BASE || "http://127.0.0.1:3000";
+const base = process.env.AGENTCLOUD_GPU_E2E_BASE || "https://d12myzdaxmn92r.cloudfront.net";
 const projectId = process.env.AGENTCLOUD_GPU_E2E_PROJECT_ID;
 const email = process.env.AGENTCLOUD_GPU_E2E_EMAIL;
 const stagingInstanceId = process.env.AGENTCLOUD_GPU_E2E_STAGING_INSTANCE_ID;
 if (!projectId || !email || !/^i-[0-9a-f]+$/.test(stagingInstanceId || "") ||
-    !/^http:\/\/127\.0\.0\.1:3000$/.test(base))
-  throw new Error("Set project ID, email, and staging instance ID; use the private localhost:3000 SSM tunnel");
+    !/^https:\/\/[a-z0-9]+\.cloudfront\.net$/.test(base))
+  throw new Error("Set project ID, email, and staging instance ID; use the staging CloudFront URL");
 
 const password = await new Promise((resolve, reject) => {
   let line = "";
@@ -96,7 +96,7 @@ try {
   const identity = await aws("sts", "get-caller-identity");
   assert.equal(identity.Account, "662660921850");
   const live = await fetch(`${base}/sign-in`, { signal: AbortSignal.timeout(5000) });
-  assert.equal(live.status, 200, "Private SSM tunnel must serve sign-in");
+  assert.equal(live.status, 200, "Staging CloudFront must serve sign-in");
   browser = await chromium.launch({ channel: "chrome", headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   page = await context.newPage();
@@ -149,7 +149,8 @@ try {
   assert.equal(evidence.remote_account, "ec2-user");
   assert.ok(evidence.remote_uid > 0);
   assert.match(evidence.gpu_device, /NVIDIA|L4/i);
-  assert.equal(evidence.cuda_sum, 4);
+  assert.equal(evidence.workload_value, 4);
+  assert.equal(evidence.correctness, 1);
   assert.ok(evidence.cpu_ms > 0 && evidence.gpu_ms > 0, "CPU and CUDA workloads must both execute");
   assert.equal(evidence.exit_code, 0);
   assert.match(evidence.output_sha256, /^[0-9a-f]{64}$/);
@@ -169,8 +170,11 @@ try {
       if (current && current.state !== "stopped") {
         await page.request.post(`${base}/api/run-boxes/${jobId}/stop`, { data: { projectId } });
         console.error(`Requested cleanup for incomplete GPU job ${jobId}`);
+        const stopped = await pollJob(page, jobId, (job) => job.state === "stopped", 12 * 60_000);
+        if (stopped.provider_resource_id) await assertReleased(stopped.provider_resource_id);
+        console.error(`Confirmed cleanup for incomplete GPU job ${jobId}`);
       }
-    } catch { console.error(`Could not confirm cleanup request for GPU job ${jobId}`); }
+    } catch (error) { console.error(`Could not confirm cleanup for GPU job ${jobId}: ${error}`); }
   }
   await browser?.close();
 }
