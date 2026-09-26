@@ -8,6 +8,7 @@ import {
   claimRunBoxJob,
   migrateRunBoxJobs,
   recordRunBoxAllocation,
+  recordRunBoxRevision,
   requestRunBoxStop,
   saveRunBoxDecision,
   transitionRunBoxJob,
@@ -31,6 +32,7 @@ function request(overrides = {}) {
     projectRole: "owner",
     provider: "aws-ec2",
     maxDurationMinutes: 120,
+    repoUrl: "https://example.com/repo.git",
     ...overrides,
   };
 }
@@ -43,6 +45,19 @@ test("member denial persists a decision without a billable job", () => {
     assert.equal(result.job, null);
     assert.equal(claimRunBoxJob(db, "worker-1"), null);
     assert.equal(db.prepare("SELECT COUNT(*) AS count FROM run_box_job").get().count, 0);
+  } finally {
+    db.close();
+  }
+});
+
+test("approved job pins a validated server repository URL in the decision", () => {
+  const db = database();
+  try {
+    assert.throws(() => saveRunBoxDecision(db, request({ repoUrl: "https://user:secret@example.com/repo.git" })), /Invalid repository URL/);
+    const { job } = saveRunBoxDecision(db, request());
+    assert.equal(job.repo_url, "https://example.com/repo.git");
+    assert.equal(job.repo_revision, null);
+    assert.throws(() => saveRunBoxDecision(db, request({ repoUrl: "https://example.com/other.git" })), /Idempotency key reused/);
   } finally {
     db.close();
   }
@@ -83,6 +98,8 @@ test("migration upgrades existing job tables and stale workers cannot transition
   const columns = old.prepare("PRAGMA table_info(run_box_job)").all().map((item) => item.name);
   assert.ok(columns.includes("stop_requested_at"));
   assert.ok(columns.includes("stop_requested_by"));
+  assert.ok(columns.includes("repo_url"));
+  assert.ok(columns.includes("repo_revision"));
   const { job } = saveRunBoxDecision(old, request());
   claimRunBoxJob(old, "worker-owner");
   assert.throws(() => transitionRunBoxJob(old, job.id, "failed", "stale-worker"), /active job lease/);
@@ -139,13 +156,17 @@ test("ready and stopped require evidence, with recorded state changes", () => {
     recordRunBoxAllocation(db, job.id, "worker-1", "aws-ec2", "i-123");
     transitionRunBoxJob(db, job.id, "verifying", "worker-1");
     assert.throws(() => transitionRunBoxJob(db, job.id, "ready", "worker-1"), /requires evidence/);
+    assert.throws(() => transitionRunBoxJob(db, job.id, "ready", "worker-1", { evidenceRef: "gpu-check" }), /repository revision required/);
+    const revision = "a".repeat(40);
+    assert.equal(recordRunBoxRevision(db, job.id, "worker-1", revision).repo_revision, revision);
+    assert.throws(() => recordRunBoxRevision(db, job.id, "worker-1", "b".repeat(40)), /another repository revision/);
     assert.equal(transitionRunBoxJob(db, job.id, "ready", "worker-1", { evidenceRef: "gpu-check-1" }).state, "ready");
     assert.equal(transitionRunBoxJob(db, job.id, "stopping", "worker-1").state, "stopping");
     assert.throws(() => transitionRunBoxJob(db, job.id, "stopped", "worker-1"), /requires evidence/);
     assert.equal(transitionRunBoxJob(db, job.id, "stopped", "worker-1", { evidenceRef: "ec2-terminated-1" }).state, "stopped");
     assert.throws(() => transitionRunBoxJob(db, job.id, "ready", "worker-1", { evidenceRef: "x" }), /Invalid transition/);
     const changes = db.prepare("SELECT from_state, to_state, evidence_ref FROM run_box_transition WHERE job_id = ? ORDER BY id").all(job.id);
-    assert.deepEqual(changes.map((item) => item.to_state), ["queued", "allocating", "connecting", "verifying", "ready", "stopping", "stopped"]);
+    assert.deepEqual(changes.map((item) => item.to_state), ["queued", "allocating", "connecting", "verifying", "verifying", "ready", "stopping", "stopped"]);
     assert.equal(changes.at(-1).evidence_ref, "ec2-terminated-1");
   } finally {
     db.close();
