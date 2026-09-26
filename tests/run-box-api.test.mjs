@@ -37,8 +37,8 @@ const projectId = (await store.action({ type: "createProject", name: "GPU test",
 fixture.grantMembership(owner.id, projectId, "owner");
 fixture.grantMembership(member.id, projectId, "member");
 const actor = (user, role) => ({ employeeId: user.id, organizationId: fixture.organization.id, projectRole: role });
-async function gpuRequest(user, role) {
-  return (await store.resourceAction({ type: "requestResource", projectId, kind: "gpu", purpose: "GPU smoke", gpuProfileId: "g6-l4-small", durationHours: 1 }, actor(user, role))).request;
+async function gpuRequest(user, role, gpuProfileId = "g6-l4-small") {
+  return (await store.resourceAction({ type: "requestResource", projectId, kind: "gpu", purpose: "GPU smoke", gpuProfileId, durationHours: 1 }, actor(user, role))).request;
 }
 function request(url, body, cookie) {
   return new Request(`http://localhost:3000${url}`, {
@@ -84,4 +84,22 @@ test("member decision denies allocation and stop is owner-scoped and durable", a
   assert.equal(stopped.status, 200);
   assert.equal((await stopped.json()).job.state, "stopping");
   assert.ok(db.prepare("SELECT stop_requested_at FROM run_box_job WHERE id = ?").get(job.id).stop_requested_at);
+});
+
+test("Runpod approval is owner scoped, profile pinned, and duplicate allocation returns conflict", async () => {
+  const saved = await gpuRequest(owner, "owner", "runpod-rtx-4090");
+  const input = { projectId, resourceRequestId: saved.id, idempotencyKey: "runpod-approval-1" };
+  assert.equal((await boxes.POST(request("/api/run-boxes", input, member.cookie))).status, 403);
+  const response = await boxes.POST(request("/api/run-boxes", input, owner.cookie));
+  assert.equal(response.status, 201);
+  const { decision, job } = await response.json();
+  assert.equal(decision.provider, "runpod");
+  assert.equal(decision.profile_id, "runpod-rtx-4090");
+  assert.equal(job.state, "queued");
+  assert.equal(job.provider_resource_id, null);
+  const next = await gpuRequest(owner, "owner", "runpod-rtx-4090");
+  const duplicate = await boxes.POST(request("/api/run-boxes", {
+    projectId, resourceRequestId: next.id, idempotencyKey: "runpod-approval-2",
+  }, owner.cookie));
+  assert.equal(duplicate.status, 409);
 });
