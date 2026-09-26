@@ -81,7 +81,10 @@ test("create reuses an exact existing pod and refuses a marker configuration con
 
 test("create sends v2 body with one GPU, SSH access, and no browser-controlled secrets", async () => {
   const h = harness([list([]), json(pod({ status: "PROVISIONING" }), 201)]);
-  const result = await h.provider.createPod({ ...spec, env: { API_KEY: "ignored" }, name: "ignored" });
+  await assert.rejects(h.provider.createPod({ ...spec, env: { API_KEY: "not-forwarded" } }), /Invalid Runpod environment/);
+  await assert.rejects(h.provider.createPod({ ...spec, cmd: "bash -c evil" }), /Invalid Runpod start command/);
+  assert.equal(h.calls.length, 0);
+  const result = await h.provider.createPod({ ...spec, name: "ignored" });
   assert.equal(result.status, "PROVISIONING");
   const body = JSON.parse(h.calls[1].body);
   assert.deepEqual(body, {
@@ -90,6 +93,16 @@ test("create sends v2 body with one GPU, SSH access, and no browser-controlled s
   });
   assert.equal(h.calls[1].method, "POST");
   assert.equal(h.calls[1].headers["Content-Type"], "application/json");
+});
+
+test("create forwards worker-owned AGENTCLOUD env and start command, never in returned pod", async () => {
+  const h = harness([list([]), json(pod({ status: "PROVISIONING", env: { AGENTCLOUD_SSH_HOST_KEY_B64: "secret" } }), 201)]);
+  const env = { AGENTCLOUD_SSH_HOST_KEY_B64: "c2VjcmV0", AGENTCLOUD_AUTHORIZED_KEYS_B64: "a2V5cw==" };
+  const result = await h.provider.createPod({ ...spec, env, cmd: ["bash", "-c", "exec /start.sh"] });
+  const body = JSON.parse(h.calls[1].body);
+  assert.deepEqual(body.env, env);
+  assert.deepEqual(body.cmd, ["bash", "-c", "exec /start.sh"]);
+  assert.equal(JSON.stringify(result).includes("secret"), false);
 });
 
 test("expiry marker is stable, bounded, and required before allocation", async () => {
