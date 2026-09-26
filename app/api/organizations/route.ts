@@ -1,5 +1,5 @@
 import { getDatabase } from "../../../lib/auth.mjs";
-import { mailMode } from "../../../lib/mail.mjs";
+import { mailDeliveryStatus } from "../../../lib/mail.mjs";
 import { requireEmployee, requireOrganizationAdmin, employeeState } from "../../../lib/employee";
 import { getState, InputError } from "../../../lib/store";
 import { body, failure, sameOrigin } from "../../../lib/http";
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     const legacyIds = db.prepare("SELECT pm.project_id AS id FROM project_membership pm LEFT JOIN project_organization po ON po.project_id=pm.project_id WHERE pm.user_id=? AND pm.role='owner' AND po.project_id IS NULL").all(employee.id) as { id: string }[];
     const legacyProjects = state.projects.filter((p) => legacyIds.some((l) => l.id === p.id)).map(({ id, name }) => ({ id, name }));
     const assignments = manage ? db.prepare("SELECT pm.user_id AS userId, pm.project_id AS projectId FROM project_membership pm JOIN project_organization po ON po.project_id=pm.project_id WHERE po.organization_id=?").all(active.id) : [];
-    return Response.json({ ...employee, members, invitations, projects, legacyProjects, assignments, mailMode: mailMode() });
+    return Response.json({ ...employee, members, invitations, projects, legacyProjects, assignments, mailMode: mailDeliveryStatus() });
   } catch (error) { return failure(error); }
 }
 export async function POST(request: Request) {

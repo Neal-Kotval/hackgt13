@@ -14,6 +14,10 @@ dev:
 dev-doppler:
     doppler run -- npm run dev
 
+# Preview local frontend against the shared AWS backend on port 3001.
+dev-aws:
+    doppler run --project hackgt --config dev -- npm run dev:aws
+
 # Initialize authentication with the selected Doppler config.
 auth-setup-doppler:
     doppler run -- npm run auth:setup
