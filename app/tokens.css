@@ -90,28 +90,28 @@
 }
 
 :root {
-  /* Primitives: restrained slate palette evolved from the v4 reference. */
-  --palette-ink: #0d1218;
-  --palette-panel: #141c25;
-  --palette-selected: #1b2732;
-  --palette-raised: #253442;
-  --palette-paper: #e8edf2;
-  --palette-gray-300: #455667;
-  --palette-gray-500: #778797;
-  --palette-gray-550: #94a3b5;
-  --palette-gray-600: #a5b2c0;
-  --palette-gray-700: #c9d3df;
-  --palette-teal: #69c5bd;
-  --palette-teal-light: #aae5dc;
-  --palette-teal-dark: #173b3b;
-  --palette-violet: #b9a1e3;
-  --palette-violet-dark: #30263f;
+  /* Primitives: black, blue, and cool-grey palette evolved from the v4 reference. */
+  --palette-ink: #090b0f;
+  --palette-panel: #12151b;
+  --palette-selected: #1c222b;
+  --palette-raised: #252c36;
+  --palette-paper: #e6e9ef;
+  --palette-gray-300: #48515f;
+  --palette-gray-500: #7f8999;
+  --palette-gray-550: #9ca5b3;
+  --palette-gray-600: #adb5c2;
+  --palette-gray-700: #cbd1db;
+  --palette-action-blue: #77a7ff;
+  --palette-action-blue-light: #b5d0ff;
+  --palette-action-blue-dark: #192d4b;
+  --palette-steel: #a3b8d8;
+  --palette-steel-dark: #263141;
   --palette-sage: #a1c9b3;
   --palette-sage-dark: #243c32;
   --palette-amber: #ddbd86;
   --palette-amber-dark: #41341f;
-  --palette-blue: #8bb8ed;
-  --palette-blue-dark: #1c304b;
+  --palette-blue: #8eafe3;
+  --palette-blue-dark: #202f45;
   --palette-coral: #e6a098;
   --palette-coral-dark: #422b2c;
   --palette-transparent: transparent;
@@ -128,12 +128,12 @@
   --color-border: color-mix(in srgb, var(--palette-paper) 14%, transparent);
   --color-border-subtle: color-mix(in srgb, var(--palette-paper) 8%, transparent);
   --color-border-strong: color-mix(in srgb, var(--palette-paper) 20%, transparent);
-  --color-accent: var(--palette-teal);
+  --color-accent: var(--palette-action-blue);
   --color-accent-text: var(--palette-ink);
-  --color-accent-hover: var(--palette-teal-light);
-  --color-accent-soft: var(--palette-teal-dark);
-  --color-agent-secondary: var(--palette-violet);
-  --color-agent-secondary-soft: var(--palette-violet-dark);
+  --color-accent-hover: var(--palette-action-blue-light);
+  --color-accent-soft: var(--palette-action-blue-dark);
+  --color-agent-secondary: var(--palette-steel);
+  --color-agent-secondary-soft: var(--palette-steel-dark);
   /* Legacy secondary-agent aliases; danger has its own coral role. */
   --color-pink: var(--color-agent-secondary);
   --color-pink-soft: var(--color-agent-secondary-soft);
@@ -150,11 +150,11 @@
   --color-dot-grid: color-mix(in srgb, var(--palette-paper) 8%, transparent);
 
   /* Quiet glass navigation: dark translucent fill, restrained edge highlights. */
-  --color-glass: rgb(20 28 37 / 88%);
-  --color-glass-hover: rgb(232 237 242 / 6%);
-  --color-glass-selected: rgb(105 197 189 / 12%);
-  --color-glass-edge: rgb(232 237 242 / 9%);
-  --shadow-glass: inset 0 1px 0 rgb(232 237 242 / 6%), 0 8px 32px rgb(0 0 0 / 14%);
+  --color-glass: rgb(18 21 27 / 90%);
+  --color-glass-hover: rgb(230 233 239 / 6%);
+  --color-glass-selected: rgb(119 167 255 / 12%);
+  --color-glass-edge: rgb(230 233 239 / 9%);
+  --shadow-glass: inset 0 1px 0 rgb(230 233 239 / 6%), 0 8px 32px rgb(0 0 0 / 14%);
   --glass-blur: 20px;
   --glass-saturation: 115%;
   --radius-navigation: 0.75rem;
