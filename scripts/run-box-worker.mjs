@@ -5,20 +5,34 @@ import { migrateRunBoxJobs } from "../lib/run-box-jobs.mjs";
 import { assumeGpuWorkerRole, createAwsGpuProvider } from "../lib/aws-gpu-provider.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
 
-if (process.argv.length !== 3 || process.argv[2] !== "--once") {
-  console.error("Usage: node scripts/run-box-worker.mjs --once");
+const mode = process.argv[2];
+if (process.argv.length !== 3 || !["--once", "--loop"].includes(mode)) {
+  console.error("Usage: node scripts/run-box-worker.mjs --once|--loop");
   process.exit(2);
 }
 
-try {
+async function cycle() {
   const aws = await assumeGpuWorkerRole();
   const provider = createAwsGpuProvider({ aws, subnetId: process.env.AGENTCLOUD_GPU_SUBNET_ID });
   await provider.identifyWorker();
   const db = getDatabase();
   migrateRunBoxJobs(db);
   const result = await workOneAwsGpuJob(db, provider);
-  console.log(result ? `Processed GPU job ${result.jobId}: ${result.state} (${result.evidenceRef})` : "No GPU job available");
-} catch (error) {
+  if (result) console.log(`Processed GPU job ${result.jobId}: ${result.state} (${result.evidenceRef})`);
+  return result;
+}
+
+async function execute() {
+  if (mode === "--once") return cycle();
+  while (true) {
+    try { await cycle(); }
+    catch (error) { console.error(`GPU worker cycle failed: ${error.message.slice(0, 256)}`); }
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+  }
+}
+
+try { await execute(); }
+catch (error) {
   // AWS CLI command failures can contain request details. Keep worker logs
   // bounded and do not print environment, command arguments, or credentials.
   console.error(`GPU worker failed: ${error.message.slice(0, 256)}`);
