@@ -2283,3 +2283,20 @@ select {
 .project-disclosure[open] > summary {
   margin-bottom: var(--space-6);
 }
+
+/* Every project destination starts at the same distance from its metadata rule. */
+.project-meta + * {
+  margin-top: var(--space-8);
+}
+.project-meta + .setup-layout,
+.project-sections > .setup-layout {
+  padding-top: 0;
+}
+.project-sections > .workspace-card {
+  margin-top: 0;
+}
+/* The section stack and disclosure own spacing around embedded resource views. */
+.project-sections > .resource-page,
+.project-disclosure > .resource-page {
+  padding-bottom: 0;
+}
