@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Select } from "@/components/ui/select";
 import { useState } from "react";
 
@@ -13,8 +12,10 @@ const colors = [
   ["text", "Text", "Primary information"],
   ["muted", "Muted", "Supporting context"],
   ["subtle", "Subtle", "Quiet metadata"],
-  ["accent", "Cyan", "Actions and focus"],
-  ["pink", "Magenta", "Agent identity"],
+  ["accent", "Blue", "Actions and focus"],
+  ["info", "Soft blue", "Information and context"],
+  ["pink", "Steel", "Agent identity"],
+  ["danger", "Coral", "Errors and destructive actions"],
   ["success", "Success", "Healthy and complete"],
   ["warning", "Warning", "Attention required"],
 ] as const;
@@ -33,11 +34,6 @@ export default function DesignSystem() {
   const [action, setAction] = useState("Try a control to inspect its interaction state.");
   return (
     <div className="ds-page">
-      <header className="ds-header">
-        <Link className="brand" href="/projects">agentcloud<span aria-hidden="true" /></Link>
-        <span className="tag cyan">Design reference · v4</span>
-        <Link className="ds-back" href="/projects">Back to projects ↗</Link>
-      </header>
       <main className="ds-main">
         <section className="ds-intro" aria-labelledby="design-title">
           <div className="eyebrow">One source of truth · app/tokens.css</div>
@@ -81,7 +77,7 @@ export default function DesignSystem() {
         <section className="ds-section" id="components" aria-labelledby="component-title">
           <div className="ds-section-title"><h2 id="component-title">States, not decoration</h2><p>Shared controls keep every workflow familiar. Use Tab to inspect focus.</p></div>
           <div className="ds-component-grid">
-            <article className="ds-specimen"><h3>Actions</h3><div className="ds-control-row"><button className="button primary" onClick={() => setAction("Primary action activated.")}>Primary action</button><button className="button" onClick={() => setAction("Secondary action activated.")}>Secondary</button><button className="button ghost" onClick={() => setAction("Quiet action activated.")}>Quiet action</button><button className="button" disabled>Unavailable</button></div><output className="ds-action-result" aria-live="polite">{action}</output></article>
+            <article className="ds-specimen"><h3>Actions</h3><div className="ds-control-row"><button className="button primary" onClick={() => setAction("Primary action activated.")}>Primary action</button><button className="button" onClick={() => setAction("Secondary action activated.")}>Secondary</button><button className="button ghost" onClick={() => setAction("Quiet action activated.")}>Quiet action</button><button className="button success" onClick={() => setAction("Approval example activated.")}>Approve</button><button className="button danger" onClick={() => setAction("Deletion example activated. No data was deleted.")}>Delete</button><button className="button warning" onClick={() => setAction("Caution example activated.")}>Move resource</button><button className="button danger" disabled>Deletion unavailable</button></div><output className="ds-action-result" aria-live="polite">{action}</output></article>
             <article className="ds-specimen"><h3>Dropdown menu</h3><label className="ds-select-label"><span className="visually-hidden">Activity view</span><Select aria-label="Activity view" value={dropdown} onChange={(event) => setDropdown(event.target.value)}><option value="all">All activity</option><option value="agents">Agent activity</option><option value="human">Human activity</option></Select></label><output className="ds-action-result" aria-live="polite">Selected: {dropdown === "all" ? "All activity" : dropdown === "agents" ? "Agent activity" : "Human activity"}</output><p className="ds-caption">Use arrows or type to find a choice. Escape closes the menu.</p></article>
             <article className="ds-specimen"><h3>Operational status</h3><div className="ds-control-row"><span className="tag cyan">● Working</span><span className="tag green">● Healthy</span><span className="tag yellow">● Waiting</span><span className="tag pink">● Needs review</span><span className="tag">○ Offline</span></div><p className="ds-caption">Agent identity stays separate from operational state. A label gives color its meaning.</p></article>
           </div>
@@ -92,7 +88,7 @@ export default function DesignSystem() {
           <div className="ds-contract-files"><code>app/tokens.css</code><span>Palette, scales, semantic aliases</span><code>DESIGN.md</code><span>Rules, exceptions, and review criteria</span><code>npm run tokens:check</code><span>Check application styles against the contract</span></div>
         </section>
       </main>
-      <footer className="ds-footer"><span>AgentCloud · Design system</span><span>Square controls. Quiet surfaces. Visible progress.</span></footer>
+      <footer className="ds-footer"><span>AgentCloud · Design system</span><span>Geometric layouts. Rounded components. Purposeful color.</span></footer>
     </div>
   );
 }

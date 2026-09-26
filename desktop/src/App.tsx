@@ -26,7 +26,7 @@ const LANDING_DRAFT_KEY = "__landing__";
 export default function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [authBootError, setAuthBootError] = useState<string | null>(null);
-  const [section, setSection] = useState<AppSection>("tasks");
+  const [section, setSection] = useState<AppSection>("local-chat");
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
@@ -432,7 +432,7 @@ export default function App() {
         <h1>Chat storage error</h1>
         <p>{bootError}</p>
         <p>
-          Local chats live under the app userData chat directory. Fix or remove
+          Project chat lives under the app userData chat directory. Fix or remove
           the corrupt file, then relaunch.
         </p>
       </div>
@@ -489,7 +489,7 @@ export default function App() {
               <div>
                 <h1>{activeThread?.title ?? "No chat selected"}</h1>
                 <p className="brand-meta">
-                  Local chat only — does not create AgentCloud tasks or sync to
+                  Project chat only — does not create AgentCloud tasks or sync to
                   the web dashboard.
                 </p>
               </div>
@@ -509,7 +509,7 @@ export default function App() {
             ) : (
               <div className="conversation">
                 <div className="main-empty" role="status">
-                  Type below to start a local chat. The first send creates a
+                  Type below to start a project chat. The first send creates a
                   thread automatically — New chat is optional for another empty
                   thread. Threads stay on this machine and are not AgentCloud
                   tasks.

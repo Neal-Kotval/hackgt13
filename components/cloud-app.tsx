@@ -1,6 +1,5 @@
 "use client";
 import { Select } from "@/components/ui/select";
-import { EmployeeMenu } from "./employee-auth";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -41,7 +40,6 @@ import { ResourceCatalog, ResourceRequests, InferenceDraft } from "./resources";
 import { RunControl } from "./runs/run-control";
 import { ResourceGraph } from "./resource-graph";
 import { Environments } from "./environments";
-type Tab = "overview" | "board" | "services" | "activity";
 type Action = Record<string, unknown>;
 const iconProps = { weight: "duotone" as const };
 function Icon({ children }: { children: ReactNode }) {
@@ -88,7 +86,6 @@ export function CloudApp() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [online, setOnline] = useState(false);
-  const [tab, setTab] = useState<Tab>("overview");
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<"task" | "handoff" | null>(null);
   const [selectedHandoff, setSelectedHandoff] = useState<Handoff | null>(null);
@@ -102,6 +99,7 @@ export function CloudApp() {
       ? state?.projects.find((p) => p.id === id)
       : state?.projects[0];
   const page = pieces[2] || "dashboard";
+  const tab = ["board", "services", "activity"].includes(page) ? page : "overview";
   const refresh = async () => {
     const response = await fetch("/api/state");
     if (!response.ok) throw new Error("Could not load projects.");
@@ -119,7 +117,6 @@ export function CloudApp() {
     return () => source.close();
   }, []);
   useEffect(() => {
-    setTab("overview");
     setFilter("all");
   }, [pathname]);
   useEffect(() => {
@@ -160,40 +157,6 @@ export function CloudApp() {
     return data;
   }
   const base = `/projects/${project?.id || id || ""}`;
-  const nav = [
-    {
-      label: "Projects",
-      url: "/projects",
-      icon: <SquaresFour {...iconProps} />,
-    },
-    ...(project
-      ? [
-          {
-            label: "Workspace",
-            url: base,
-            icon: <TerminalWindow {...iconProps} />,
-          },
-          {
-            label: "Review",
-            url: base + "/review",
-            icon: <GitPullRequest {...iconProps} />,
-          },
-          {
-            label: "Connect",
-            url: base + "/agents",
-            icon: <PlugsConnected {...iconProps} />,
-          },
-        ]
-      : []),
-  ];
-  const isActiveNav = (label: string) =>
-    (label === "Projects" && (isProjects || isSetup)) ||
-    (label === "Workspace" &&
-      !isProjects &&
-      !isSetup &&
-      ["dashboard", "environments", "resources", "requests", "runs", "graph", "inference", "desktop"].includes(page)) ||
-    (label === "Review" && page === "review") ||
-    (label === "Connect" && page === "agents");
   if (!state)
     return (
       <main className="loading">
@@ -210,32 +173,7 @@ export function CloudApp() {
       </main>
     );
   return (
-    <div className="app-frame">
-      <a className="skip-link" href="#workspace-content">
-        Skip to content
-      </a>
-      <header className="global-header">
-        <Link className="brand" href="/projects">
-          agentcloud
-          <span className="brand-cursor" aria-hidden="true" />
-        </Link>
-        <nav aria-label="Main navigation">
-          {nav.map((n) => (
-            <Link
-              key={n.label}
-              className={isActiveNav(n.label) ? "active" : ""}
-              aria-current={isActiveNav(n.label) ? "page" : undefined}
-              href={n.url}
-            >
-              <Icon>{n.icon}</Icon>
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="header-right">
-          <EmployeeMenu />
-        </div>
-      </header>
+    <>
       <main className="app-shell" id="workspace-content" tabIndex={-1}>
         <div className="breadcrumb">
           <Link href="/projects">workspace</Link>
@@ -286,22 +224,22 @@ export function CloudApp() {
           </div>
         ) : (
           <>
+            {page === "dashboard" ? <>
             <section className="project-heading">
               <div>
                 <div className="eyebrow">
                   <span className="status-dot" />
-                  Project workspace / setup pending
+                  Project workspace
                 </div>
                 <h1>{project.name}</h1>
                 <p>
-                  Coordinate work, inspect requests, and follow recorded
-                  activity.
+                  Follow your project’s progress and results.
                 </p>
               </div>
               <div className="heading-actions">
-                <Link className="button primary" href={base + "/agents"}>
+                <Link className="button primary" href={base + "/environments"}>
                   <Plus />
-                  Connect agent
+                  Manage environments
                 </Link>
               </div>
             </section>
@@ -320,34 +258,26 @@ export function CloudApp() {
               </span>
               <span className="meta-right">Project workspace pending</span>
             </div>
-            <div className="demo-note">
-              <Warning />
-              <span>Project saved.</span>
-              <span className="muted">
-                Saving this project does not provision a workspace or Git
-                worktrees. Start, monitor, and stop project environments under Environments.
-              </span>
-            </div>
-            <nav className="control-nav" aria-label="Project control plane">
-              {[
-                ["Environments", "environments"],
-                ["Resources", "resources"],
-                ["Requests", "requests"],
-                ["Runs", "runs"],
-                ["Graph", "graph"],
-                ["Inference", "inference"],
-              ].map(([label, segment]) => (
-                <Link
-                  key={segment}
-                  href={base + "/" + segment}
-                  aria-current={page === segment ? "page" : undefined}
-                  className={page === segment ? "active" : ""}
-                >
-                  {label}
-                </Link>
-              ))}
-            </nav>
-            {page === "agents" ? (
+            </> : <h1 className="visually-hidden project-section-title">{({board: "Task board", desktop: "CLI connection"} as Record<string, string>)[page] ?? page.charAt(0).toUpperCase() + page.slice(1)}</h1>}
+            {page === "environments" ? (
+              <div className="project-sections">
+                <Environments project={project} />
+                <ResourceRequests project={project} onAction={resourceAction} />
+                <details className="project-disclosure">
+                  <summary>Machines &amp; resource catalog</summary>
+                  <p className="section-description">Save the machines and resources your project may use. Registration alone does not connect or verify a machine.</p>
+                  <ResourceCatalog project={project} onAction={resourceAction} />
+                </details>
+              </div>
+            ) : page === "settings" ? (
+              <div className="project-sections">
+                <AgentSetup project={project} action={action} busy={busy} notify={setNotice} />
+                <details className="project-disclosure" id="cli-guide">
+                  <summary>CLI connection guide</summary>
+                  <DesktopPage project={project} notify={setNotice} />
+                </details>
+              </div>
+            ) : page === "agents" ? (
               <AgentSetup
                 project={project}
                 action={action}
@@ -366,8 +296,6 @@ export function CloudApp() {
               />
             ) : page === "desktop" ? (
               <DesktopPage project={project} notify={setNotice} />
-            ) : page === "environments" ? (
-              <Environments project={project} />
             ) : page === "resources" ? (
               <ResourceCatalog project={project} onAction={resourceAction} />
             ) : page === "requests" ? (
@@ -380,185 +308,28 @@ export function CloudApp() {
               <InferenceDraft project={project} onAction={resourceAction} />
             ) : (
               <>
-                <div
-                  className="workspace-tabs"
-                  role="tablist"
-                  aria-label="Workspace views"
-                >
-                  {(["overview", "board", "services", "activity"] as Tab[]).map(
-                    (t) => (
-                      <button
-                        key={t}
-                        role="tab"
-                        aria-selected={tab === t}
-                        className={tab === t ? "selected" : ""}
-                        onClick={() => setTab(t)}
-                      >
-                        {t === "overview" ? (
-                          <SquaresFour />
-                        ) : t === "board" ? (
-                          <ListChecks />
-                        ) : t === "services" ? (
-                          <Database />
-                        ) : (
-                          <Lightning />
-                        )}
-                        {t === "board"
-                          ? "Task board"
-                          : t[0].toUpperCase() + t.slice(1)}
-                        {t !== "overview" && (
-                          <span className="count">
-                            {t === "board"
-                              ? project.tasks.length
-                              : t === "services"
-                                ? project.services.length
-                                : project.events.length}
-                          </span>
-                        )}
-                      </button>
-                    ),
-                  )}
-                  <Link className="view-link" href={base + "/desktop"}>
-                    <Desktop />
-                    CLI connection
-                    <ArrowUpRight />
-                  </Link>
-                </div>
                 {tab === "overview" ? (
-                  <div className="dashboard-grid">
-                    <div className="main-column">
-                      <section>
-                        <SectionTitle
-                          label="Agent team"
-                          number={project.agents.length}
-                          action={
-                            <Link href={base + "/agents"}>
-                              Manage agents <ArrowUpRight />
-                            </Link>
-                          }
-                        />
-                        {project.agents.length ? (
-                          <div className="agent-grid">
-                            {project.agents.map((a) => (
-                              <AgentCard
-                                key={a.id}
-                                agent={a}
-                                project={project}
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <Empty
-                            title="Your team starts here"
-                            text="Connect an agent, give it a role, and assign its first task."
-                            href={base + "/agents"}
-                            label="Connect an agent"
-                          />
-                        )}
-                      </section>
-                      {project.handoffs.some((h) => !h.accepted) && (
-                        <div className="handoff-callout">
-                          <div className="handoff-symbol">
-                            <PaperPlaneTilt {...iconProps} />
-                          </div>
-                          <div>
-                            <span className="eyebrow pink-text">
-                              Handoff · awaiting you
-                            </span>
-                            <h3>
-                              {project.handoffs.find((h) => !h.accepted)!.title}
-                            </h3>
-                            <p>
-                              {ownerName(
-                                project,
-                                project.handoffs.find((h) => !h.accepted)!.from,
-                              )}{" "}
-                              <ArrowRight />{" "}
-                              {ownerName(
-                                project,
-                                project.handoffs.find((h) => !h.accepted)!.to,
-                              )}{" "}
-                              · context ready to pass
-                            </p>
-                          </div>
-                          <button
-                            className="button pink-button"
-                            onClick={() => {
-                              setSelectedHandoff(
-                                project.handoffs.find((h) => !h.accepted)!,
-                              );
-                              setModal("handoff");
-                            }}
-                          >
-                            Review <ArrowUpRight />
-                          </button>
-                        </div>
-                      )}
-                      <section>
-                        <SectionTitle
-                          label="Project tasks"
-                          number={project.tasks.length}
-                          action={
-                            <button onClick={() => setModal("task")}>
-                              <Plus />
-                              New task
-                            </button>
-                          }
-                        />
-                        <TaskTable
-                          project={project}
-                          action={action}
-                          busy={busy}
-                        />
-                      </section>
-                      <section>
-                        <SectionTitle
-                          label="Shared services"
-                          number={project.services.length}
-                          action={
-                            <button onClick={() => setTab("services")}>
-                              View registry <ArrowUpRight />
-                            </button>
-                          }
-                        />
-                        <Services project={project} notify={setNotice} />
-                      </section>
-                    </div>
-                    <aside className="side-column">
-                      <ActivityFeed project={project} filter="all" />
-                      <div className="workspace-card">
-                        <div className="section-heading">
-                          <span>
-                            <HardDrives />
-                            Workspace
-                          </span>
-                          <Tag tone="cyan">pending</Tag>
-                        </div>
-                        <dl>
-                          <dt>Compute</dt>
-                          <dd>{project.compute}</dd>
-                          <dt>Worktrees</dt>
-                          <dd>Not provisioned</dd>
-                          <dt>Access</dt>
-                          <dd>Trusted clients</dd>
-                          <dt>Persistence</dt>
-                          <dd>Local disk</dd>
-                        </dl>
-                        <p>
-                          <ShieldCheck />
-                          Each client gets a separate identity. Shell
-                          restrictions are not claimed.
-                        </p>
-                      </div>
-                      <div className="team-note">
-                        <GitBranch {...iconProps} />
-                        <p>
-                          Work independently.
-                          <br />
-                          <strong>Build something together.</strong>
-                        </p>
-                      </div>
-                    </aside>
+                  <div className="project-sections">
+                    <section className="workspace-card">
+                      <SectionTitle label="Environments" />
+                      <p>Set up the machine your agent will use, then follow its request and approval status.</p>
+                      <dl>
+                        <dt>Saved resources</dt><dd>{(project.resources ?? []).length}</dd>
+                        <dt>Resource requests</dt><dd>{(project.resourceRequests ?? []).length}</dd>
+                      </dl>
+                      <p className="muted">Saved resources are configuration records. Check requests for allocation and verification evidence.</p>
+                      <Link className="button secondary" href={base + "/environments"}>Manage environments <ArrowUpRight /></Link>
+                    </section>
+                    <section>
+                      <SectionTitle label="Task progress" number={project.tasks.length} />
+                      <p className="section-description">Monitor tasks here. The desktop app is the intended place to create tasks and send instructions; its integration is still in progress.</p>
+                      <TaskTable project={project} />
+                    </section>
+                    <section className="workspace-card">
+                      <SectionTitle label="Agent activity" number={project.agents.length} />
+                      <p>See connection status, recorded activity, and command results reported by your agents.</p>
+                      <Link className="button secondary" href={base + "/runs"}>View runs <ArrowUpRight /></Link>
+                    </section>
                   </div>
                 ) : tab === "board" ? (
                   <section className="standalone">
@@ -771,7 +542,7 @@ export function CloudApp() {
             <h4>Next step</h4>
             <p>{selectedHandoff.next}</p>
             <button
-              className="button primary"
+              className="button success"
               disabled={busy || selectedHandoff.accepted}
               onClick={async () => {
                 if (
@@ -800,7 +571,7 @@ export function CloudApp() {
           </div>
         </Modal>
       )}
-    </div>
+    </>
   );
 }
 function SectionTitle({
@@ -926,20 +697,12 @@ function StatusSelect({
     </Select>
   );
 }
-function TaskTable({
-  project,
-  action,
-  busy,
-}: {
-  project: Project;
-  action: (a: Action) => Promise<unknown>;
-  busy: boolean;
-}) {
+function TaskTable({ project }: { project: Project }) {
   if (!project.tasks.length)
     return (
       <Empty
-        title="Give your team a direction"
-        text="Create a task and choose an agent to own it."
+        title="No tasks yet"
+        text="Tasks will appear here when they are added to this project."
       />
     );
   return (
@@ -986,7 +749,7 @@ function TaskTable({
                 </span>
               </td>
               <td>
-                <StatusSelect task={t} action={action} busy={busy} />
+                <Tag tone={t.status === "done" ? "green" : t.status === "blocked" ? "yellow" : t.status === "in progress" ? "cyan" : "neutral"}>{t.status}</Tag>
               </td>
             </tr>
           ))}
@@ -1495,8 +1258,14 @@ function AgentSetup({
     agentId: string;
   } | null>(null);
   const [client, setClient] = useState("Codex");
+  useEffect(() => {
+    if (window.location.hash !== "#agent-setup") return;
+    const setup = document.getElementById("agent-setup");
+    setup?.focus({ preventScroll: true });
+    setup?.scrollIntoView();
+  }, []);
   return (
-    <div className="setup-layout connect-layout">
+    <div id="agent-setup" tabIndex={-1} className="setup-layout connect-layout">
       <section>
         <SectionTitle label="Connect an agent" />
         <p className="section-description">
@@ -1610,9 +1379,7 @@ function AgentSetup({
             </div>
           ))}
         </div>
-        <Link className="text-link" href={`/projects/${project.id}/desktop`}>
-          CLI setup guide <ArrowUpRight />
-        </Link>
+        <p className="muted">For terminal setup, expand the CLI connection guide in Settings.</p>
       </aside>
     </div>
   );
@@ -1748,7 +1515,8 @@ function DesktopPage({
             <p>Choose a role and generate a scoped connection token.</p>
             <Link
               className="button secondary"
-              href={`/projects/${project.id}/agents`}
+              href={`/projects/${project.id}/settings#agent-setup`}
+              onClick={() => document.getElementById("agent-setup")?.focus({ preventScroll: true })}
             >
               Agent setup <ArrowRight />
             </Link>

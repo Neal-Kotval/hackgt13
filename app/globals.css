@@ -50,7 +50,8 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+summary:focus-visible {
   outline: var(--focus-width) solid var(--color-accent);
   outline-offset: var(--focus-offset);
 }
@@ -262,7 +263,7 @@ pre {
   display: inline-block;
   width: var(--dot-size);
   height: var(--dot-size);
-  border-radius: var(--radius-none);
+  border-radius: var(--radius-full);
   background: currentColor;
   flex-shrink: 0;
 }
@@ -342,6 +343,43 @@ h1 {
   color: var(--color-text);
   background: var(--color-surface);
 }
+/* Semantic actions retain text labels; color reinforces their consequence. */
+.button.success,
+.button.danger,
+.button.warning {
+  border-color: currentColor;
+  font-weight: var(--font-weight-semibold);
+}
+.button.success {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+.button.danger {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+.button.warning {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+.button.success:hover:not(:disabled),
+.button.success:active:not(:disabled) {
+  color: var(--color-status-action-text);
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+.button.danger:hover:not(:disabled),
+.button.danger:active:not(:disabled) {
+  color: var(--color-status-action-text);
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+}
+.button.warning:hover:not(:disabled),
+.button.warning:active:not(:disabled) {
+  color: var(--color-status-action-text);
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+}
 .button.square {
   width: var(--control-height);
   padding: 0;
@@ -364,7 +402,7 @@ h1 {
   overflow-wrap: anywhere;
 }
 .project-meta svg {
-  color: var(--color-subtle);
+  color: var(--color-info);
   width: var(--icon-sm);
   height: var(--icon-sm);
 }
@@ -379,7 +417,7 @@ h1 {
   flex-wrap: wrap;
   font-size: var(--text-xs);
   padding: var(--space-3) 0;
-  color: var(--color-accent);
+  color: var(--color-info);
 }
 .demo-note .muted {
   color: var(--color-subtle);
@@ -1937,6 +1975,9 @@ dialog::backdrop {
   gap: var(--space-3);
   margin-top: var(--space-4);
 }
+.auth-success {
+  color: var(--color-success);
+}
 .auth-error {
   color: var(--color-danger);
 }
@@ -2221,4 +2262,49 @@ select {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+.project-sections {
+  display: grid;
+  gap: var(--space-8);
+}
+.project-disclosure {
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.project-disclosure > summary {
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+}
+.project-disclosure[open] > summary {
+  margin-bottom: var(--space-6);
+}
+
+/* Every project destination starts at the same distance from its metadata rule. */
+.project-meta + * {
+  margin-top: var(--space-8);
+}
+.project-meta + .setup-layout,
+.project-sections > .setup-layout {
+  padding-top: 0;
+}
+.project-sections > .workspace-card {
+  margin-top: 0;
+}
+/* The section stack and disclosure own spacing around embedded resource views. */
+.project-sections > .resource-page,
+.project-disclosure > .resource-page {
+  padding-bottom: 0;
+}
+
+/* The breadcrumb supplies the gap on pages without the Overview summary. */
+.project-section-title + .setup-layout {
+  padding-top: 0;
+}
+.project-section-title + .standalone {
+  margin-top: 0;
 }

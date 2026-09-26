@@ -110,7 +110,7 @@ export function TaskComposer({
       <h2 id="task-composer-title">Create task</h2>
       <p className="brand-meta">
         Submits to the shared backend (<code>POST /api/state</code>{" "}
-        <code>addTask</code>). Local chat is never a substitute for remote agent
+        <code>addTask</code>). Project chat is never a substitute for remote agent
         start.
       </p>
       <form onSubmit={(event) => void submit(event)}>

@@ -117,7 +117,7 @@ try {
       },
     });
     expect(agent.ok()).toBeTruthy();
-    await page.reload();
+    await page.goto(origin + `/projects/${projectId}/board`);
     await page.getByRole("button", { name: "New task", exact: true }).click();
     await page.getByRole("combobox", { name: /Depends on/ }).click();
     await expect(page.getByRole("listbox")).toBeVisible();
@@ -163,13 +163,12 @@ try {
     ).toBe("");
     await page.keyboard.press("Escape");
 
-    await page.getByRole("link", { name: "Resources", exact: true }).click();
+    if (width <= 768) await page.getByRole("button", { name: "Open navigation" }).click();
+    await page.getByRole("link", { name: "Environments", exact: true }).click();
     await expect(
-      page.getByRole("link", { name: "Resources", exact: true }),
+      page.locator('.site-nav-link[href$="/environments"]'),
     ).toHaveAttribute("aria-current", "page");
-    await expect(
-      page.getByRole("link", { name: "Workspace", exact: true }),
-    ).toHaveAttribute("aria-current", "page");
+    await expect(page.locator('.site-nav-link[aria-current="page"]')).toHaveCount(1);
     await page.goto(origin + "/organizations");
     await page
       .getByRole("button", { name: "Grant project access", exact: true })
@@ -180,6 +179,7 @@ try {
     await expect(
       page.getByText("Choose an option.", { exact: true }),
     ).toHaveCount(2);
+    if (width <= 768) await page.getByRole("button", { name: "Open navigation" }).click();
     await page.getByRole("combobox", { name: "Active organization" }).click();
     const listbox = page.getByRole("listbox");
     await expect(listbox).toBeVisible();
@@ -200,6 +200,38 @@ try {
       ),
     ).toBeTruthy();
     await page.keyboard.press("Escape");
+    if (width <= 768) {
+      await expect(page.locator(".site-sidebar")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.locator(".site-sidebar")).not.toBeVisible();
+      await expect(page.getByRole("button", { name: "Open navigation" })).toBeFocused();
+    }
+    for (const destination of ["Projects", "Organizations", "Overview", "Environments", "Runs", "Settings"]) {
+      if (width <= 768) await page.getByRole("button", { name: "Open navigation" }).click();
+      const link = page.locator(".site-navigation").getByRole("link", { name: destination, exact: true });
+      const href = await link.getAttribute("href");
+      await link.click();
+      await expect(page).toHaveURL(origin + href);
+      await expect(page.locator('.site-nav-link[aria-current="page"]')).toHaveText(destination);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+      await expect(page.locator(".site-navigation a")).toHaveCount(6);
+      await expect(page.locator('.site-navigation a[href="/design-system"]')).toHaveCount(0);
+      if (destination === "Overview") {
+        await expect(page.getByRole("button", {name: "New task", exact: true})).toHaveCount(0);
+        await expect(page.getByRole("heading", {name: "Task progress"})).toBeVisible();
+        await expect(page.getByRole("cell", {name: "queued", exact: true})).toBeVisible();
+      }
+      if (destination === "Environments") {
+        await page.getByText("Machines & resource catalog", {exact: true}).focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("button", {name: "Register resource", exact: true})).toBeVisible();
+      }
+      if (destination === "Settings") {
+        await page.getByText("CLI connection guide", {exact: true}).focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("button", {name: "Copy command", exact: true})).toBeVisible();
+      }
+    }
     expect(errors).toEqual([]);
     console.log(
       `PASS ${width}px: keyboard/typeahead, form submission, empty values, required validation, dialog portal, navigation and menu bounds`,

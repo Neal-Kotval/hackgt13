@@ -10,6 +10,7 @@ import {
   HardDrives,
   Lightning,
   Plus,
+  Minus,
   ShieldWarning,
   Warning,
 } from "@phosphor-icons/react";
@@ -180,7 +181,7 @@ export function ResourceCatalog({ project, onAction }: ResourceProps) {
           aria-expanded={showForm}
           aria-controls="resource-register-form"
         >
-          <Plus /> {showForm ? "Close form" : "Register resource"}
+          {showForm ? <Minus aria-hidden="true" /> : <Plus aria-hidden="true" />} {showForm ? "Close form" : "Register resource"}
         </button>
       </div>
       <FormFeedback error={error} success={success} />
@@ -766,7 +767,7 @@ function RequestCard({
             <p className="resource-note">SSH identity, workspace, and GPU workload verification are in progress.</p>
           )}
           {projectRole === "owner" && job.state !== "stopped" && !job.stop_requested_at && (
-            <button className="button" type="button" disabled={Boolean(busy)} onClick={() => void onStop(job)}>
+            <button className="button danger" type="button" disabled={Boolean(busy)} onClick={() => void onStop(job)}>
               {busy === job.id ? "Requesting stop…" : "Request stop"}
             </button>
           )}
@@ -779,7 +780,7 @@ function RequestCard({
           ) : (
             <p className="resource-note">Approving this request queues an AWS GPU launch for up to {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}. Compute is quoted at ${request.computePreference.estimatedComputeUsd.toFixed(2)} before storage, network, and tax. The worker must pass live cost and safety checks before launch.</p>
           )}
-          <button className="button primary" type="button" disabled={Boolean(busy)} onClick={() => void onApprove(request.id)}>
+          <button className="button success" type="button" disabled={Boolean(busy)} onClick={() => void onApprove(request.id)}>
             {busy === request.id ? "Approving…" : "Approve and queue GPU"}
           </button>
         </div>

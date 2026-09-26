@@ -8,20 +8,20 @@ One window, two primary sections:
 
 | Section | Role |
 | --- | --- |
-| **Tasks** | Project/environment picker + task composer against the shared backend (`addTask`). Local chat is separate. |
+| **Tasks** | Project/environment picker + task composer against the shared backend (`addTask`). Project chat is separate. |
 | **Environments** | Run boxes for a project (`GET /api/run-boxes`) with server states and an in-app SSH terminal for `ready` environments (HAC-90). |
-| **Local chat** | Codex-like on-device threads (`threads.json`). Does **not** create AgentCloud tasks and does **not** sync to the web dashboard. |
+| **Project chat** | Codex-like on-device threads (`threads.json`). Does **not** create AgentCloud tasks and does **not** sync to the web dashboard. |
 
-Machine-first journey: connect/verify a machine in the **web** app → return to desktop **Tasks** to author work against a ready environment → monitor on the web. Local chat remains an optional scratchpad beside that flow.
+Machine-first journey: connect/verify a machine in the **web** app → return to desktop **Tasks** to author work against a ready environment → monitor on the web. Project chat remains an optional scratchpad beside that flow.
 
-Switching Tasks ↔ Local chat keeps in-memory chat drafts for the session.
+Switching Tasks ↔ Project chat keeps in-memory chat drafts for the session.
 
 ## Prerequisites
 
 - Node.js 22 LTS
 - macOS (primary hackathon target)
 - Reachable AgentCloud web app for employee sign-in (local `just dev` or the shared AWS URL)
-- Optional: `OPENAI_API_KEY` for real assistant replies in Local chat
+- Optional: `OPENAI_API_KEY` for real assistant replies in Project chat
 
 ## Install and launch
 
@@ -35,7 +35,7 @@ just desktop-verify  # check + test + build
 
 Other desktop recipes: `just desktop-check`, `just desktop-test`, `just desktop-build`, `just desktop-devtools`.
 
-`just desktop` opens **one** desktop window. After sign-in you land on **Tasks** (honest empty state). Use **Local chat** for the D1 thread UI. UI (renderer) edits hot-reload through Vite.
+`just desktop` opens **one** desktop window. After sign-in you land on **Project chat**. **Tasks** is the shared-backend project panel. UI (renderer) edits hot-reload through Vite.
 
 ### Main-process HMR policy
 
@@ -53,10 +53,10 @@ just desktop-devtools
 
 Or set `AGENTCLOUD_DESKTOP_DEVTOOLS=1` in `desktop/.env`. DevTools are attached to the chat window (not a detached orphan).
 
-## Local chat loop
+## Project chat loop
 
 1. Sign in with the same Better Auth employee email/password as the web app (web must be running at `AGENTCLOUD_URL`, default `http://127.0.0.1:3000`).
-2. Open **Local chat**. Type and **Enter** to send — the first send auto-creates a thread (no mandatory **New chat** click).
+2. Open **Project chat**. Type and **Enter** to send — the first send auto-creates a thread (no mandatory **New chat** click).
 3. **Shift+Enter** inserts a newline. **New chat** still starts another empty thread while one is open.
 4. With `OPENAI_API_KEY` set, the assistant streams a real reply into the thread.
 5. Without credentials, the failed assistant turn explains how to configure `.env` — it does not invent a successful reply.
@@ -110,7 +110,7 @@ On **Tasks**, pick a project, then use **Create task** (title, instructions, age
 
 ### Start agent (HAC-35)
 
-The Tasks panel includes a **Start agent** control that selects a created task + verified environment. It stays **disabled** with an explicit reason: “Agent start requires remote runner — not implemented.” Desktop does not call Local chat / OpenAI as a substitute, and it never marks a task running without server evidence. When a start endpoint lands, wire it here with `taskId` + `environmentId` + agent owner and surface the server decision only.
+The Tasks panel includes a **Start agent** control that selects a created task + verified environment. It stays **disabled** with an explicit reason: “Agent start requires remote runner — not implemented.” Desktop does not call Project chat / OpenAI as a substitute, and it never marks a task running without server evidence. When a start endpoint lands, wire it here with `taskId` + `environmentId` + agent owner and surface the server decision only.
 
 ## Deep links (HAC-54)
 

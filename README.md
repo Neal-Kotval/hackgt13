@@ -217,3 +217,7 @@ Add transactional run/decision records and server-side resource policy, attach o
 After `npm run build`, run `npm run test:select:browser` to exercise themed dropdown keyboard navigation, form values, required validation, dialog menus, navigation states, and responsive bounds in headless Chrome. It uses temporary accounts/data and port 3162, then removes its test data. The shared dropdown also has an interactive specimen at `/design-system#components`.
 
 On **People & organizations**, choose **New organization** to open the creation dialog. Cancel or Escape closes it without creating an organization; successful creation refreshes the organization list.
+
+Website navigation uses one shared vertical sidebar for projects, organization management, project views, and the design reference. On narrow screens, **Open navigation** opens a keyboard-accessible drawer. Project view links have durable URLs; organization changes refresh the available project links.
+
+After `npm run build`, run `npm run test:motion:browser` to verify Motion entrances, inline-style cleanup, notification positioning, drawer/dropdown behavior, and reduced-motion preferences in headless Chrome at 375, 768, and 1440 pixels. It uses isolated temporary accounts and port 3183.
