@@ -16,8 +16,11 @@ import type {
 /**
  * Draft behavior: each thread keeps its own unsent composer text in memory.
  * Switching threads or Tasks ↔ Local chat preserves drafts until send or
- * explicit clear. Drafts are not persisted across app relaunch.
+ * explicit clear. With no thread selected, drafts use a landing key so the
+ * first Send can auto-create a chat. Drafts are not persisted across relaunch.
  */
+const LANDING_DRAFT_KEY = "__landing__";
+
 export default function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [authBootError, setAuthBootError] = useState<string | null>(null);
@@ -156,10 +159,17 @@ export default function App() {
     }
   }, [auth?.signedIn, refreshThreads]);
 
-  const draft =
-    selectedId && Object.prototype.hasOwnProperty.call(drafts, selectedId)
-      ? drafts[selectedId]
-      : "";
+  const draftKey = selectedId ?? LANDING_DRAFT_KEY;
+  const draft = Object.prototype.hasOwnProperty.call(drafts, draftKey)
+    ? drafts[draftKey]
+    : "";
+
+  useEffect(() => {
+    if (section !== "local-chat" || selectedId) return;
+    queueMicrotask(() => {
+      document.getElementById("composer-input")?.focus();
+    });
+  }, [section, selectedId]);
 
   async function handleSignedIn(status: AuthStatus) {
     setAuth(status);
@@ -251,21 +261,45 @@ export default function App() {
   }
 
   async function handleSend() {
-    if (!selectedId || !draft.trim() || sending) return;
+    if (!draft.trim() || sending) return;
     const api = desktopApi();
     const content = draft.trim();
-    const threadId = selectedId;
+    const previousDraftKey = selectedId ?? LANDING_DRAFT_KEY;
     setError(null);
-    setDrafts((current) => ({ ...current, [threadId]: "" }));
+    setDrafts((current) => ({ ...current, [previousDraftKey]: "" }));
 
+    let threadId = selectedId;
     try {
+      if (!threadId) {
+        const thread = await api.createThread();
+        threadId = thread.id;
+        setSelectedId(thread.id);
+        setActiveThread(thread);
+        setDrafts((current) => {
+          const next = { ...current };
+          delete next[LANDING_DRAFT_KEY];
+          next[thread.id] = "";
+          return next;
+        });
+        await refreshThreads();
+      }
+
       const userMessage = await api.appendMessage(threadId, {
         role: "user",
         content,
         status: "complete",
       });
       setActiveThread((current) => {
-        if (!current || current.id !== threadId) return current;
+        if (!current || current.id !== threadId) {
+          return {
+            id: threadId!,
+            title:
+              content.length > 48 ? `${content.slice(0, 45)}…` : content,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            messages: [userMessage],
+          };
+        }
         return {
           ...current,
           title:
@@ -284,12 +318,14 @@ export default function App() {
       setError(err instanceof Error ? err.message : "Send failed");
       setDrafts((current) => ({
         ...current,
-        [threadId]: current[threadId] || content,
+        [previousDraftKey]: current[previousDraftKey] || content,
       }));
-      try {
-        await loadThread(threadId);
-      } catch {
-        // Keep the send error as the primary signal.
+      if (threadId) {
+        try {
+          await loadThread(threadId);
+        } catch {
+          // Keep the send error as the primary signal.
+        }
       }
     }
   }
@@ -397,50 +433,38 @@ export default function App() {
               ) : null}
             </header>
             {activeThread ? (
-              <>
-                <Conversation
-                  messages={activeThread.messages}
-                  emptyLabel="This chat has no messages yet. Type below to send the first turn."
-                />
-                <Composer
-                  value={draft}
-                  disabled={false}
-                  sending={sending}
-                  error={error}
-                  onChange={(value) => {
-                    if (!selectedId) return;
-                    setDrafts((current) => ({
-                      ...current,
-                      [selectedId]: value,
-                    }));
-                  }}
-                  onSend={() => {
-                    void handleSend();
-                  }}
-                  onStop={() => {
-                    void handleStop();
-                  }}
-                />
-              </>
+              <Conversation
+                messages={activeThread.messages}
+                emptyLabel="This chat has no messages yet. Type below to send the first turn."
+              />
             ) : (
-              <>
-                <div className="conversation">
-                  <div className="main-empty" role="status">
-                    Create a new local chat to start messaging. Threads stay on
-                    this machine and are not AgentCloud tasks.
-                  </div>
+              <div className="conversation">
+                <div className="main-empty" role="status">
+                  Type below to start a local chat. The first send creates a
+                  thread automatically — New chat is optional for another empty
+                  thread. Threads stay on this machine and are not AgentCloud
+                  tasks.
                 </div>
-                <Composer
-                  value=""
-                  disabled
-                  sending={false}
-                  error={error}
-                  onChange={() => undefined}
-                  onSend={() => undefined}
-                  onStop={() => undefined}
-                />
-              </>
+              </div>
             )}
+            <Composer
+              value={draft}
+              disabled={false}
+              sending={sending}
+              error={error}
+              onChange={(value) => {
+                setDrafts((current) => ({
+                  ...current,
+                  [draftKey]: value,
+                }));
+              }}
+              onSend={() => {
+                void handleSend();
+              }}
+              onStop={() => {
+                void handleStop();
+              }}
+            />
           </main>
         </div>
       )}
