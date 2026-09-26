@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     } catch (error) {
       if (error instanceof Error && error.message === "Invalid repository URL")
         throw new InputError("Project repository URL is not eligible for a run box", 409);
-      if (error instanceof Error && /Idempotency key reused|already has a run-box decision|AWS run box is already active/.test(error.message))
+      if (error instanceof Error && /Idempotency key reused|already has a run-box decision|(?:AWS|Runpod) run box is already active/.test(error.message))
         throw new InputError(error.message, 409);
       throw error;
     }
