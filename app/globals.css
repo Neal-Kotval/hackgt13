@@ -343,6 +343,43 @@ h1 {
   color: var(--color-text);
   background: var(--color-surface);
 }
+/* Semantic actions retain text labels; color reinforces their consequence. */
+.button.success,
+.button.danger,
+.button.warning {
+  border-color: currentColor;
+  font-weight: var(--font-weight-semibold);
+}
+.button.success {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+.button.danger {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+.button.warning {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+.button.success:hover:not(:disabled),
+.button.success:active:not(:disabled) {
+  color: var(--color-status-action-text);
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+.button.danger:hover:not(:disabled),
+.button.danger:active:not(:disabled) {
+  color: var(--color-status-action-text);
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+}
+.button.warning:hover:not(:disabled),
+.button.warning:active:not(:disabled) {
+  color: var(--color-status-action-text);
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+}
 .button.square {
   width: var(--control-height);
   padding: 0;
@@ -1937,6 +1974,9 @@ dialog::backdrop {
   flex-wrap: wrap;
   gap: var(--space-3);
   margin-top: var(--space-4);
+}
+.auth-success {
+  color: var(--color-success);
 }
 .auth-error {
   color: var(--color-danger);
