@@ -35,3 +35,11 @@ export const localDockerSandboxProfile = {
 } as const;
 
 export const demoGpuDurations = [1, 2] as const;
+
+// A CPU-only Linux container with sshd on the machine running the worker.
+// It is for local development and demos: no GPU and no provider charge.
+export const localDockerSandboxProfile = {
+  id: "local-docker-sandbox",
+  provider: "docker-local",
+  label: "Local Docker sandbox",
+} as const;

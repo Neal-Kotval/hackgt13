@@ -33,7 +33,7 @@ This repository is the web application and a local coordination foundation. New 
 | Employee login and resource policy | Local Better Auth verified accounts, organization invitations/roles, and project memberships; human routes require authentication. Resource decisions remain unevaluated; no allocation approval or SSH enforcement |
 | Resource graph and inference | Graph of persisted coordination relationships and configuration drafts only; no GPU allocation, private endpoint, or serving process |
 | SSH / hosted compute | Setup intent and metadata only until a workspace provider is implemented |
-| Run boxes and artifact homes | Planned execution and publication lifecycles; neither is provisioned by this application yet |
+| Run boxes and artifact homes | The Environments page records a request and owner decision in one step and queues a run-box job for a server-owned profile; a separate worker must allocate and verify it before it is shown as ready. Artifact homes remain planned |
 | Repository import / worktrees | Repository and branch metadata in the app; an isolated local Git provider exists but is not connected to project actions, so no project clone or Git isolation is claimed |
 | Codex / Claude execution | Agent identities and protocol foundation; real tool adapters and remote execution remain to build |
 | Merge / test execution | Planned operations; no live diff, merge, or test execution |

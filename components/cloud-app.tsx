@@ -40,6 +40,7 @@ import type { State, Project, Agent, Task, Handoff } from "@/lib/types";
 import { ResourceCatalog, ResourceRequests, InferenceDraft } from "./resources";
 import { RunControl } from "./runs/run-control";
 import { ResourceGraph } from "./resource-graph";
+import { Environments } from "./environments";
 type Tab = "overview" | "board" | "services" | "activity";
 type Action = Record<string, unknown>;
 const iconProps = { weight: "duotone" as const };
@@ -190,7 +191,7 @@ export function CloudApp() {
     (label === "Workspace" &&
       !isProjects &&
       !isSetup &&
-      ["dashboard", "resources", "requests", "runs", "graph", "inference", "desktop"].includes(page)) ||
+      ["dashboard", "environments", "resources", "requests", "runs", "graph", "inference", "desktop"].includes(page)) ||
     (label === "Review" && page === "review") ||
     (label === "Connect" && page === "agents");
   if (!state)
@@ -324,11 +325,12 @@ export function CloudApp() {
               <span>Project saved.</span>
               <span className="muted">
                 Saving this project does not provision a workspace or Git
-                worktrees. GPU job approvals and observed status appear under Requests.
+                worktrees. Start, monitor, and stop project environments under Environments.
               </span>
             </div>
             <nav className="control-nav" aria-label="Project control plane">
               {[
+                ["Environments", "environments"],
                 ["Resources", "resources"],
                 ["Requests", "requests"],
                 ["Runs", "runs"],
@@ -364,6 +366,8 @@ export function CloudApp() {
               />
             ) : page === "desktop" ? (
               <DesktopPage project={project} notify={setNotice} />
+            ) : page === "environments" ? (
+              <Environments project={project} />
             ) : page === "resources" ? (
               <ResourceCatalog project={project} onAction={resourceAction} />
             ) : page === "requests" ? (

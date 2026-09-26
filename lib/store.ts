@@ -10,7 +10,12 @@ import type {
   ResourceRequest,
   InferenceConfiguration,
 } from "./types";
-import { demoGpuDurations, demoGpuProfile, runpodGpuProfile } from "./resource-profiles";
+import {
+  demoGpuDurations,
+  demoGpuProfile,
+  localDockerSandboxProfile,
+  runpodGpuProfile,
+} from "./resource-profiles";
 interface Credential {
   hash: string;
   projectId: string;
@@ -451,11 +456,15 @@ export async function resourceAction(
           throw new InputError("Requested kind does not match resource");
         const hasGpuPreference =
           input.gpuProfileId !== undefined || input.durationHours !== undefined;
+        // The CPU-only local sandbox is a run box, never a GPU request.
+        const isLocalSandbox = input.gpuProfileId === localDockerSandboxProfile.id;
         if (
           hasGpuPreference &&
           (resourceId ||
-            kind !== "gpu" ||
-            (input.gpuProfileId !== demoGpuProfile.id && input.gpuProfileId !== runpodGpuProfile.id) ||
+            kind !== (isLocalSandbox ? "run-box" : "gpu") ||
+            (input.gpuProfileId !== demoGpuProfile.id &&
+              input.gpuProfileId !== runpodGpuProfile.id &&
+              !isLocalSandbox) ||
             typeof input.durationHours !== "number" ||
             !demoGpuDurations.some((hours) => hours === input.durationHours))
         )
@@ -480,7 +489,11 @@ export async function resourceAction(
           },
           ...(hasGpuPreference
             ? {
-                computePreference: input.gpuProfileId === runpodGpuProfile.id ? {
+                computePreference: isLocalSandbox ? {
+                  provider: localDockerSandboxProfile.provider,
+                  profileId: localDockerSandboxProfile.id,
+                  durationHours: input.durationHours as number,
+                } : input.gpuProfileId === runpodGpuProfile.id ? {
                   provider: runpodGpuProfile.provider,
                   profileId: runpodGpuProfile.id,
                   gpuId: runpodGpuProfile.gpuId,
