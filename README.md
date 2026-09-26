@@ -17,6 +17,38 @@ npm run dev
 
 With [just](https://github.com/casey/just) installed, the equivalent shortcut is `just setup` once, then `npm run auth:setup`, and run `just` (or `just dev`). Run `just --list` to see the other recipes, including `just verify` for all repository checks and a production build. `just setup` preserves an existing `.env.local`.
 
+### Run with Doppler
+
+The repository's `doppler.yaml` selects the `hackgt` project and `dev_personal` config. [Install and log in to the Doppler CLI](https://docs.doppler.com/docs/install-cli), then run these commands **in each worktree** (Doppler scopes its selection to a directory):
+
+```sh
+npm ci
+doppler setup --no-interactive
+just auth-setup-doppler
+just dev-doppler
+```
+
+Without `just`, use `doppler run -- npm run auth:setup` and `doppler run -- npm run dev`. Doppler injects values into those processes; no `.env.local` is needed for this path. If `.env.local` already exists, process environment variables supplied by Doppler take precedence. Use `doppler secrets --only-names` to check names without printing values.
+
+Set `BETTER_AUTH_SECRET` to a stable random value of at least 32 characters in `dev_personal` before running auth setup. Keep the same value alongside the same local `.agentcloud` data directory across restarts; changing it invalidates existing sessions. The auth setup command generates a secret in `.env.local` only when one is not supplied. `BETTER_AUTH_URL` is optional and defaults to `http://127.0.0.1:3000`. `AGENTCLOUD_DATA_DIR` optionally selects a persistent data directory; otherwise each worktree uses its own `.agentcloud` directory.
+
+Email defaults to local capture with no Doppler mail keys. For SMTP, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_FROM`, and, if required by the provider, `SMTP_USER` and `SMTP_PASSWORD`. `SMTP_PORT` defaults to 587; set `SMTP_SECURE=true` for implicit TLS, usually on port 465. Keep all secret values and Doppler tokens out of Git. The existing `.env.local` setup remains available.
+
+### Doppler MCP for coding assistants
+
+Doppler also publishes an [experimental MCP server](https://github.com/DopplerHQ/mcp-server) for assistants that need to manage Doppler through its API. This is separate from the CLI path above; the app itself reads environment variables supplied by `doppler run` and does not use MCP. Install the MCP server in your assistant's **personal** MCP settings, not in this repository. For an MCP client that accepts `mcpServers` JSON, the server entry is:
+
+```json
+{
+  "doppler": {
+    "command": "npx",
+    "args": ["-y", "@dopplerhq/mcp-server", "--read-only", "--project", "hackgt", "--config", "dev_personal"]
+  }
+}
+```
+
+This is the entry under the client's `mcpServers` object. Authenticate locally with `npx @dopplerhq/mcp-server login`, or configure a config-scoped read-only service token in the MCP client's private settings. A token with broader access remains broad even when `--project` and `--config` are specified; those flags only narrow the tools shown by the server. Remove `--read-only` only when the assistant must change Doppler configuration. Never paste token or secret values into prompts, logs, or tracked MCP settings.
+
 Open http://127.0.0.1:3000. For a local production build:
 
 ```sh

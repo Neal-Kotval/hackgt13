@@ -10,6 +10,14 @@ setup:
 dev:
     npm run dev
 
+# Run the development server with the selected Doppler config.
+dev-doppler:
+    doppler run -- npm run dev
+
+# Initialize authentication with the selected Doppler config.
+auth-setup-doppler:
+    doppler run -- npm run auth:setup
+
 # Create a production build.
 build:
     npm run build
