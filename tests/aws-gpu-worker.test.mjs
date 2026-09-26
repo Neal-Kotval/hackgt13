@@ -42,9 +42,19 @@ test("revoked owner membership prevents allocation", async () => {
   db.prepare("DELETE FROM member WHERE userId = 'employee-1'").run();
   let launched = false;
   const provider = { async identifyWorker() {}, async allocate() { launched = true; } };
-  await assert.rejects(workOneAwsGpuJob(db, provider, { workerId: "worker-1" }), /revoked before launch/);
+  await assert.rejects(workOneAwsGpuJob(db, provider, { workerId: "worker-1" }), /invalid before launch/);
   assert.equal(launched, false);
   assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+});
+
+test("a queued job past its approved deadline cannot launch", async () => {
+  const { db, job } = setup();
+  db.prepare("UPDATE run_box_job SET created_at = ? WHERE id = ?")
+    .run(new Date(Date.now() - 61 * 60_000).toISOString(), job.id);
+  let launched = false;
+  const provider = { async identifyWorker() {}, async allocate() { launched = true; } };
+  await assert.rejects(workOneAwsGpuJob(db, provider, { workerId: "worker-1" }), /invalid before launch/);
+  assert.equal(launched, false);
 });
 
 test("queued cancellation is stopped without invoking EC2", async () => {
