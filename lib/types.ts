@@ -43,12 +43,9 @@ export interface Activity {
   detail?: string;
 }
 export type ResourceKind =
-  | "run-box"
-  | "gpu"
-  | "data-source"
-  | "service"
-  | "inference-api";
-export type ResourceStatus = "draft" | "registered" | "verified" | "unavailable";
+  "run-box" | "gpu" | "data-source" | "service" | "inference-api";
+export type ResourceStatus =
+  "draft" | "registered" | "verified" | "unavailable";
 export interface InferenceConfiguration {
   model: string;
   hardware: string;
@@ -81,6 +78,15 @@ export interface ResourceRequest {
   taskId?: string;
   agentId?: string;
   purpose: string;
+  computePreference?: {
+    provider: "aws-ec2";
+    profileId: string;
+    region: string;
+    instanceType: string;
+    durationHours: number;
+    estimatedComputeUsd: number;
+    quotedAt: string;
+  };
   status: ResourceRequestStatus;
   decision: {
     status: "not_evaluated" | "approved" | "denied";

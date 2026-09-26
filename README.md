@@ -108,6 +108,7 @@ The token check enforces the visual-system rules; it does not replace visual ins
 | [DESIGN.md](DESIGN.md) | Visual system, token rules, component patterns, and responsive behavior |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Application, storage, API, CLI, and future infrastructure boundaries |
 | [BACKEND_PLAN.md](BACKEND_PLAN.md) | Proposed identity, worker, run-box provider, events, and EC2 implementation contract |
+| [AWS_SETUP.md](AWS_SETUP.md) | Live AWS GPU demo preflight, spending policy, quota request, and launch gates |
 | [ROADMAP.md](ROADMAP.md) | Dependency-ordered delivery phases and acceptance gates |
 | [VERIFICATION.md](VERIFICATION.md) | Recorded check results, remaining verification, and browser-tool limitations |
 | [AGENTS.md](AGENTS.md) | Contributor rules for design, testing, collaboration, and truthful capabilities |

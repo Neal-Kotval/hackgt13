@@ -7,7 +7,7 @@ import ts from "typescript";
 const temporary = await mkdtemp(path.join(os.tmpdir(), "agentcloud-test-"));
 process.env.AGENTCLOUD_DATA_DIR = path.join(temporary, "data");
 await writeFile(path.join(temporary, "package.json"), '{"type":"module"}');
-for (const name of ["store", "http"]) {
+for (const name of ["store", "http", "resource-profiles"]) {
   const source = await readFile(
     new URL(`../lib/${name}.ts`, import.meta.url),
     "utf8",
@@ -19,7 +19,7 @@ for (const name of ["store", "http"]) {
         module: ts.ModuleKind.ES2022,
       },
     })
-    .outputText.replace(/from ["']\.\/(\w+)["']/g, "from './$1.js'");
+    .outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'");
   await writeFile(path.join(temporary, `${name}.js`), output);
 }
 const { action, getState, agentAction } = await import(

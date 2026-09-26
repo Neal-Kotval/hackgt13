@@ -19,6 +19,7 @@ import type {
   ResourceRequest,
   ResourceStatus,
 } from "@/lib/types";
+import { demoGpuDurations, demoGpuProfile } from "@/lib/resource-profiles";
 import "./resources.css";
 
 type ResourceAction = (input: Record<string, unknown>) => Promise<unknown>;
@@ -357,6 +358,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
   const [taskId, setTaskId] = useState("");
   const [agentId, setAgentId] = useState("");
   const [purpose, setPurpose] = useState("");
+  const [durationHours, setDurationHours] = useState<number>(2);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -378,6 +380,12 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
         ...(taskId ? { taskId } : {}),
         ...(agentId ? { agentId } : {}),
         purpose: purpose.trim(),
+        ...(!resourceId && kind === "gpu"
+          ? {
+              gpuProfileId: demoGpuProfile.id,
+              durationHours,
+            }
+          : {}),
       })) as { request?: ResourceRequest } | null;
       if (!response?.request?.id)
         throw new Error("The server did not confirm the request.");
@@ -448,6 +456,56 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                 ))}
               </select>
             </label>
+          )}
+          {!resourceId && kind === "gpu" && (
+            <div className="resource-price-summary">
+              <label>
+                GPU profile
+                <select value={demoGpuProfile.id} disabled>
+                  <option value={demoGpuProfile.id}>
+                    {demoGpuProfile.label} · {demoGpuProfile.instanceType}
+                  </option>
+                </select>
+              </label>
+              <label>
+                Requested duration
+                <select
+                  value={durationHours}
+                  onChange={(event) =>
+                    setDurationHours(Number(event.target.value))
+                  }
+                >
+                  {demoGpuDurations.map((hours) => (
+                    <option key={hours} value={hours}>
+                      {hours} {hours === 1 ? "hour" : "hours"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <dl className="resource-facts resource-facts--compact">
+                <div>
+                  <dt>Compute rate</dt>
+                  <dd>${demoGpuProfile.hourlyComputeUsd.toFixed(4)}/hour</dd>
+                </div>
+                <div>
+                  <dt>Compute estimate</dt>
+                  <dd>
+                    $
+                    {(demoGpuProfile.hourlyComputeUsd * durationHours).toFixed(
+                      2,
+                    )}{" "}
+                    for {durationHours} {durationHours === 1 ? "hour" : "hours"}
+                  </dd>
+                </div>
+              </dl>
+              <p className="resource-note">
+                AWS Price List quote from {demoGpuProfile.quotedAt} for{" "}
+                {demoGpuProfile.region}. Excludes storage, public IPv4,
+                transfer, and taxes. GPU quota is pending; price and capacity
+                must be checked again before launch. This duration is requested
+                only and is not enforced yet.
+              </p>
+            </div>
           )}
           <label>
             Task
@@ -548,6 +606,18 @@ function RequestCard({
       </div>
       <p>{request.purpose}</p>
       <dl className="resource-facts resource-facts--compact">
+        {request.computePreference && (
+          <div>
+            <dt>GPU estimate</dt>
+            <dd>
+              {request.computePreference.instanceType} · $
+              {request.computePreference.estimatedComputeUsd.toFixed(2)} compute
+              for {request.computePreference.durationHours}{" "}
+              {request.computePreference.durationHours === 1 ? "hour" : "hours"}{" "}
+              (quote {request.computePreference.quotedAt})
+            </dd>
+          </div>
+        )}
         <div>
           <dt>Task</dt>
           <dd>{task?.title ?? "Not linked"}</dd>

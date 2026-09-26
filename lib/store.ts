@@ -2,9 +2,15 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type {
-  State, Project, TaskStatus, ResourceKind, ResourceDefinition,
-  ResourceRequest, InferenceConfiguration,
+  State,
+  Project,
+  TaskStatus,
+  ResourceKind,
+  ResourceDefinition,
+  ResourceRequest,
+  InferenceConfiguration,
 } from "./types";
+import { demoGpuDurations, demoGpuProfile } from "./resource-profiles";
 interface Credential {
   hash: string;
   projectId: string;
@@ -276,7 +282,11 @@ export async function action(input: Record<string, unknown>) {
   });
 }
 const resourceKinds: ResourceKind[] = [
-  "run-box", "gpu", "data-source", "service", "inference-api",
+  "run-box",
+  "gpu",
+  "data-source",
+  "service",
+  "inference-api",
 ];
 function resourceKind(value: unknown): ResourceKind {
   if (!resourceKinds.includes(value as ResourceKind))
@@ -301,11 +311,20 @@ export async function resourceAction(input: Record<string, unknown>) {
   return transaction((disk) => {
     const p = project(disk, input.projectId);
     const now = new Date().toISOString();
-    let result: { resource?: ResourceDefinition; request?: ResourceRequest } = {};
+    let result: { resource?: ResourceDefinition; request?: ResourceRequest } =
+      {};
     switch (input.type) {
       case "registerResource": {
-        fields(input, ["type", "projectId", "name", "kind", "capability", "owner"]);
-        if (p.resources.length >= 200) throw new InputError("Resource limit reached", 409);
+        fields(input, [
+          "type",
+          "projectId",
+          "name",
+          "kind",
+          "capability",
+          "owner",
+        ]);
+        if (p.resources.length >= 200)
+          throw new InputError("Resource limit reached", 409);
         const kind = resourceKind(input.kind);
         if (kind === "inference-api")
           throw new InputError("Use an inference draft for an inference API");
@@ -320,15 +339,29 @@ export async function resourceAction(input: Record<string, unknown>) {
           updatedAt: now,
         };
         p.resources.push(resource);
-        event(p, "human", `Registered ${resource.name} in the catalog; availability unverified`, "resource");
+        event(
+          p,
+          "human",
+          `Registered ${resource.name} in the catalog; availability unverified`,
+          "resource",
+        );
         result = { resource };
         break;
       }
       case "saveInferenceDraft": {
-        fields(input, ["type", "projectId", "name", "kind", "capability", "owner", "inference"]);
+        fields(input, [
+          "type",
+          "projectId",
+          "name",
+          "kind",
+          "capability",
+          "owner",
+          "inference",
+        ]);
         if (input.kind !== undefined && input.kind !== "inference-api")
           throw new InputError("Inference draft kind must be inference-api");
-        if (p.resources.length >= 200) throw new InputError("Resource limit reached", 409);
+        if (p.resources.length >= 200)
+          throw new InputError("Resource limit reached", 409);
         const raw = input.inference;
         if (!raw || typeof raw !== "object" || Array.isArray(raw))
           throw new InputError("Inference configuration is required");
@@ -352,23 +385,52 @@ export async function resourceAction(input: Record<string, unknown>) {
           updatedAt: now,
         };
         p.resources.push(resource);
-        event(p, "human", `Saved inference API draft ${resource.name}; no serving process started`, "resource");
+        event(
+          p,
+          "human",
+          `Saved inference API draft ${resource.name}; no serving process started`,
+          "resource",
+        );
         result = { resource };
         break;
       }
       case "requestResource": {
-        fields(input, ["type", "projectId", "resourceId", "kind", "taskId", "agentId", "purpose"]);
+        fields(input, [
+          "type",
+          "projectId",
+          "resourceId",
+          "kind",
+          "taskId",
+          "agentId",
+          "purpose",
+          "gpuProfileId",
+          "durationHours",
+        ]);
         if (p.resourceRequests.length >= 500)
           throw new InputError("Resource request limit reached", 409);
-        const resourceId = optionalReference(input.resourceId, "Resource", (value) =>
-          p.resources.some((resource) => resource.id === value),
+        const resourceId = optionalReference(
+          input.resourceId,
+          "Resource",
+          (value) => p.resources.some((resource) => resource.id === value),
         );
         const resource = p.resources.find((item) => item.id === resourceId);
-        const kind = input.kind === undefined && resource
-          ? resource.kind
-          : resourceKind(input.kind);
+        const kind =
+          input.kind === undefined && resource
+            ? resource.kind
+            : resourceKind(input.kind);
         if (resource && kind !== resource.kind)
           throw new InputError("Requested kind does not match resource");
+        const hasGpuPreference =
+          input.gpuProfileId !== undefined || input.durationHours !== undefined;
+        if (
+          hasGpuPreference &&
+          (resourceId ||
+            kind !== "gpu" ||
+            input.gpuProfileId !== demoGpuProfile.id ||
+            typeof input.durationHours !== "number" ||
+            !demoGpuDurations.some((hours) => hours === input.durationHours))
+        )
+          throw new InputError("Unsupported GPU profile or duration");
         const taskId = optionalReference(input.taskId, "Task", (value) =>
           p.tasks.some((task) => task.id === value),
         );
@@ -382,6 +444,24 @@ export async function resourceAction(input: Record<string, unknown>) {
           ...(taskId ? { taskId } : {}),
           ...(agentId ? { agentId } : {}),
           purpose: str(input.purpose, "purpose", 2000),
+          ...(hasGpuPreference
+            ? {
+                computePreference: {
+                  provider: demoGpuProfile.provider,
+                  profileId: demoGpuProfile.id,
+                  region: demoGpuProfile.region,
+                  instanceType: demoGpuProfile.instanceType,
+                  durationHours: input.durationHours as number,
+                  estimatedComputeUsd: Number(
+                    (
+                      demoGpuProfile.hourlyComputeUsd *
+                      (input.durationHours as number)
+                    ).toFixed(4),
+                  ),
+                  quotedAt: demoGpuProfile.quotedAt,
+                },
+              }
+            : {}),
           status: "requested",
           decision: {
             status: "not_evaluated",
@@ -390,7 +470,12 @@ export async function resourceAction(input: Record<string, unknown>) {
           createdAt: now,
         };
         p.resourceRequests.push(request);
-        event(p, "human", `Requested ${kind} resource; policy decision unavailable`, "resource");
+        event(
+          p,
+          "human",
+          `Requested ${kind} resource; policy decision unavailable`,
+          "resource",
+        );
         result = { request };
         break;
       }
@@ -489,7 +574,12 @@ export async function agentAction(
           accepted: false,
         };
         p.handoffs.push(h);
-        event(p, a.id, `Sent handoff to ${agent(p, to).name}: ${h.title}`, "handoff");
+        event(
+          p,
+          a.id,
+          `Sent handoff to ${agent(p, to).name}: ${h.title}`,
+          "handoff",
+        );
         result = { handoff: h };
         break;
       }
