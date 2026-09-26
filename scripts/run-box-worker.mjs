@@ -3,6 +3,7 @@
 import { getDatabase } from "../lib/auth.mjs";
 import { migrateRunBoxJobs, requestRunBoxStop } from "../lib/run-box-jobs.mjs";
 import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
+import { migrateAwsGpuEvidence } from "../lib/aws-gpu-evidence.mjs";
 import { assumeGpuWorkerRole, createAwsGpuProvider } from "../lib/aws-gpu-provider.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
 
@@ -20,6 +21,7 @@ async function cycle() {
   const db = getDatabase();
   migrateRunBoxJobs(db);
   migrateRunBoxCleanup(db);
+  migrateAwsGpuEvidence(db);
   const reconciled = await reconcileAwsRunBoxes(db, provider, { workerId, requestStop: requestRunBoxStop });
   if (reconciled.some((item) => item.status === "retry"))
     throw new Error("GPU cleanup remains unconfirmed; refusing another allocation");

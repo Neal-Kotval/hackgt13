@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createAwsGpuProvider, assumeGpuWorkerRole } from "../lib/aws-gpu-provider.mjs";
 
 const jobId = "11111111-1111-4111-8111-111111111111";
@@ -44,15 +45,39 @@ test("SSM verification requires non-root workspace and a CUDA workload marker", 
       sent.push(payload);
       return { Command: { CommandId: "cmd-1" } };
     }
-    if (operation === "get-command-invocation") return { Status: "Success", ResponseCode: 0, StandardOutputContent: "GPU 0\nAGENTCLOUD_CUDA_OK 4\nAGENTCLOUD_WORKSPACE_OK\n" };
+    if (operation === "get-command-invocation") return { Status: "Success", ResponseCode: 0, StandardOutputContent:
+      `AGENTCLOUD_EVIDENCE=${JSON.stringify({ uid: 1000, workspace: `/home/ec2-user/agentcloud/${jobId}`,
+        repo_sha: "a".repeat(40), gpu_device: "NVIDIA L4", nvidia_probe: "GPU 0: NVIDIA L4",
+        workload_value: 4, correct: true, cpu_ms: 1.25, gpu_ms: 0.75, elapsed_ms: 2230 })}\n` };
     throw new Error(`Unexpected ${operation}`);
   });
   const provider = createAwsGpuProvider({ aws, subnetId, sleep: async () => {} });
-  const evidence = await provider.verify(instanceId, jobId);
+  const evidence = await provider.verify(instanceId, { id: jobId, repo_url: "https://github.com/example/repo.git", repo_revision: null });
   assert.equal(evidence.evidenceRef, "ssm:cmd-1");
   assert.equal(evidence.remoteAccount, "ec2-user");
+  assert.equal(evidence.repositoryRevision, "a".repeat(40));
+  assert.equal(evidence.gpuDevice, "NVIDIA L4");
+  assert.equal(evidence.workloadValue, 4);
+  assert.equal(evidence.cpuMs, 1.25);
+  assert.equal(evidence.gpuMs, 0.75);
   assert.match(sent[0].Parameters.commands.join("\n"), /sudo -u ec2-user/);
+  assert.match(sent[0].Parameters.commands.join("\n"), /\/opt\/pytorch\/bin\/python/);
+  assert.match(sent[0].Parameters.commands.join("\n"), /git\("clone"/);
   assert.match(sent[0].Parameters.commands.join("\n"), /torch\.cuda\.is_available/);
+  const script = sent[0].Parameters.commands[0].split("<<'PY'\n")[1].split("\nPY")[0];
+  execFileSync("python3", ["-c", "import ast,sys; ast.parse(sys.stdin.read())"], { input: script });
+});
+
+test("SSM success without repository and CUDA evidence is rejected", async () => {
+  const aws = mockAws((service, operation) => {
+    if (operation === "describe-instance-information") return { InstanceInformationList: [{ InstanceId: instanceId, PingStatus: "Online" }] };
+    if (operation === "send-command") return { Command: { CommandId: "11111111-1111-4111-8111-111111111111" } };
+    if (operation === "get-command-invocation") return { Status: "Success", ResponseCode: 0, StandardOutputContent: "nvidia-smi available" };
+    throw new Error(`Unexpected ${operation}`);
+  });
+  const provider = createAwsGpuProvider({ aws, subnetId, sleep: async () => {} });
+  await assert.rejects(provider.verify(instanceId, { id: jobId, repo_url: "https://github.com/example/repo.git", repo_revision: null }),
+    /evidence missing/);
 });
 
 test("termination does not succeed until the root volume is gone", async () => {
