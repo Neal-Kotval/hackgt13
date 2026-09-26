@@ -140,6 +140,20 @@
   --color-overlay: rgb(0 0 0 / 65%);
   --color-dot-grid: color-mix(in srgb, var(--palette-paper) 8%, transparent);
 
+  /* Quiet glass navigation: dark translucent fill, restrained edge highlights. */
+  --color-glass: rgb(22 25 27 / 82%);
+  --color-glass-hover: rgb(230 228 225 / 6%);
+  --color-glass-selected: rgb(56 166 207 / 12%);
+  --color-glass-edge: rgb(230 228 225 / 9%);
+  --shadow-glass: inset 0 1px 0 rgb(230 228 225 / 6%), 0 8px 32px rgb(0 0 0 / 14%);
+  --glass-blur: 20px;
+  --glass-saturation: 115%;
+  --radius-navigation: 0.75rem;
+  --radius-navigation-panel: 1.25rem;
+  --navigation-width: 15rem;
+  --z-navigation-backdrop: 40;
+  --z-navigation: 50;
+
   /* Typography. Self-hosted reference fonts with system fallbacks. */
   --font-body:
     "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
