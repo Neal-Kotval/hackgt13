@@ -107,3 +107,5 @@ The prototype is a visual reference, not evidence of remote infrastructure. The 
 The dominant interface palette is black, blue, and cool grey. Use saturated blue for primary actions and selected navigation, subdued blue-grey for supporting identity, and neutral charcoal for panels. Sage, amber, and coral are reserved for meaningful success, warning, and error states rather than decorative accents.
 
 The sidebar hides native scrollbar chrome while preserving wheel, touch, and keyboard scrolling. Its Project section uses a heading aligned with navigation icons. Account identity combines an initials avatar, display name, and email; long names wrap and email truncates with its full value available on hover. All account styling uses existing semantic and scale tokens.
+
+Entrances use a noticeable 24px rise over 420ms, with 65ms staggering capped at 260ms for sibling surfaces. The drawer travels 48px. Buttons and project links lift slightly on hover. Native smooth scrolling applies to page anchors and sidebar programmatic scrolling without intercepting wheel or touch input; reduced motion restores instant scrolling and disables travel and staggering.

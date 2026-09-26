@@ -27,6 +27,12 @@ try {
       page.on("pageerror", error => errors.push(error.message));
       await page.addInitScript(() => {
         window.motionEvents = [];
+        window.motionDurations = [];
+        const nativeAnimate = Element.prototype.animate;
+        Element.prototype.animate = function (keyframes, options) {
+          window.motionDurations.push(typeof options === "number" ? options : options?.duration);
+          return nativeAnimate.call(this, keyframes, options);
+        };
         new MutationObserver(records => records.forEach(record => {
           if (record.target instanceof HTMLElement && record.target.hasAttribute("data-motion-active")) window.motionEvents.push(record.target.getAttribute("data-motion-active"));
         })).observe(document, {subtree: true, attributes: true, attributeFilter: ["data-motion-active"]});
@@ -50,7 +56,14 @@ try {
       expect(await page.locator(".toast").evaluate(element => getComputedStyle(element).transform)).not.toBe("none");
       const events = await page.evaluate(() => window.motionEvents);
       if (reducedMotion === "reduce") expect(events).toEqual([]);
-      else expect(events).toContain("dialog");
+      else {
+        expect(events).toContain("dialog");
+        const durations = await page.evaluate(() => window.motionDurations);
+        // Catch CSS time normalization (.42s versus 420ms) making entrances instantaneous.
+        expect(durations.length).toBeGreaterThan(0);
+        expect(durations.every(duration => duration >= 300 && duration <= 600)).toBeTruthy();
+      }
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe(reducedMotion === "reduce" ? "auto" : "smooth");
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
       await page.locator(".toast").evaluate(element => element.remove());
       if (reducedMotion === "no-preference") {

@@ -22,11 +22,15 @@ export function SiteMotion({ children }: { children: ReactNode }) {
       }
       running.clear();
     }
-    function enter(element: HTMLElement, kind: "surface" | "drawer" | "dialog" = "surface") {
+    function enter(element: HTMLElement, kind: "surface" | "drawer" | "dialog" = "surface", index = 0) {
       if (preference.matches || !element.isConnected || !element.getClientRects().length) return;
       const tokens = getComputedStyle(document.documentElement);
       const read = (name: string) => tokens.getPropertyValue(name).trim();
-      const duration = parseFloat(read("--duration-enter")) / 1000;
+      const seconds = (name: string) => {
+        const value = read(name);
+        return parseFloat(value) / (value.endsWith("ms") ? 1000 : 1);
+      };
+      const duration = seconds("--duration-enter");
       const easing = read("--ease-standard").match(/-?\d*\.?\d+/g)?.map(Number);
       if (!duration || easing?.length !== 4) return;
       const previous = running.get(element);
@@ -48,6 +52,7 @@ export function SiteMotion({ children }: { children: ReactNode }) {
       ];
       const animation = animate(element, { opacity, ...(transform ? { transform } : {}) }, {
         duration,
+        delay: Math.min(index * seconds("--duration-stagger"), seconds("--duration-stagger-max")),
         ease: easing as [number, number, number, number],
       });
       running.set(element, { animation, restore });
@@ -61,23 +66,23 @@ export function SiteMotion({ children }: { children: ReactNode }) {
         element.removeAttribute("data-motion-active");
       }).catch(() => {});
     }
-    function discover(root: ParentNode) {
-      const candidates = [
+    function discover(roots: ParentNode[]) {
+      const candidates = [...new Set(roots.flatMap(root => [
         ...(root instanceof HTMLElement && root.matches(surfaces) ? [root] : []),
         ...root.querySelectorAll<HTMLElement>(surfaces),
-      ];
+      ]))];
       const fresh = candidates.filter(element => !seen.has(element));
       fresh.forEach(element => seen.add(element));
       // Animate the containing surface once instead of compounding nested fades.
-      for (const element of fresh) {
-        if (!fresh.some(parent => parent !== element && parent.contains(element))) enter(element);
-      }
+      const topLevel = fresh.filter(element => !fresh.some(parent => parent !== element && parent.contains(element)));
+      topLevel.forEach((element, index) => enter(element, "surface", index));
     }
-    discover(document);
+    discover([document]);
     const observer = new MutationObserver(records => {
+      const added: HTMLElement[] = [];
       for (const record of records) {
         if (record.type === "childList") {
-          record.addedNodes.forEach(node => {if (node instanceof HTMLElement) discover(node);});
+          record.addedNodes.forEach(node => {if (node instanceof HTMLElement) added.push(node);});
         } else if (record.target instanceof HTMLDialogElement && record.target.open) {
           const inner = record.target.querySelector<HTMLElement>(".modal-inner");
           if (inner) enter(inner, "dialog");
@@ -85,6 +90,7 @@ export function SiteMotion({ children }: { children: ReactNode }) {
           enter(record.target, "drawer");
         }
       }
+      discover(added);
       // Detached surfaces cannot finish visibly; release their animations immediately.
       for (const [element, { animation, restore }] of running) {
         if (!element.isConnected) {animation.cancel(); restore(); element.removeAttribute("data-motion-active"); running.delete(element);}
