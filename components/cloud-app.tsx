@@ -152,7 +152,8 @@ export function CloudApp() {
       body: JSON.stringify({ ...body, projectId: project?.id }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Could not save resource record.");
+    if (!response.ok)
+      throw new Error(data.error || "Could not save resource record.");
     if (data.state) setState(data.state);
     return data;
   }
@@ -185,7 +186,10 @@ export function CloudApp() {
   ];
   const isActiveNav = (label: string) =>
     (label === "Projects" && (isProjects || isSetup)) ||
-    (label === "Workspace" && !isProjects && !isSetup && page === "dashboard") ||
+    (label === "Workspace" &&
+      !isProjects &&
+      !isSetup &&
+      page === "dashboard") ||
     (label === "Review" && page === "review") ||
     (label === "Connect" && page === "agents");
   if (!state)
@@ -204,11 +208,14 @@ export function CloudApp() {
       </main>
     );
   return (
-    <>
+    <div className="app-frame">
+      <a className="skip-link" href="#workspace-content">
+        Skip to content
+      </a>
       <header className="global-header">
         <Link className="brand" href="/projects">
-          <TerminalWindow {...iconProps} />
-          agentcloud<span>_</span>
+          agentcloud
+          <span className="brand-cursor" aria-hidden="true" />
         </Link>
         <nav aria-label="Main navigation">
           {nav.map((n) => (
@@ -227,7 +234,7 @@ export function CloudApp() {
           <EmployeeMenu />
         </div>
       </header>
-      <div className="app-shell">
+      <main className="app-shell" id="workspace-content" tabIndex={-1}>
         <div className="breadcrumb">
           <Link href="/projects">workspace</Link>
           <CaretRight />
@@ -283,11 +290,11 @@ export function CloudApp() {
                   <span className="status-dot" />
                   Remote control plane / setup pending
                 </div>
-                <h1>
-                  {project.name.toLowerCase().replaceAll(" ", "-")}
-                  <span className="cursor">_</span>
-                </h1>
-                <p>Coordinate work, inspect requests, and follow recorded activity.</p>
+                <h1>{project.name}</h1>
+                <p>
+                  Coordinate work, inspect requests, and follow recorded
+                  activity.
+                </p>
               </div>
               <div className="heading-actions">
                 <Link className="button primary" href={base + "/agents"}>
@@ -689,7 +696,7 @@ export function CloudApp() {
             <span className="footer-dot">●</span> v0.1
           </span>
         </footer>
-      </div>
+      </main>
       {notice && (
         <div className="toast" role="status">
           <CheckCircle />
@@ -780,7 +787,7 @@ export function CloudApp() {
           </div>
         </Modal>
       )}
-    </>
+    </div>
   );
 }
 function SectionTitle({
@@ -1109,11 +1116,9 @@ function Projects({ projects }: { projects: Project[] }) {
     <>
       <section className="project-heading">
         <div>
-          <div className="eyebrow">Your command center</div>
-          <h1>
-            projects<span className="cursor">_</span>
-          </h1>
-          <p>A persistent home for every agent on your team.</p>
+          <div className="eyebrow">Your workspace</div>
+          <h1>Your projects.</h1>
+          <p>Set up your computers. Follow the work.</p>
         </div>
         <Link className="button primary" href="/projects/new">
           <Plus />
@@ -1124,6 +1129,22 @@ function Projects({ projects }: { projects: Project[] }) {
         <span>{projects.length} projects</span>
         <span>Local persistence enabled</span>
       </div>
+      {!projects.length && (
+        <section className="welcome-panel" aria-labelledby="welcome-title">
+          <span className="eyebrow">
+            <span className="status-dot" />
+            Getting started
+          </span>
+          <h2 id="welcome-title">A place for your next project.</h2>
+          <p>
+            Create a project to save your repository and machine setup. Remote
+            connection and verification are not available yet.
+          </p>
+          <Link className="button primary" href="/projects/new">
+            Create your first project <ArrowRight />
+          </Link>
+        </section>
+      )}
       <div className="project-list">
         {projects.map((p) => (
           <Link className="project-row" href={"/projects/" + p.id} key={p.id}>
@@ -1196,12 +1217,10 @@ function Setup({
   return (
     <div className="setup-layout">
       <section>
-        <div className="eyebrow">$ agentcloud init</div>
-        <h1>
-          new workspace<span className="cursor">_</span>
-        </h1>
+        <div className="eyebrow">Project setup</div>
+        <h1>Create a project.</h1>
         <p className="section-description">
-          Set the direction. Bring your agents. Build together.
+          Add your repository and choose where the work will happen.
         </p>
         <form
           onSubmit={(e) => {
