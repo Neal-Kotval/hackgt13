@@ -18,3 +18,9 @@ variable "gpu_root_device" {
   type    = string
   default = "/dev/xvda"
 }
+
+variable "gpu_subnet_id" {
+  type        = string
+  description = "Verified public-IP subnet for the private SSM-only GPU demo box."
+  default     = "subnet-0d76bc090d2666592"
+}

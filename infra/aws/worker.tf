@@ -50,22 +50,28 @@ resource "aws_iam_role_policy" "worker" {
         Resource = "*"
       },
       {
-        Sid    = "LaunchOnlyThroughPinnedTemplate"
-        Effect = "Allow"
-        Action = "ec2:RunInstances"
-        Resource = [
-          "arn:aws:ec2:us-east-1::image/*",
-          "arn:aws:ec2:us-east-1:${var.account_id}:instance/*",
-          "arn:aws:ec2:us-east-1:${var.account_id}:volume/*",
-          "arn:aws:ec2:us-east-1:${var.account_id}:network-interface/*",
-          "arn:aws:ec2:us-east-1:${var.account_id}:subnet/*",
-          "arn:aws:ec2:us-east-1:${var.account_id}:security-group/*",
-          aws_launch_template.gpu.arn
-        ]
+        Sid      = "LaunchOnlyG6InstanceThroughPinnedTemplate"
+        Effect   = "Allow"
+        Action   = "ec2:RunInstances"
+        Resource = "arn:aws:ec2:us-east-1:${var.account_id}:instance/*"
         Condition = { StringEquals = {
           "ec2:LaunchTemplate" = aws_launch_template.gpu.arn
           "ec2:InstanceType"   = "g6.xlarge"
         } }
+      },
+      {
+        Sid    = "UsePinnedTemplateAndLaunchResources"
+        Effect = "Allow"
+        Action = "ec2:RunInstances"
+        Resource = [
+          "arn:aws:ec2:us-east-1::image/${var.gpu_ami_id}",
+          "arn:aws:ec2:us-east-1:${var.account_id}:volume/*",
+          "arn:aws:ec2:us-east-1:${var.account_id}:network-interface/*",
+          "arn:aws:ec2:us-east-1:${var.account_id}:subnet/${var.gpu_subnet_id}",
+          aws_security_group.instance.arn,
+          aws_launch_template.gpu.arn
+        ]
+        Condition = { StringEquals = { "ec2:LaunchTemplate" = aws_launch_template.gpu.arn } }
       },
       {
         Sid    = "TagOnLaunchOnly"
