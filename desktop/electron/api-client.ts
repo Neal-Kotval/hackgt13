@@ -23,6 +23,8 @@ export type ProjectTaskSnapshot = {
   title: string;
   owner: string;
   status: string;
+  instructions?: string;
+  environmentId?: string;
 };
 
 export type ProjectResourceSnapshot = {
@@ -166,11 +168,15 @@ function mapProject(value: unknown): ProjectSnapshot | null {
           const taskId = stringField(row, "id");
           const title = stringField(row, "title");
           if (!taskId || !title) return null;
+          const instructions = stringField(row, "instructions");
+          const environmentId = stringField(row, "environmentId");
           return {
             id: taskId,
             title,
             owner: stringField(row, "owner", "unknown"),
             status: stringField(row, "status", "unknown"),
+            ...(instructions ? { instructions } : {}),
+            ...(environmentId ? { environmentId } : {}),
           } satisfies ProjectTaskSnapshot;
         })
         .filter((task): task is ProjectTaskSnapshot => Boolean(task))

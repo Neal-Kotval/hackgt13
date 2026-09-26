@@ -89,9 +89,22 @@ Renderer helpers: `desktop/src/lib/server-api.ts` → `getState()` / `postAction
 
 The **Tasks** panel loads live projects via `getState` (project picker). Empty servers show a connect-on-web CTA; resource statuses are shown as returned (`registered`, `verified`, `not_evaluated`, …) without inventing `ready`.
 
-## Task authoring (HAC-33 / HAC-34)
+## Task authoring (HAC-33 / HAC-34 / HAC-64)
 
-On **Tasks**, pick a project, then use **Create task** (title, instructions, agent, optional environment). Submit calls main-process `postAction` → `POST /api/state` `{ type: "addTask", projectId, title, owner }`. Instructions are folded into `title` (≤200) because the server has no instructions field yet. Environment is UI context only; Start agent stays disabled. Created tasks appear in the server task list and the web dashboard — not in Local chat `threads.json`.
+On **Tasks**, pick a project, then use **Create task** (title, instructions, agent, optional environment). Submit calls main-process `postAction` → `POST /api/state`:
+
+```json
+{
+  "type": "addTask",
+  "projectId": "…",
+  "title": "…",
+  "owner": "<agentId>",
+  "instructions": "…",
+  "environmentId": "<verified resource id, optional>"
+}
+```
+
+`instructions` and `environmentId` round-trip in `GET /api/state`. Binding `environmentId` requires a project resource with status `verified`; unknown or unverified ids are rejected. Start agent stays disabled until a runner endpoint exists ([HAC-35](https://linear.app/startup-yc/issue/HAC-35)). Created tasks appear on the web dashboard — not in Local chat `threads.json`.
 
 ## Persistence
 

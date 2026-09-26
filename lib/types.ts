@@ -15,6 +15,10 @@ export interface Task {
   status: TaskStatus;
   dependency?: string;
   handoffId?: string;
+  /** Authoring body from desktop; optional for legacy tasks. */
+  instructions?: string;
+  /** Verified resource/environment bound at create time; optional. */
+  environmentId?: string;
 }
 export interface Service {
   id: string;

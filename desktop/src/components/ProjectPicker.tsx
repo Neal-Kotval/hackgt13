@@ -260,7 +260,17 @@ function ProjectDetail({
         items={project.tasks.map((task) => ({
           id: task.id,
           primary: task.title,
-          secondary: `owner ${task.owner}`,
+          secondary: [
+            `owner ${task.owner}`,
+            task.environmentId ? `env ${task.environmentId}` : null,
+            task.instructions
+              ? `instructions: ${task.instructions.slice(0, 120)}${
+                  task.instructions.length > 120 ? "…" : ""
+                }`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
           status: task.status,
         }))}
       />

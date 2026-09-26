@@ -196,12 +196,33 @@ export async function action(input: Record<string, unknown>) {
               : undefined;
           if (dependency && !p.tasks.some((t) => t.id === dependency))
             throw new InputError("Dependency not found");
+          const instructions =
+            input.instructions === undefined || input.instructions === ""
+              ? undefined
+              : str(input.instructions, "instructions", 4000);
+          const environmentId = optionalReference(
+            input.environmentId,
+            "Environment",
+            (value) => p.resources.some((resource) => resource.id === value),
+          );
+          if (environmentId) {
+            const resource = p.resources.find(
+              (row) => row.id === environmentId,
+            );
+            if (!resource || resource.status !== "verified") {
+              throw new InputError(
+                "Environment must be verified before binding a task",
+              );
+            }
+          }
           p.tasks.push({
             id: id(),
             title: str(input.title, "title", 200),
             owner,
             status: "queued",
             dependency,
+            ...(instructions ? { instructions } : {}),
+            ...(environmentId ? { environmentId } : {}),
           });
           event(p, "human", "Created a task", "task");
           break;

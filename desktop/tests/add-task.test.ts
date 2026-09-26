@@ -3,19 +3,33 @@ import { describe, it } from "node:test";
 import { buildAddTaskPayload } from "../src/lib/add-task.ts";
 
 describe("buildAddTaskPayload", () => {
-  it("folds instructions into title for today's API", () => {
+  it("sends title and instructions as separate fields", () => {
     const payload = buildAddTaskPayload({
       projectId: "p1",
       title: "GPU smoke",
       instructions: "Run nvidia-smi and report",
       agentId: "a1",
+      environmentId: "env-1",
     });
     assert.deepEqual(payload, {
       type: "addTask",
       projectId: "p1",
-      title: "GPU smoke — Run nvidia-smi and report",
+      title: "GPU smoke",
       owner: "a1",
+      instructions: "Run nvidia-smi and report",
+      environmentId: "env-1",
     });
+  });
+
+  it("omits empty environmentId", () => {
+    const payload = buildAddTaskPayload({
+      projectId: "p1",
+      title: "No env",
+      instructions: "Do the work",
+      agentId: "a1",
+      environmentId: "  ",
+    });
+    assert.equal("environmentId" in payload, false);
   });
 
   it("rejects empty fields", () => {
@@ -37,13 +51,22 @@ describe("buildAddTaskPayload", () => {
     );
   });
 
-  it("truncates to 200 characters", () => {
-    const payload = buildAddTaskPayload({
-      projectId: "p1",
-      title: "T",
-      instructions: "x".repeat(300),
-      agentId: "a1",
-    });
-    assert.equal(payload.title.length, 200);
+  it("rejects oversized title or instructions", () => {
+    assert.throws(() =>
+      buildAddTaskPayload({
+        projectId: "p1",
+        title: "T".repeat(201),
+        instructions: "ok",
+        agentId: "a1",
+      }),
+    );
+    assert.throws(() =>
+      buildAddTaskPayload({
+        projectId: "p1",
+        title: "T",
+        instructions: "x".repeat(4001),
+        agentId: "a1",
+      }),
+    );
   });
 });
