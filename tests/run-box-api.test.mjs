@@ -85,3 +85,108 @@ test("member decision denies allocation and stop is owner-scoped and durable", a
   assert.equal((await stopped.json()).job.state, "stopping");
   assert.ok(db.prepare("SELECT stop_requested_at FROM run_box_job WHERE id = ?").get(job.id).stop_requested_at);
 });
+
+// One-step environment path: { projectId, profileId, durationHours, idempotencyKey }.
+const requestCount = async () => (await store.getState()).projects.find((item) => item.id === projectId).resourceRequests.length;
+const environment = (overrides = {}) => ({ projectId, profileId: "runpod-rtx-4090", durationHours: 2, idempotencyKey: "env-runpod-1", ...overrides });
+
+test("one-step environment path validates the body before recording anything", async () => {
+  const before = await requestCount();
+  assert.equal((await boxes.POST(request("/api/run-boxes", environment()))).status, 401);
+  for (const input of [
+    environment({ profileId: "attacker-profile" }),
+    environment({ profileId: "__proto__" }),
+    environment({ durationHours: 3 }),
+    environment({ durationHours: "1" }),
+    environment({ idempotencyKey: "" }),
+    environment({ idempotencyKey: "k".repeat(129) }),
+    environment({ repoUrl: "https://attacker.example/other.git" }),
+  ]) {
+    const response = await boxes.POST(request("/api/run-boxes", input, owner.cookie));
+    assert.equal(response.status, 400, JSON.stringify(input));
+  }
+  assert.equal((await boxes.POST(request("/api/run-boxes", environment({ projectId: "other-project" }), owner.cookie))).status, 403);
+  assert.equal(await requestCount(), before);
+});
+
+test("one-step owner path records the request with server-derived requester and queues one approved job idempotently", async () => {
+  const before = await requestCount();
+  const created = await boxes.POST(request("/api/run-boxes", environment(), owner.cookie));
+  assert.equal(created.status, 201);
+  const { decision, job } = await created.json();
+  assert.equal(decision.outcome, "approved");
+  assert.equal(decision.project_role, "owner");
+  assert.equal(job.state, "queued");
+  assert.equal(job.provider, "runpod");
+  assert.equal(job.profile_id, "runpod-rtx-4090");
+  assert.equal(job.max_duration_minutes, 120);
+  assert.equal(job.repo_url, "https://example.com/repo");
+  assert.equal(await requestCount(), before + 1);
+  const saved = (await store.getState()).projects.find((item) => item.id === projectId).resourceRequests.find((item) => item.id === decision.resource_request_id);
+  assert.equal(saved.kind, "gpu");
+  assert.deepEqual(saved.requestedBy, { employeeId: owner.id, organizationId: fixture.organization.id, projectRoleAtRequest: "owner" });
+  assert.equal(saved.computePreference.provider, "runpod");
+  assert.equal(saved.computePreference.maxHourlyUsd, 1);
+
+  const retry = await boxes.POST(request("/api/run-boxes", environment(), owner.cookie));
+  assert.equal(retry.status, 201);
+  assert.equal((await retry.json()).job.id, job.id);
+  assert.equal(await requestCount(), before + 1);
+  assert.equal((await boxes.POST(request("/api/run-boxes", environment({ durationHours: 1 }), owner.cookie))).status, 409);
+  const second = await boxes.POST(request("/api/run-boxes", environment({ idempotencyKey: "env-runpod-2" }), owner.cookie));
+  assert.equal(second.status, 409);
+  assert.match((await second.json()).error, /Runpod run box is already active/);
+  assert.equal(await requestCount(), before + 1);
+  const listed = await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, owner.cookie))).json();
+  assert.ok(listed.jobs.some((item) => item.id === job.id && item.resource_request_id === decision.resource_request_id));
+});
+
+test("one-step member path records a denied decision without a job, once under concurrent retries", async () => {
+  const before = await requestCount();
+  const input = environment({ profileId: "g6-l4-small", durationHours: 1, idempotencyKey: "env-member-1" });
+  const responses = await Promise.all([1, 2, 3].map(() => boxes.POST(request("/api/run-boxes", input, member.cookie))));
+  const bodies = await Promise.all(responses.map((response) => response.json()));
+  for (const [index, response] of responses.entries()) {
+    assert.equal(response.status, 200);
+    assert.equal(bodies[index].job, null);
+    assert.equal(bodies[index].decision.outcome, "denied");
+    assert.equal(bodies[index].decision.reason, "Project member cannot allocate a run box");
+    assert.equal(bodies[index].decision.id, bodies[0].decision.id);
+  }
+  assert.equal(await requestCount(), before + 1);
+  const saved = (await store.getState()).projects.find((item) => item.id === projectId).resourceRequests.at(-1);
+  assert.equal(saved.requestedBy.employeeId, member.id);
+  assert.equal(saved.requestedBy.projectRoleAtRequest, "member");
+  // Another employee cannot replay a member's key to read or alter that decision.
+  assert.equal((await boxes.POST(request("/api/run-boxes", input, owner.cookie))).status, 409);
+});
+
+const { migrateRunBoxJobs } = await import(path.join(directory, "run-box-jobs.mjs"));
+migrateRunBoxJobs(db);
+const dockerSupported = (() => {
+  const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'run_box_job'").get();
+  return Boolean(table?.sql.includes("'docker-local'"));
+})();
+
+test("one-step local Docker sandbox path queues a CPU-only run box", {
+  skip: !dockerSupported && "TODO: enable when lib/run-box-jobs.mjs supports the docker-local provider",
+}, async () => {
+  const created = await boxes.POST(request("/api/run-boxes", environment({ profileId: "local-docker-sandbox", durationHours: 1, idempotencyKey: "env-docker-1" }), owner.cookie));
+  assert.equal(created.status, 201);
+  const { job, decision } = await created.json();
+  assert.equal(job.provider, "docker-local");
+  assert.equal(job.state, "queued");
+  const saved = (await store.getState()).projects.find((item) => item.id === projectId).resourceRequests.find((item) => item.id === decision.resource_request_id);
+  assert.equal(saved.kind, "run-box");
+  assert.equal(saved.computePreference.provider, "docker-local");
+});
+
+test("one-step local Docker sandbox path refuses cleanly while the provider is unsupported", {
+  skip: dockerSupported && "docker-local provider is supported",
+}, async () => {
+  const before = await requestCount();
+  const response = await boxes.POST(request("/api/run-boxes", environment({ profileId: "local-docker-sandbox", durationHours: 1, idempotencyKey: "env-docker-unsupported" }), owner.cookie));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /not available on this server/);
+  assert.equal(await requestCount(), before);
+});
