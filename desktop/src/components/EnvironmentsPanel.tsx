@@ -1,3 +1,4 @@
+import { Select } from "./ui/Select";
 import { useCallback, useEffect, useState } from "react";
 import { TerminalPanel } from "./TerminalPanel";
 import { desktopApi } from "../lib/desktop-api";
@@ -315,9 +316,8 @@ export function EnvironmentsPanel({
       {projectList.length > 0 ? (
         <div className="environments-layout">
           <label className="picker-select">
-            <span>Project</span>
-            <select
-              className="control-select"
+            <span className="visually-hidden">Project</span>
+            <Select
               aria-label="Project"
               value={projectId ?? ""}
               onChange={(event) => {
@@ -331,7 +331,7 @@ export function EnvironmentsPanel({
                   {project.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           {jobs.kind === "error" ? (

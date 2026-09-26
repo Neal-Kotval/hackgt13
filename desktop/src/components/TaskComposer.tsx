@@ -1,3 +1,4 @@
+import { Select } from "./ui/Select";
 import { useState, type FormEvent } from "react";
 import { buildAddTaskPayload } from "../lib/add-task";
 import { describeAgentStartAvailability } from "../lib/agent-start";
@@ -139,10 +140,9 @@ export function TaskComposer({
           />
         </label>
         <label htmlFor="task-agent">
-          Agent
-          <select
+          <span className="visually-hidden">Agent</span>
+          <Select
             id="task-agent"
-            className="control-select"
             aria-label="Agent"
             value={agentId}
             onChange={(event) => setAgentId(event.target.value)}
@@ -154,13 +154,12 @@ export function TaskComposer({
                 {agent.name} ({agent.role}) · {agent.status}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label htmlFor="task-environment">
-          Environment / resource
-          <select
+          <span className="visually-hidden">Environment / resource</span>
+          <Select
             id="task-environment"
-            className="control-select"
             aria-label="Environment"
             value={environmentId}
             onChange={(event) => setEnvironmentId(event.target.value)}
@@ -177,7 +176,7 @@ export function TaskComposer({
                 </option>
               ))
             )}
-          </select>
+          </Select>
         </label>
         {!canStartLater ? (
           <p className="credential-banner" role="status">
@@ -215,10 +214,9 @@ export function TaskComposer({
           environment. Local OpenAI chat does not start AgentCloud agents.
         </p>
         <label htmlFor="start-task">
-          Task
-          <select
+          <span className="visually-hidden">Task</span>
+          <Select
             id="start-task"
-            className="control-select"
             aria-label="Task to start"
             value={startTaskId}
             onChange={(event) => setStartTaskId(event.target.value)}
@@ -233,13 +231,12 @@ export function TaskComposer({
                 </option>
               ))
             )}
-          </select>
+          </Select>
         </label>
         <label htmlFor="start-environment">
-          Verified environment
-          <select
+          <span className="visually-hidden">Verified environment</span>
+          <Select
             id="start-environment"
-            className="control-select"
             aria-label="Environment for agent start"
             value={startEnvironmentId}
             onChange={(event) => setStartEnvironmentId(event.target.value)}
@@ -254,7 +251,7 @@ export function TaskComposer({
                 </option>
               ))
             )}
-          </select>
+          </Select>
         </label>
         <p id="start-agent-reason" className="credential-banner" role="status">
           {startAvailability.reason}
