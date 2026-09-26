@@ -1,0 +1,18 @@
+# Public-key login for the non-root agentcloud account only.
+Port 22
+HostKey /etc/ssh/ssh_host_ed25519_key
+PermitRootLogin no
+AllowUsers agentcloud
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+UsePAM no
+AuthorizedKeysFile .ssh/authorized_keys
+StrictModes yes
+PermitUserEnvironment no
+X11Forwarding no
+AllowAgentForwarding no
+PrintMotd no
+Subsystem sftp /usr/lib/openssh/sftp-server
