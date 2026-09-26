@@ -80,3 +80,16 @@
   .ds-contract { padding: var(--space-5); gap: var(--space-6); }
   .ds-back { flex-basis: 100%; }
 }
+
+.ds-jump { gap: var(--space-2); }
+.ds-jump a,
+.ds-back {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-secondary);
+}
+.ds-jump a:hover,
+.ds-back:hover { border-color: var(--color-accent); background: var(--color-selected); }

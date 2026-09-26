@@ -157,20 +157,28 @@ pre {
 .global-header nav {
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
 }
 .global-header nav > a {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3);
   color: var(--color-secondary);
-  border-bottom: var(--border-width) solid var(--color-border-subtle);
-  border-left: var(--focus-width) solid var(--color-transparent);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-left: var(--focus-width) solid var(--color-border);
 }
-.global-header nav > a:hover,
-.global-header nav > a.active {
+.global-header nav > a:hover {
   background: var(--color-selected);
+  border-color: var(--color-border-strong);
   color: var(--color-text);
+}
+.global-header nav > a.active {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
 }
 .global-header nav > a.active {
   border-left-color: var(--color-accent);
@@ -2119,7 +2127,7 @@ dialog::backdrop {
     grid-column: 1 / -1;
     max-width: none;
   }
-  .header-right .organization-switcher span {
+  .header-right .organization-switcher > span {
     display: none;
   }
   .header-right .button {
@@ -2143,7 +2151,8 @@ dialog::backdrop {
 }
 
 /* Keep select labels above their controls, including inline member actions. */
-label:has(> select) {
+label:has(> select),
+label:has(> .select-field) {
   display: grid;
   gap: var(--field-label-gap);
   min-width: 0;
@@ -2155,3 +2164,52 @@ select {
   line-height: var(--leading-normal);
 }
 .organization-list .auth-actions { align-items: end; gap: var(--space-4); }
+
+/* Page destinations are bounded controls with explicit hover/current states. */
+.control-nav {
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+}
+.control-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  min-height: var(--control-height-small);
+  font-size: var(--text-sm);
+  border: var(--border-width) solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-secondary);
+}
+.control-nav a::after { content: "↗"; color: var(--color-subtle); }
+.control-nav a:hover {
+  background: var(--color-selected);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+.control-nav a.active {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.control-nav a.active::after { color: var(--color-accent); }
+.header-right a.button,
+.organization-header-actions a.button {
+  border: var(--border-width) solid var(--color-border);
+  background: var(--color-surface);
+  padding: var(--space-2) var(--space-3);
+  min-height: var(--control-height-small);
+}
+.header-right a.button:hover,
+.organization-header-actions a.button:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: var(--color-selected);
+}
+.workspace-tabs > button {
+  padding-inline: var(--space-3);
+}
+.workspace-tabs > button:hover,
+.workspace-tabs > button.selected { background: var(--color-selected); }
+.workspace-tabs > button.selected { color: var(--color-accent); }
+.breadcrumb a { text-decoration: underline; text-underline-offset: var(--space-1); }
