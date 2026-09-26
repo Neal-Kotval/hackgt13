@@ -74,10 +74,23 @@ test("tagged orphan is terminated but cannot be assigned to a job", async () => 
 test("ambiguous attempted create with no Pod remains visible and never claims cleanup", async () => {
   const { db, job } = setup({ allocated: false });
   claimRunBoxJob(db, "worker");
+  db.prepare("INSERT INTO runpod_create_attempt (job_id, attempted_at) VALUES (?, ?)").run(job.id, new Date().toISOString());
   transitionRunBoxJob(db, job.id, "failed", "worker", { reason: "Runpod create outcome ambiguous" });
   requestRunBoxStop(db, job.id, "owner");
   const result = await reconcileRunpodJobs(db, provider([]), { workerId: "worker", requestStop: requestRunBoxStop });
   assert.equal(result[0].status, "retry");
   assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+  db.close();
+});
+
+test("guard-blocked job can stop with durable no-create evidence", async () => {
+  const { db, job } = setup({ allocated: false });
+  claimRunBoxJob(db, "worker");
+  requestRunBoxStop(db, job.id, "owner");
+  const result = await reconcileRunpodJobs(db, provider([]), { workerId: "worker", requestStop: requestRunBoxStop });
+  assert.equal(result[0].status, "stopped");
+  assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
+  assert.equal(db.prepare("SELECT evidence_ref FROM run_box_transition WHERE job_id = ? AND to_state = 'stopped'").get(job.id).evidence_ref,
+    `runpod:never-created:${job.id}`);
   db.close();
 });
