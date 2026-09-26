@@ -19,7 +19,7 @@ With [just](https://github.com/casey/just) installed, the equivalent shortcut is
 
 ### Run with Doppler
 
-The repository's `doppler.yaml` selects the `hackgt` project and `dev_personal` config. [Install and log in to the Doppler CLI](https://docs.doppler.com/docs/install-cli), then run these commands **in each worktree** (Doppler scopes its selection to a directory):
+The repository's `doppler.yaml` selects the shared `hackgt` project and `dev` config. You need access to that specific Doppler project and config. [Install and log in to the Doppler CLI](https://docs.doppler.com/docs/install-cli), then run these commands **in each worktree** (Doppler scopes its selection to a directory):
 
 ```sh
 npm ci
@@ -30,7 +30,7 @@ just dev-doppler
 
 Without `just`, use `doppler run -- npm run auth:setup` and `doppler run -- npm run dev`. Doppler injects values into those processes; no `.env.local` is needed for this path. If `.env.local` already exists, process environment variables supplied by Doppler take precedence. Use `doppler secrets --only-names` to check names without printing values.
 
-Set `BETTER_AUTH_SECRET` to a stable random value of at least 32 characters in `dev_personal` before running auth setup. Keep the same value alongside the same local `.agentcloud` data directory across restarts; changing it invalidates existing sessions. The auth setup command generates a secret in `.env.local` only when one is not supplied. `BETTER_AUTH_URL` is optional and defaults to `http://127.0.0.1:3000`. `AGENTCLOUD_DATA_DIR` optionally selects a persistent data directory; otherwise each worktree uses its own `.agentcloud` directory.
+The shared `dev` config contains a stable `BETTER_AUTH_SECRET` of at least 32 characters for local testing. Keep the same value alongside the same local `.agentcloud` data directory across restarts; changing configs or secrets invalidates existing sessions. Each developer has a separate local database, so access to the secret does not create an account or copy another developer's users. The auth setup command generates a secret in `.env.local` only when one is not supplied. `BETTER_AUTH_URL` is optional and defaults to `http://127.0.0.1:3000`. `AGENTCLOUD_DATA_DIR` optionally selects a persistent data directory; otherwise each worktree uses its own `.agentcloud` directory. AWS auth staging uses a separate secret from `dev_personal` and AWS Secrets Manager; see [AWS_AUTH_STAGING.md](AWS_AUTH_STAGING.md).
 
 Email defaults to local capture with no Doppler mail keys. For SMTP, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_FROM`, and, if required by the provider, `SMTP_USER` and `SMTP_PASSWORD`. `SMTP_PORT` defaults to 587; set `SMTP_SECURE=true` for implicit TLS, usually on port 465. Keep all secret values and Doppler tokens out of Git. The existing `.env.local` setup remains available.
 
