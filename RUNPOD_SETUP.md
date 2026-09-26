@@ -1,0 +1,18 @@
+# Runpod run-box worker
+
+Runpod is the selected alternative for the live GPU test while the AWS account remains on its Free plan. The backend supports an approved, leased `runpod` job with profile `runpod-rtx-4090`: one NVIDIA GeForce RTX 4090, `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404`, Secure cloud, and a disposable 50 GB container disk. The worker checks current catalog availability and a live Secure price at or below $1/hour before creating a Pod. The quote covers the Pod price returned by Runpod's catalog; it is not a hard spending limit.
+
+Run `node scripts/run-box-worker.mjs --once runpod` for one reconciliation and job cycle, or `node scripts/run-box-worker.mjs --loop runpod` for a continuing worker. The worker shares the private app SQLite database selected by `AGENTCLOUD_DATA_DIR`. Its `RUNPOD_API_KEY` must be supplied server-side, for example through the existing Doppler setup. Never expose it to a browser or commit it. The worker also requires absolute paths in `AGENTCLOUD_RUNPOD_SSH_KEY_FILE` and `AGENTCLOUD_RUNPOD_KNOWN_HOSTS_FILE`, plus `AGENTCLOUD_RUNPOD_SSH_PUBLIC_KEY`. The private key and known-hosts file must exist before allocation. The direct Pod IPv4 host key must be pinned in the known-hosts file before SSH proof can pass. The worker records a `runpod_connection_wait` reason and retries verification when this pin or SSH endpoint is missing; it does not accept an unverified host key.
+
+Every cycle lists managed Pods and reconciles stop requests and expired jobs before claiming an allocation. **The production worker currently blocks allocation until an independent cleanup guard can attest that it is active.** This guard is not implemented yet, so the worker records a visible `allocating` retry and issues no Runpod POST. If the guard becomes unavailable after allocation, reconciliation requests Pod termination. Creation, once enabled, uses a deterministic job and expiry marker and recovers an existing matching Pod. Uncertain create responses leave a failed job for reconciliation; the worker never blindly posts another Pod. Termination requires the Runpod DELETE operation followed by a fresh GET that returns no Pod before `stopped` is recorded. A create with no durable Pod ID remains an explicit retry because one empty list cannot prove that an uncertain POST did not allocate.
+
+After SSH proof, `runpod_gpu_verification` stores the non-root account/UID, workspace, checked-out repository SHA, GPU device, CPU/CUDA timings and correctness, output hash, and evidence reference. A running Pod is not proof of a completed GPU test. The Pod remains billable until termination is confirmed.
+
+## Live launch blockers
+
+- A Runpod API key and billing authorization for a bounded Pod run are required. Neither is in the repository.
+- The direct SSH host key for a new Pod is not authenticated by the current Runpod API adapter. A trusted pinning step is needed after the endpoint appears; the worker deliberately waits rather than using trust-on-first-use.
+- The reconciliation loop is the current expiry mechanism. The private staging host may stop, so a separate always-on cleanup guard or verified provider-side TTL is required before a billable live run. A `$1/hour` price check and warning budget cannot replace that guard.
+- No Runpod Pod has been launched or GPU verification observed by this implementation. Tests use a mock provider and verifier.
+
+The AWS G6 attempt and current Free-plan block remain recorded in [AWS_SETUP.md](AWS_SETUP.md).
