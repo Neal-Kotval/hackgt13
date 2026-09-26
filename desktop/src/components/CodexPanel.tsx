@@ -4,7 +4,7 @@ import type { DeepLinkParseResult, ProjectSnapshot } from "../lib/types";
 import { Select } from "./ui/Select";
 
 type Session = { id: string; projectId: string; agentId: string; status: "initializing" | "auth_required" | "ready" | "running" | "error" | "stopped"; error: string | null };
-type Event = { id: string; kind: "user" | "assistant" | "command" | "status" | "error"; text: string; updatedAt: string };
+type Event = { id: string; kind: "user" | "assistant" | "command" | "status" | "error"; text: string; actorName?: string; updatedAt: string };
 async function request<T>(path: string, body?: object): Promise<T> {
   const response = await desktopApi().fetchHuman(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : undefined);
   const result = JSON.parse(response.body);
@@ -108,7 +108,7 @@ export function CodexPanel({ webBaseUrl, deepLink, onDeepLinkHandled }: { webBas
       <div className="codex-session-status"><span className="field-label">Local Docker · {session.status.replaceAll("_", " ")}</span>{session.status === "running" && <button className="button danger" disabled={busy} onClick={() => void act("interrupt")}>Stop generation</button>}{["error", "stopped"].includes(session.status) && <button className="button primary" disabled={busy} onClick={() => void act("resume")}>Reconnect Codex</button>}</div>
       {session.error && <p className="error-banner" role="alert">{session.error}</p>}
       {session.status === "auth_required" && <p className="credential-banner">Codex authentication is required. Complete the setup instructions on the website before sending a message.</p>}
-      <div className="codex-events" aria-label="Codex conversation">{snapshot.events.length ? snapshot.events.map(event => <article className="codex-event" data-kind={event.kind} key={event.id}><strong className="field-label">{event.kind === "command" ? "Command · Local Docker" : event.kind === "assistant" ? "Codex" : event.kind === "user" ? "You" : event.kind}</strong><pre>{event.text}</pre></article>) : <p className="brand-meta">No messages yet. Send instructions when Codex is ready.</p>}</div>
+      <div className="codex-events" aria-label="Codex conversation">{snapshot.events.length ? snapshot.events.map(event => <article className="codex-event" data-kind={event.kind} key={event.id}><strong className="field-label">{event.kind === "command" ? "Command · Local Docker" : event.kind === "assistant" ? "Codex" : event.kind === "user" ? event.actorName || "Project member" : event.kind}</strong><pre>{event.text}</pre></article>) : <p className="brand-meta">No messages yet. Send instructions when Codex is ready.</p>}</div>
       <form className="composer" onSubmit={e => { e.preventDefault(); if (session.status === "ready" && draft.trim() && !busy) void act("message"); }}><label className="composer-hint" htmlFor="codex-message">Message Codex · instructions run inside the local Docker box</label><div className="composer-row"><textarea id="codex-message" value={draft} placeholder="Ask Codex to work on your project" onChange={e => setDrafts(current => ({ ...current, [sessionId]: e.target.value }))} /><button className="button primary" disabled={busy || session.status !== "ready" || !draft.trim()}>Send to Codex</button></div></form>
     </>}
     {actionError && <p className="error-banner" role="alert">{actionError}</p>}

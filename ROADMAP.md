@@ -167,3 +167,13 @@ Snapshots and rollback, graphical desktop access, notifications, file sync, mana
 ## Release evidence
 
 For each phase, record the tested revision, commands and results, screenshots or browser trace, and any remaining limitations. Do not mark a phase complete from implementation alone. [PRODUCT.md](PRODUCT.md) defines product truth; [ARCHITECTURE.md](ARCHITECTURE.md) defines the technical boundaries; [DESIGN.md](DESIGN.md) defines visual constraints.
+
+## Local Docker Codex integration (HAC-116)
+
+The opt-in local Codex path initializes a real Codex app-server in a Docker CPU
+box from project Settings and lets desktop send turns to the same persistent
+thread. Employee membership gates reads and chat; owners control setup and
+lifecycle. SQLite stores bounded attributed session items, while the Docker
+volume retains Codex history and workspace files. This local implementation does
+not satisfy the AWS/GPU execution or public multi-tenant milestones above. See
+[LOCAL_CODEX.md](LOCAL_CODEX.md) for setup, authentication, recovery and limits.

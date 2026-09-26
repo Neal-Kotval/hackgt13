@@ -17,7 +17,9 @@
     "aws:gpu:preflight": "node scripts/aws-gpu-preflight.mjs",
     "dev:aws": "node scripts/dev-aws.mjs",
     "dev:docker": "node scripts/dev-docker.mjs",
-    "test:motion:browser": "node tests/motion.browser.mjs"
+    "test:motion:browser": "node tests/motion.browser.mjs",
+    "codex:setup": "node scripts/codex-setup.mjs",
+    "dev:codex": "node scripts/codex-dev.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
