@@ -93,3 +93,11 @@
 }
 .ds-jump a:hover,
 .ds-back:hover { border-color: var(--color-accent); background: var(--color-selected); }
+.ds-select-label {
+  display: grid;
+  gap: var(--field-label-gap);
+  max-width: var(--sidebar-width-wide);
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-secondary);
+}
