@@ -73,7 +73,7 @@ export function ThreadList({
               </button>
               <button
                 type="button"
-                className="button ghost thread-delete"
+                className="button danger thread-delete"
                 aria-label={`Delete ${thread.title}`}
                 disabled={busy}
                 onClick={() => {
