@@ -225,6 +225,23 @@ test("GPU request stores a bounded quote without authorizing a launch", async ()
   assert.equal(result.request.decision.status, "not_evaluated");
 });
 
+test("Runpod request pins GPU profile and ceiling without inventing a price", async () => {
+  const p = await action({ type: "createProject", name: "Runpod profile test",
+    repo: "https://example.com/runpod", template: "blank", compute: "Hosted Linux" });
+  const result = await resourceAction({
+    type: "requestResource", projectId: p.id, kind: "gpu",
+    gpuProfileId: "runpod-rtx-4090", durationHours: 1,
+    purpose: "Run a CUDA matrix smoke workload",
+  });
+  assert.deepEqual(result.request.computePreference, {
+    provider: "runpod", profileId: "runpod-rtx-4090",
+    gpuId: "NVIDIA GeForce RTX 4090", cloud: "SECURE",
+    durationHours: 1, maxHourlyUsd: 1,
+  });
+  assert.equal(result.request.status, "requested");
+  assert.equal(result.request.decision.status, "not_evaluated");
+});
+
 test("older project snapshots gain empty resource arrays without changing existing records", async () => {
   const file = path.join(temporary, "data", "state.json");
   const disk = JSON.parse(await readFile(file, "utf8"));
