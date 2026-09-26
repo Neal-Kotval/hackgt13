@@ -184,3 +184,13 @@ sidebar, icon navigation, an account card, and a keyboard-accessible drawer on
 narrow windows. Flat dark surfaces, rounded controls, and semantic action colors
 consume the same tokens. Project and task dropdowns reuse the web Radix Select
 primitive directly, including keyboard navigation and accessible names.
+
+### Project chat presentation
+
+Chat history lives in the shared navigation sidebar (or its drawer on narrow
+windows). New chats open with a centered greeting and composer; conversations use
+a restrained reading column, user bubbles, and unboxed assistant turns. Enter
+sends, Shift+Enter adds a line, and composing text with an IME does not send early.
+Send and Stop have accessible labels. Removed routine message counts and explanatory
+banners do not change storage or execution: chat history is still saved on this
+device, and missing configuration and failed turns remain visible.

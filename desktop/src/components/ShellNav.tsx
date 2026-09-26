@@ -10,6 +10,7 @@ type ShellNavProps = {
   onSectionChange: (section: AppSection) => void;
   onSignOut: () => void;
   children: ReactNode;
+  renderHistory?: (closeNavigation: () => void) => ReactNode;
 };
 const sections = [
   { id: "tasks", label: "Tasks", icon: ListChecks },
@@ -17,7 +18,7 @@ const sections = [
   { id: "local-chat", label: "Project chat", icon: ChatCircle },
 ] as const;
 
-export function ShellNav({ section, employeeName, employeeEmail, busy, onSectionChange, onSignOut, children }: ShellNavProps) {
+export function ShellNav({ section, employeeName, employeeEmail, busy, onSectionChange, onSignOut, children, renderHistory }: ShellNavProps) {
   const [open, setOpen] = useState(false);
   const sidebar = useRef<HTMLElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -33,6 +34,11 @@ export function ShellNav({ section, employeeName, employeeEmail, busy, onSection
       if (event.key !== "Tab") return;
       const items = Array.from(sidebar.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []).filter(item => item.getClientRects().length);
       const first = items[0], last = items[items.length - 1];
+      if (!sidebar.current?.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+        return;
+      }
       if (event.shiftKey && document.activeElement === first) {event.preventDefault(); last?.focus();}
       else if (!event.shiftKey && document.activeElement === last) {event.preventDefault(); first?.focus();}
     };
@@ -48,6 +54,13 @@ export function ShellNav({ section, employeeName, employeeEmail, busy, onSection
       else sidebar.current?.querySelector<HTMLButtonElement>('[aria-current="page"]')?.focus();
     };
   }, [open]);
+  // A deleted history row can remove the focused control while the drawer is open.
+  useEffect(() => {
+    if (!open || busy || sidebar.current?.contains(document.activeElement)) return;
+    const next = sidebar.current?.querySelector<HTMLButtonElement>(".thread-item")
+      ?? sidebar.current?.querySelector<HTMLButtonElement>(".shell-close");
+    next?.focus();
+  }, [busy, open, renderHistory]);
   return (
     <div className="shell">
       <header className="shell-mobile-header">
@@ -61,6 +74,7 @@ export function ShellNav({ section, employeeName, employeeEmail, busy, onSection
         <nav className="control-nav" aria-label="App sections">
           {sections.map(({ id, label, icon: Icon }) => <button key={id} type="button" className="section-tab" data-active={section === id} aria-current={section === id ? "page" : undefined} onClick={() => {onSectionChange(id); setOpen(false);}}><Icon aria-hidden="true" /><span>{label}</span></button>)}
         </nav>
+        {renderHistory?.(() => setOpen(false))}
         <div className="shell-account">
           <div className="account-identity"><span className="account-avatar" aria-hidden="true">{initials}</span><div className="account-details"><strong>{employeeName}</strong><span title={employeeEmail}>{employeeEmail}</span></div></div>
           <button type="button" className="button ghost" onClick={onSignOut} disabled={busy}><SignOut aria-hidden="true" />Sign out</button>

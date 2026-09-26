@@ -121,3 +121,12 @@ Tasks, Environments, and Project chat destinations use the same flush glass
 sidebar and account-card treatment, with a focus-managed drawer on narrow
 windows. Desktop errors use danger colors; agent identity colors must not
 stand in for failed states.
+
+Project chat places its history inside the shared desktop navigation. The reading
+column and composer use `--content-narrow`, with user turns on a neutral selected
+surface and assistant turns on the canvas. Only the empty-chat greeting is centered;
+conversation content remains left aligned. A compact composer expands with its
+text, keeps Send/Stop reachable, and exposes keyboard guidance through its accessible
+description. Routine timestamps, message counts, and repeated setup explanations
+are omitted; errors and missing configuration remain visible. History actions are
+available through the existing focus-managed navigation drawer on narrow windows.
