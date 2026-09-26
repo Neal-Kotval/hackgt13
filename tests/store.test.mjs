@@ -182,6 +182,23 @@ test("browser-facing Host permits same-origin mutations when Next rewrites the r
     ),
   );
 });
+test("configured HTTPS app origin permits CloudFront proxied mutations", async () => {
+  const { sameOrigin } = await import(path.join(temporary, "http.js"));
+  const before = process.env.BETTER_AUTH_URL;
+  process.env.BETTER_AUTH_URL = "https://demo.cloudfront.net";
+  try {
+    const request = (origin) => new Request("http://localhost:3000/api/state", {
+      method: "POST",
+      headers: { origin, host: "demo.cloudfront.net", "x-forwarded-proto": "http" },
+    });
+    assert.doesNotThrow(() => sameOrigin(request("https://demo.cloudfront.net")));
+    assert.throws(() => sameOrigin(request("http://demo.cloudfront.net")), { status: 403 });
+    assert.throws(() => sameOrigin(request("https://evil.example")), { status: 403 });
+  } finally {
+    if (before === undefined) delete process.env.BETTER_AUTH_URL;
+    else process.env.BETTER_AUTH_URL = before;
+  }
+});
 test("cross-origin browser mutations and malformed bodies are rejected", async () => {
   const { sameOrigin, body } = await import(path.join(temporary, "http.js"));
   assert.throws(

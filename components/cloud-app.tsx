@@ -289,7 +289,7 @@ export function CloudApp() {
               <div>
                 <div className="eyebrow">
                   <span className="status-dot" />
-                  Remote control plane / setup pending
+                  Project workspace / setup pending
                 </div>
                 <h1>{project.name}</h1>
                 <p>
@@ -317,14 +317,14 @@ export function CloudApp() {
                 <ShieldCheck />
                 Saved to disk
               </span>
-              <span className="meta-right">Provisioning not configured</span>
+              <span className="meta-right">Project workspace pending</span>
             </div>
             <div className="demo-note">
               <Warning />
               <span>Project saved.</span>
               <span className="muted">
-                Resource records and requests are local. Remote compute, GPU
-                execution, and Git worktrees are not provisioned yet.
+                Saving this project does not provision a workspace or Git
+                worktrees. GPU job approvals and observed status appear under Requests.
               </span>
             </div>
             <nav className="control-nav" aria-label="Project control plane">

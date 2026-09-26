@@ -19,7 +19,7 @@ Switching Tasks ↔ Local chat keeps in-memory chat drafts for the session.
 
 - Node.js 22 LTS
 - macOS (primary hackathon target)
-- Running AgentCloud web app for employee sign-in (`just` / `just dev`)
+- Reachable AgentCloud web app for employee sign-in (local `just dev` or the shared AWS URL)
 - Optional: `OPENAI_API_KEY` for real assistant replies in Local chat
 
 ## Install and launch
@@ -70,6 +70,7 @@ Desktop reuses the web app’s Better Auth employee accounts and session cookies
 
 1. Start the web app (`just` / `just dev`) and create/verify an account there if needed.
 2. Set `AGENTCLOUD_URL` in `desktop/.env` if the web origin is not `http://127.0.0.1:3000`.
+   For the shared AWS app, run `doppler setup --no-interactive` in the repository root, then `just desktop-doppler`. The shared Doppler `dev` config supplies `AGENTCLOUD_URL`; no AWS credentials or local web server are needed for this path. Environment variables supplied by Doppler take precedence over `desktop/.env`.
 3. Launch desktop (`just desktop`) and sign in with that email/password.
 4. Human API calls from the desktop bridge send the session cookie only — never an agent `Authorization: Bearer` token.
 5. Unauthenticated calls to protected routes such as `/api/state` receive **401**.

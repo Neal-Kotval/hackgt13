@@ -19,7 +19,8 @@ load_staging_outputs() {
   STAGING_INSTANCE="$(tf_output instance_id)"
   STAGING_BUCKET="$(tf_output artifact_bucket_name)"
   STAGING_SECRET="$(tf_output auth_secret_arn)"
-  [[ "$STAGING_REGION" =~ ^[a-z0-9-]+$ && "$STAGING_INSTANCE" =~ ^i-[a-f0-9]+$ && "$STAGING_BUCKET" =~ ^[a-z0-9.-]+$ && "$STAGING_SECRET" =~ ^arn:aws:secretsmanager: ]] || {
+  STAGING_PUBLIC_URL="$(tf_output public_url)"
+  [[ "$STAGING_REGION" =~ ^[a-z0-9-]+$ && "$STAGING_INSTANCE" =~ ^i-[a-f0-9]+$ && "$STAGING_BUCKET" =~ ^[a-z0-9.-]+$ && "$STAGING_SECRET" =~ ^arn:aws:secretsmanager: && "$STAGING_PUBLIC_URL" =~ ^https://[a-z0-9]+\.cloudfront\.net$ ]] || {
     echo 'Terraform staging outputs are missing or invalid; apply the reviewed Terraform plan first.' >&2
     exit 1
   }

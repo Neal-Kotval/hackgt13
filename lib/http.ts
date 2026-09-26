@@ -3,7 +3,10 @@ export function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   const host = request.headers.get("host");
   const requestHost = host || new URL(request.url).host;
-  const requestProtocol = request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
+  const publicOrigin = process.env.BETTER_AUTH_URL ? new URL(process.env.BETTER_AUTH_URL) : null;
+  const requestProtocol = publicOrigin?.host === requestHost
+    ? publicOrigin.protocol.replace(":", "")
+    : request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
   let parsedOrigin: URL | null = null;
   try {
     if (origin) parsedOrigin = new URL(origin);

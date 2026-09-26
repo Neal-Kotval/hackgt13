@@ -1,7 +1,7 @@
 "use client";
 import { Select } from "@/components/ui/select";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   CheckCircle,
@@ -25,6 +25,15 @@ import "./resources.css";
 
 type ResourceAction = (input: Record<string, unknown>) => Promise<unknown>;
 type ResourceProps = { project: Project; onAction: ResourceAction };
+type RunBoxJob = {
+  id: string;
+  resource_request_id: string;
+  state: "queued" | "allocating" | "connecting" | "verifying" | "ready" | "stopping" | "stopped" | "failed";
+  provider_resource_id: string | null;
+  max_duration_minutes: number;
+  stop_requested_at: string | null;
+  created_at: string;
+};
 
 const resourceKinds: { value: ResourceKind; label: string }[] = [
   { value: "run-box", label: "Run box" },
@@ -363,9 +372,75 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [jobs, setJobs] = useState<RunBoxJob[]>([]);
+  const [projectRole, setProjectRole] = useState<"owner" | "member" | null>(null);
+  const [jobBusy, setJobBusy] = useState("");
+  const [jobError, setJobError] = useState("");
+  const [jobSuccess, setJobSuccess] = useState("");
   const selectedResource = resources.find(
     (resource) => resource.id === resourceId,
   );
+
+  useEffect(() => {
+    let active = true;
+    async function refreshJobs() {
+      const [employeeResponse, jobsResponse] = await Promise.all([
+        fetch("/api/employee"),
+        fetch(`/api/run-boxes?projectId=${encodeURIComponent(project.id)}`),
+      ]);
+      if (!employeeResponse.ok || !jobsResponse.ok) throw new Error("Could not load run-box status.");
+      const employee = await employeeResponse.json() as { memberships: { projectId: string; role: "owner" | "member" }[] };
+      const data = await jobsResponse.json() as { jobs: RunBoxJob[] };
+      if (active) {
+        setProjectRole(employee.memberships.find((item) => item.projectId === project.id)?.role ?? null);
+        setJobs(data.jobs);
+        setJobError("");
+      }
+    }
+    refreshJobs().catch((caught) => { if (active) setJobError(caught instanceof Error ? caught.message : "Could not load run-box status."); });
+    const timer = window.setInterval(() => {
+      refreshJobs().catch((caught) => { if (active) setJobError(caught instanceof Error ? caught.message : "Could not load run-box status."); });
+    }, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [project.id]);
+
+  async function decideRunBox(resourceRequestId: string) {
+    setJobBusy(resourceRequestId);
+    setJobError("");
+    setJobSuccess("");
+    try {
+      const response = await fetch("/api/run-boxes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, resourceRequestId, idempotencyKey: `gpu-${resourceRequestId}` }),
+      });
+      const data = await response.json() as { job?: RunBoxJob; error?: string };
+      if (!response.ok || !data.job) throw new Error(data.error || "GPU approval was not saved.");
+      setJobs((current) => [{ ...data.job!, resource_request_id: resourceRequestId }, ...current.filter((job) => job.id !== data.job!.id)]);
+      setJobSuccess("GPU job approved and queued. The worker may launch a billable instance.");
+    } catch (caught) {
+      setJobError(caught instanceof Error ? caught.message : "Could not approve GPU job.");
+    } finally { setJobBusy(""); }
+  }
+
+  async function stopRunBox(job: RunBoxJob) {
+    setJobBusy(job.id);
+    setJobError("");
+    setJobSuccess("");
+    try {
+      const response = await fetch(`/api/run-boxes/${encodeURIComponent(job.id)}/stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id }),
+      });
+      const data = await response.json() as { job?: RunBoxJob; error?: string };
+      if (!response.ok || !data.job) throw new Error(data.error || "Stop request was not saved.");
+      setJobs((current) => current.map((item) => item.id === job.id ? { ...data.job!, resource_request_id: item.resource_request_id } : item));
+      setJobSuccess("Stop requested. Wait for confirmed termination before treating this box as released.");
+    } catch (caught) {
+      setJobError(caught instanceof Error ? caught.message : "Could not request a stop.");
+    } finally { setJobBusy(""); }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -413,8 +488,8 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
           <p className="resource-eyebrow">Access and allocation</p>
           <h2 id="resource-requests-title">Requests</h2>
           <p>
-            Ask for a resource in the project record. Employee policy and remote
-            allocation are not connected.
+            Save a resource request, then approve a bounded GPU job. The worker
+            reports allocation and cleanup separately.
           </p>
         </div>
       </div>
@@ -422,9 +497,9 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
         <form className="resource-form resource-panel" onSubmit={submit}>
           <div>
             <h3>New request</h3>
-            <p className="resource-note">
-              A saved request remains pending policy evaluation. It cannot start
-              a machine.
+              <p className="resource-note">
+                Saving a request does not start a machine. Project owners can
+                approve a GPU job from the request history.
             </p>
           </div>
           <label>
@@ -502,9 +577,8 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
               <p className="resource-note">
                 AWS Price List quote from {demoGpuProfile.quotedAt} for{" "}
                 {demoGpuProfile.region}. Excludes storage, public IPv4,
-                transfer, and taxes. GPU quota is pending; price and capacity
-                must be checked again before launch. This duration is requested
-                only and is not enforced yet.
+                transfer, and taxes. Quota, price, credit, and capacity are
+                checked again before launch. Approval may incur charges.
               </p>
             </div>
           )}
@@ -556,6 +630,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
           className="resource-request-history"
           aria-label="Resource request history"
         >
+          <FormFeedback error={jobError} success={jobSuccess} />
           <h3>
             Request history{" "}
             <span className="resource-count">{requests.length}</span>
@@ -575,6 +650,11 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                 key={request.id}
                 project={project}
                 request={request}
+                job={jobs.find((item) => item.resource_request_id === request.id)}
+                projectRole={projectRole}
+                busy={jobBusy}
+                onApprove={decideRunBox}
+                onStop={stopRunBox}
               />
             ))
           )}
@@ -587,9 +667,19 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
 function RequestCard({
   request,
   project,
+  job,
+  projectRole,
+  busy,
+  onApprove,
+  onStop,
 }: {
   request: ResourceRequest;
   project: Project;
+  job?: RunBoxJob;
+  projectRole: "owner" | "member" | null;
+  busy: string;
+  onApprove: (resourceRequestId: string) => Promise<void>;
+  onStop: (job: RunBoxJob) => Promise<void>;
 }) {
   const resource = (project.resources ?? []).find(
     (entry) => entry.id === request.resourceId,
@@ -633,17 +723,44 @@ function RequestCard({
         </div>
       </dl>
       <div
-        className={`resource-decision resource-decision--${decision.status}`}
+        className={`resource-decision resource-decision--${job ? "approved" : decision.status}`}
       >
         <ShieldWarning aria-hidden="true" />
         <div>
-          <strong>Permission: {decision.status.replace("_", " ")}</strong>
-          <p>{decision.reason}</p>
+          <strong>Permission: {job ? "approved" : decision.status.replace("_", " ")}</strong>
+          <p>{job ? "A project owner approved this GPU job. Allocation and readiness are shown below." : decision.reason}</p>
         </div>
       </div>
-      {request.status === "requested" && (
+      {job ? (
+        <div className="resource-job">
+          <div className="resource-detail-title">
+            <h4>GPU run box</h4>
+            <span className={`resource-badge resource-badge--${job.state}`}>
+              {job.state}
+            </span>
+          </div>
+          <dl className="resource-facts resource-facts--compact">
+            <div><dt>Provider</dt><dd>AWS EC2{job.provider_resource_id ? ` · ${job.provider_resource_id}` : " · not allocated"}</dd></div>
+            <div><dt>Approved limit</dt><dd>{job.max_duration_minutes} minutes</dd></div>
+            <div><dt>Cleanup</dt><dd>{job.state === "stopped" ? job.provider_resource_id ? "EC2 release confirmed by worker" : "Cancelled before allocation" : job.stop_requested_at ? "Stop requested; awaiting confirmation" : "Not requested"}</dd></div>
+          </dl>
+          {projectRole === "owner" && job.state !== "stopped" && !job.stop_requested_at && (
+            <button className="button" type="button" disabled={Boolean(busy)} onClick={() => void onStop(job)}>
+              {busy === job.id ? "Requesting stop…" : "Request stop"}
+            </button>
+          )}
+          {job.state === "failed" && <p className="resource-note">The job failed. Check worker evidence and request cleanup before trying again.</p>}
+        </div>
+      ) : request.kind === "gpu" && request.computePreference?.provider === "aws-ec2" && projectRole === "owner" ? (
+        <div className="resource-job">
+          <p className="resource-note">Approving this request queues an AWS GPU launch for up to {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}. Compute is quoted at ${request.computePreference.estimatedComputeUsd.toFixed(2)} before storage, network, and tax. The worker must pass live cost and safety checks before launch.</p>
+          <button className="button primary" type="button" disabled={Boolean(busy)} onClick={() => void onApprove(request.id)}>
+            {busy === request.id ? "Approving…" : "Approve and queue GPU"}
+          </button>
+        </div>
+      ) : request.status === "requested" && (
         <p className="resource-note">
-          No resource has been allocated or started.
+          No resource has been allocated or started. A project owner must approve a GPU job.
         </p>
       )}
     </article>
