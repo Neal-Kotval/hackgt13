@@ -58,7 +58,7 @@ export function OrganizationDashboard() {
   }
   function invite(event: FormEvent<HTMLFormElement>) {event.preventDefault();if(data?.mailMode==="unavailable"){setError("Email delivery is unavailable. Ask an administrator to configure SMTP before inviting teammates.");return;}const form=event.currentTarget;const values=new FormData(form);void run(async()=>{checked(await client.organization.inviteMember({email:String(values.get("email")).trim(),role:values.get("role") as "member" | "admin",organizationId:active!.id}));form.reset();},data?.mailMode==="local"?"Invitation captured in the local mailbox. No external email was sent.":"Invitation submitted to the email provider.");}
   return <>
-  <main className="organization-page"><div className="section-heading"><h1>Organization settings</h1><button className="button" disabled={!data || busy} onClick={() => createDialog.current?.showModal()}>New organization</button></div>
+  <main className="organization-page"><div className="section-heading"><h1>Organizations</h1><button className="button" disabled={!data || busy} onClick={() => createDialog.current?.showModal()}>New organization</button></div>
     {error && <p className="auth-error" role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     {!data ? <p>Loading organizations…</p> : <>
       <section className="organization-panel"><h2>Your organizations</h2>

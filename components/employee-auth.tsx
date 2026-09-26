@@ -64,7 +64,7 @@ export function EmployeeMenu({ navigation = true }: { navigation?: boolean }) {
       const result = await client.organization.setActive({ organizationId: e.target.value });
       if (result.error) setError("Could not switch organization"); else window.location.assign("/projects");
     }}><option value="" disabled>Select organization</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</Select></label>}
-    {navigation && <Link className="button ghost" href="/organizations">Organization settings</Link>}
+    {navigation && <Link className="button ghost" href="/organizations">Organizations</Link>}
     <div className="account-identity"><span className="account-avatar" aria-hidden="true">{data?.user ? initials : <User />}</span><div className="account-details"><strong className="local-label">{name}</strong>{data?.user?.email && <span className="account-email" title={data.user.email}>{data.user.email}</span>}</div></div>
     <button className="button ghost" onClick={async () => {try {const result=await client.signOut();if(result.error)setError("Sign-out failed");else window.location.assign("/sign-in");}catch{setError("Sign-out failed");}}}><SignOut aria-hidden="true" />Sign out</button>
     {error && <span role="alert">{error}</span>}

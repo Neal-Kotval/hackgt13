@@ -206,7 +206,7 @@ try {
       await expect(page.locator(".site-sidebar")).not.toBeVisible();
       await expect(page.getByRole("button", { name: "Open navigation" })).toBeFocused();
     }
-    for (const destination of ["Projects", "Organization settings", "Overview", "Environments", "Runs", "Settings"]) {
+    for (const destination of ["Projects", "Organizations", "Overview", "Environments", "Runs", "Settings"]) {
       if (width <= 768) await page.getByRole("button", { name: "Open navigation" }).click();
       const link = page.locator(".site-navigation").getByRole("link", { name: destination, exact: true });
       const href = await link.getAttribute("href");
