@@ -3,7 +3,8 @@ set -euo pipefail
 REVISION="${1:-}"
 SECRET_ID="${2:-}"
 REGION="${3:-}"
-[[ "$REVISION" =~ ^[a-f0-9]{40}$ && "$SECRET_ID" == arn:aws:secretsmanager:* && "$REGION" =~ ^[a-z0-9-]+$ ]] || exit 2
+PUBLIC_URL="${4:-}"
+[[ "$REVISION" =~ ^[a-f0-9]{40}$ && "$SECRET_ID" == arn:aws:secretsmanager:* && "$REGION" =~ ^[a-z0-9-]+$ && "$PUBLIC_URL" =~ ^https://[a-z0-9]+\.cloudfront\.net$ ]] || exit 2
 RELEASE="/opt/agentcloud/releases/$REVISION"
 
 systemctl is-active --quiet amazon-ssm-agent || { echo 'Amazon SSM agent is not active.' >&2; exit 1; }
@@ -45,6 +46,7 @@ Group=agentcloud
 WorkingDirectory=/opt/agentcloud/current
 Environment=AGENTCLOUD_AUTH_SECRET_ID=$SECRET_ID
 Environment=AWS_DEFAULT_REGION=$REGION
+Environment=AGENTCLOUD_PUBLIC_ORIGIN=$PUBLIC_URL
 Environment=HOME=/var/lib/agentcloud
 ExecStartPre=/usr/local/bin/agentcloud-service-start setup
 ExecStart=/usr/local/bin/agentcloud-service-start start
