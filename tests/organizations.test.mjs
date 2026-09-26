@@ -114,3 +114,17 @@ test("legacy projects require their existing owner to move them into an organiza
  assert.equal((await routes.organizations.POST(request("organizations",{type:"adoptProject",projectId:p.id},owner.cookie))).status,200);
  assert.equal((await routes.organizations.POST(request("organizations",{type:"adoptProject",projectId:p.id},owner.cookie))).status,409);
 });
+test("public local-mail configuration keeps authenticated organization reads available",async()=>{
+ const previous=process.env.BETTER_AUTH_URL;
+ const mode=process.env.AGENTCLOUD_MAIL_MODE;
+ try{
+  process.env.BETTER_AUTH_URL="https://shared.example.test";
+  process.env.AGENTCLOUD_MAIL_MODE="local";
+  const response=await routes.organizations.GET(request("organizations",null,owner.cookie));
+  assert.equal(response.status,200);
+  assert.equal((await response.json()).mailMode,"unavailable");
+ }finally{
+  if(previous===undefined)delete process.env.BETTER_AUTH_URL;else process.env.BETTER_AUTH_URL=previous;
+  if(mode===undefined)delete process.env.AGENTCLOUD_MAIL_MODE;else process.env.AGENTCLOUD_MAIL_MODE=mode;
+ }
+});
