@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const region = "us-east-1";
 const accountId = "662660921850";
+const maxHourlyComputeUsd = 1;
 const checks = [];
 
 async function aws(...args) {
@@ -31,12 +32,21 @@ try {
   check("AWS account", identity.Account === accountId, identity.Account);
   if (identity.Account !== accountId) throw Error("Account mismatch; stopped before regional checks");
 
-  const [quota, templates, budget, expiry, rule, instances] = await Promise.all([
+  const [quota, templates, budget, expiry, rule, targets, plan, pricing, instances] = await Promise.all([
     aws("service-quotas", "get-service-quota", "--region", region, "--service-code", "ec2", "--quota-code", "L-DB2E81BA"),
     aws("ec2", "describe-launch-templates", "--region", region, "--launch-template-names", "agentcloud-demo-g6"),
     aws("budgets", "describe-budget", "--account-id", accountId, "--budget-name", "AgentCloud-Demo-Gross-25"),
     aws("lambda", "get-function-configuration", "--region", region, "--function-name", "agentcloud-demo-expiry"),
     aws("events", "describe-rule", "--region", region, "--name", "agentcloud-demo-expiry"),
+    aws("events", "list-targets-by-rule", "--region", region, "--rule", "agentcloud-demo-expiry"),
+    aws("freetier", "get-account-plan-state", "--region", region),
+    aws("pricing", "get-products", "--region", region, "--service-code", "AmazonEC2", "--filters",
+      "Type=TERM_MATCH,Field=instanceType,Value=g6.xlarge",
+      "Type=TERM_MATCH,Field=location,Value=US East (N. Virginia)",
+      "Type=TERM_MATCH,Field=operatingSystem,Value=Linux",
+      "Type=TERM_MATCH,Field=tenancy,Value=Shared",
+      "Type=TERM_MATCH,Field=preInstalledSw,Value=NA",
+      "Type=TERM_MATCH,Field=capacitystatus,Value=Used", "--max-results", "1"),
     aws("ec2", "describe-instances", "--region", region, "--filters", "Name=tag:Project,Values=AgentCloudDemo", "Name=instance-state-name,Values=pending,running,stopping,stopped"),
   ]);
 
@@ -63,6 +73,17 @@ try {
 
   check("Expiry Lambda", expiry.State === "Active" && expiry.LastUpdateStatus === "Successful" && expiry.Environment?.Variables?.MAX_AGE_MINUTES === "120", `${expiry.State}, max age ${expiry.Environment?.Variables?.MAX_AGE_MINUTES} minutes`);
   check("Expiry schedule", rule.State === "ENABLED" && rule.ScheduleExpression === "rate(5 minutes)", `${rule.State}, ${rule.ScheduleExpression}`);
+  check("Expiry schedule target", targets.Targets?.some((target) => target.Arn === expiry.FunctionArn), `${targets.Targets?.length || 0} target(s)`);
+
+  const credits = plan.accountPlanRemainingCredits;
+  const expiration = Date.parse(plan.accountPlanExpirationDate);
+  check("Free plan active", plan.accountId === accountId && plan.accountPlanType === "FREE" && plan.accountPlanStatus === "ACTIVE" && credits?.unit === "USD" && credits.amount > 0 && expiration > Date.now() + 3 * 60 * 60 * 1000, `${plan.accountPlanStatus}, ${credits?.amount} ${credits?.unit}, expires ${plan.accountPlanExpirationDate}`);
+  const price = JSON.parse(pricing.PriceList?.[0] || "{}");
+  const onDemand = Object.values(price.terms?.OnDemand || {})[0];
+  const dimension = Object.values(onDemand?.priceDimensions || {}).find((value) => value.unit === "Hrs");
+  const hourlyUsd = Number(dimension?.pricePerUnit?.USD);
+  check("G6 compute price", hourlyUsd > 0 && hourlyUsd <= maxHourlyComputeUsd, `${hourlyUsd} USD/hour (check ceiling ${maxHourlyComputeUsd}); storage, network, and tax excluded`);
+
   const active = (instances.Reservations || []).flatMap((reservation) => reservation.Instances || []);
   check("No active demo instance", active.length === 0, `${active.length} active instance(s)`);
 
@@ -75,4 +96,4 @@ try {
 
 for (const item of checks) console.log(`${item.passed ? "PASS" : "FAIL"} ${item.label}: ${item.detail}`);
 if (checks.some((item) => !item.passed)) process.exitCode = 1;
-console.log("Launch still requires current credit/price/capacity checks, an approved worker job, scoped worker role, and verified cleanup.");
+console.log("Launch still requires a capacity check, approved worker job, scoped worker role, and verified cleanup. Re-run this check immediately before launch.");
