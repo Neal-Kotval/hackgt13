@@ -45,7 +45,7 @@ export function ShellNav({
             aria-current={section === "local-chat" ? "page" : undefined}
             onClick={() => onSectionChange("local-chat")}
           >
-            Local chat
+            Project chat
           </button>
         </nav>
         <button
