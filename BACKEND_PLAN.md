@@ -6,13 +6,14 @@ This is the proposed implementation contract for the first remote AgentCloud run
 
 Build one provider-neutral run-box lifecycle. Support an **existing, user-controlled SSH host** as the shortest proof path and **Amazon EC2** as the first managed provider. Use the same request, decision, run, event, and evidence records for both. A known host such as Cresix may be used if access is available; its GPU is existing capacity, not capacity AgentCloud purchased. An EC2 allocation is recorded only after an actual AWS launch succeeds; its run box becomes ready only after execution-environment verification.
 
-For the first EC2 path, prefer one instance per active run. This makes instance identity, stop behavior, and attribution easy to inspect. It does not by itself enforce restrictions inside an unrestricted shell. A later scheduler can place multiple runs on shared capacity once isolation, leases, and accounting are real.
+For the first EC2 path, prefer one instance per allocated project environment, with at most one active agent run in that environment for the initial demo. This makes instance identity, stop behavior, and attribution easy to inspect. It does not by itself enforce restrictions inside an unrestricted shell. A later scheduler can place multiple runs on shared capacity once isolation, leases, and accounting are real.
 
 The application server remains the **control plane**. A separate worker is the only component permitted to use provider credentials and perform box operations. The box executes the agent and workload and sends bounded, attributed events. The browser never receives AWS credentials, SSH private keys, model credentials, or a direct arbitrary-command capability.
 
 ```mermaid
 flowchart LR
-  Browser[Employee browser] --> API[Authenticated control-plane API]
+  Browser[Web environment setup and monitoring] --> API[Authenticated control-plane API]
+  Desktop[Desktop task creation and instructions] --> API
   API --> DB[(Transactional records and event outbox)]
   Worker[Run-box worker] --> DB
   Worker --> SSH[Known SSH host]
@@ -24,12 +25,18 @@ flowchart LR
   Stream --> Browser
 ```
 
+## Client ownership
+
+The desktop app creates tasks, assigns agents, and submits task instructions/follow-ups through the authenticated backend. The web app configures project environments, manages permitted resource lifecycle actions, and reads progress/results and operational analytics. Both use shared project/task/run IDs and server-side authorization. The flow is machine-first: web attachment/allocation requests are project-scoped and do not require a task or agent. The worker verifies the environment independently. The desktop app then creates a task and requests an agent start against the ready box, with a separate server-side authorization decision. A ready box may have zero runs; task completion does not itself release it.
+
+Analytics aggregate recorded run outcomes, durations, failures, and environment state within an explicit time range. Expose freshness and missing data; GPU utilization, token usage, and cost require explicit telemetry sources. Current local coordination snapshots are not evidence that this analytics pipeline or desktop integration exists.
+
 ## First durable records
 
 | Record | Minimum fields | Authority |
 | --- | --- | --- |
 | Employee and membership | Identity-provider subject, project, role, active state | Verified server session and membership table |
-| Resource request | Project, task, requesting employee, intended agent, GPU requirement, reason, created time | Authenticated API |
+| Resource request | Project, requesting employee, environment action, resource/GPU requirement, reason, created time; task and agent optional for initial environment setup | Authenticated API |
 | Policy decision | Request, allow/deny, reason, policy version, deciding identity, time | Server-side policy; never browser-supplied |
 | Run box | Provider, provider resource ID, project, owner, lifecycle state, remote account, workspace identity, created/stopped times | Worker after provider response |
 | Allocation | Request, box, GPU target, lease start/end if enforced, release evidence | Worker after real attachment and release |
@@ -73,7 +80,7 @@ interface RunBoxProvider {
 }
 ```
 
-`ApprovedRunSpec` carries a decision ID, project/task IDs, repository revision or URL, requested capacity, and a bounded lifetime intent. The worker resolves secret references server-side. `ProviderBox` records opaque provider identity; `ObservedBox` reports what actually exists. AgentCloud must label an existing-host attachment and a newly launched EC2 instance differently.
+`ApprovedRunSpec` describes the approved environment allocation: decision ID, project ID, repository revision or URL, requested capacity, and bounded lifetime intent. Task and agent IDs are not required for allocation. `AgentRunSpec` later carries the existing box, task, agent, and start-authorization decision IDs; starting an agent does not allocate a duplicate box. The worker resolves secret references server-side. `ProviderBox` records opaque provider identity; `ObservedBox` reports what actually exists. AgentCloud must label an existing-host attachment and a newly launched EC2 instance differently.
 
 The local `lib/workspace.ts` Git utility can inform clone and worktree validation, but it is not a remote provider. The worker must verify the repository and worktree on the **target box** before attaching them to a run record.
 
@@ -98,7 +105,7 @@ Specify stop versus terminate in the product and worker. EBS-backed instances ca
 ## API, events, and access boundary
 
 - Authenticate human mutations before enabling employee policy or public deployment. A session maps to a verified employee identity; project membership is checked on every read and write.
-- Evaluate policy on employee, project role, task, agent, resource, and action. Save the decision and version. Recheck before a worker starts an operation. Provider credentials stay in the worker's secret store, not the JSON state or client response.
+- Evaluate environment attachment/allocation policy on employee, project role, resource, and action without requiring a task. Evaluate agent-start policy again on employee, project role, task, agent, selected box/resource, and action. Save the decision and version. Recheck before a worker starts an operation. Provider credentials stay in the worker's secret store, not the JSON state or client response.
 - Give each agent/run a separate scoped credential. Reject cross-project and cross-run operations and record attributed denials. Enforce any claimed SSH/path restriction at the remote execution boundary and demonstrate a forbidden action failing there.
 - Emit typed events such as `box.allocating`, `box.verified`, `run.started`, `command.started`, `command.completed`, `gpu.workload_verified`, and `access.denied`. Include IDs, sequence, timestamp, actor, outcome, and bounded evidence; redact credentials and sensitive command output.
 - Serve a replayable event stream from stored events. On reconnect, the dashboard first reads the current snapshot, then resumes after its last event sequence. A transport heartbeat remains a separate signal.

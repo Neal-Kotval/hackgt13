@@ -1,3 +1,4 @@
+import { prepareAuth } from "./auth-fixture.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
@@ -25,6 +26,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
 const { action, getState, agentAction } = await import(
   path.join(temporary, "store.js")
 );
+const authFixture = await prepareAuth(temporary);
 after(() => rm(temporary, { recursive: true, force: true }));
 test("fresh installation starts empty and remains stable without creating a data file", async () => {
   assert.deepEqual(await getState(), { projects: [], revision: 0 });
@@ -221,19 +223,20 @@ test("HTTP route contract returns state and enforces bearer identity", async () 
       .outputText.replace(
         /from ["']\.\.\/\.\.\/\.\.\/lib\/(\w+)["']/g,
         "from './$1.js'",
-      );
+      ).replace("../../../lib/auth.mjs", "./auth.mjs");
     await writeFile(path.join(temporary, `${name}-route.js`), output);
   }
   const stateRoute = await import(path.join(temporary, "state-route.js"));
   const agentRoute = await import(path.join(temporary, "agent-route.js"));
   const projectId = (await getState()).projects[0].id;
-  const response = await stateRoute.GET();
+  authFixture.grantMembership(authFixture.users[0].id, projectId, "owner");
+  const response = await stateRoute.GET(new Request("http://localhost/api/state", { headers: { cookie: authFixture.users[0].cookie } }));
   assert.equal(response.status, 200);
   assert.ok((await response.json()).projects.length);
   const forbidden = await stateRoute.POST(
     new Request("http://localhost/api/state", {
       method: "POST",
-      headers: { origin: "https://other.example" },
+      headers: { origin: "https://other.example", cookie: authFixture.users[0].cookie },
       body: JSON.stringify({ type: "addTask", projectId }),
     }),
   );
@@ -248,6 +251,7 @@ test("HTTP route contract returns state and enforces bearer identity", async () 
   const created = await stateRoute.POST(
     new Request("http://localhost/api/state", {
       method: "POST",
+      headers: { cookie: authFixture.users[0].cookie },
       body: JSON.stringify({
         type: "addAgent",
         projectId,
@@ -383,7 +387,8 @@ test("stale heartbeat becomes disconnected in public state and SSE without a mut
     );
   await writeFile(path.join(temporary, "events-route.js"), output);
   const { GET } = await import(path.join(temporary, "events-route.js"));
-  const stream = await GET(new Request("http://localhost/api/events"));
+  authFixture.grantMembership(authFixture.users[0].id, p.id, "owner");
+  const stream = await GET(new Request("http://localhost/api/events", { headers: { cookie: authFixture.users[0].cookie } }));
   const reader = stream.body.getReader();
   const decoder = new TextDecoder();
   const decode = (chunk) =>

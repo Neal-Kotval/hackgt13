@@ -6,6 +6,14 @@ Read PRODUCT.md, DESIGN.md, ARCHITECTURE.md, and ROADMAP.md before making materi
 
 Other agents may be editing this repository. Own explicit files or modules, coordinate shared interfaces, and never revert another agent's unrelated work. Keep changes scoped to the user's request.
 
+### Feature delivery workflow
+
+For every new feature, start from the latest `origin/main` in a dedicated Git worktree with its own branch. Keep `main` for integration and releases; do not develop features in the main worktree. Use the relevant `HAC` issue identifier in the branch name.
+
+Move quickly by assigning independent, well-scoped slices to agents in parallel. Give each agent its own worktree, explicit file or module ownership, and a shared interface before work begins. Integrate through commits and pull requests, not by editing another agent's worktree or bundling unfinished changes. Keep handoffs short and include changed files, verification results, and any dependency for the next agent.
+
+Push each completed feature branch, open a pull request targeting `main`, run the relevant checks, and review the diff. Resolve feedback and conflicts on the feature branch, then merge the pull request after its checks and review pass. Update the worktree from the resulting `main` before starting dependent work. Do not force-push or bypass a failing check to save time.
+
 Before substantial code changes, run `git status --short` and `git fetch origin`, then compare the current branch with its upstream branch (or `origin/main` if it has no upstream). Review any new commits and changed files that overlap your work, and adjust your plan before editing. If the fetch fails, say that the remote check could not be completed. Do not automatically merge, rebase, reset, or overwrite local work.
 
 Commit and push completed work in small, coherent batches, especially before switching tasks or handing work to another agent. Check the remote branch again before pushing, resolve any divergence without force pushing, and do not include another agent's unfinished changes unless the user asks to push everything.
