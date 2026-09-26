@@ -3,7 +3,6 @@ import { Select } from "@/components/ui/select";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { authClient as client } from "@/lib/auth-client";
-import { EmployeeMenu } from "./employee-auth";
 type Org = { id: string; name: string; slug: string; role: string };
 type Member = { id: string; userId: string; role: string; name: string; email: string };
 type Invitation = { id: string; email: string; role: "member" | "admin"; status: string; expiresAt: string | number; delivery: string | null };
@@ -58,7 +57,7 @@ export function OrganizationDashboard() {
     }
   }
   function invite(event: FormEvent<HTMLFormElement>) {event.preventDefault();if(data?.mailMode==="unavailable"){setError("Email delivery is unavailable. Ask an administrator to configure SMTP before inviting teammates.");return;}const form=event.currentTarget;const values=new FormData(form);void run(async()=>{checked(await client.organization.inviteMember({email:String(values.get("email")).trim(),role:values.get("role") as "member" | "admin",organizationId:active!.id}));form.reset();},data?.mailMode==="local"?"Invitation captured in the local mailbox. No external email was sent.":"Invitation submitted to the email provider.");}
-  return <><header className="organization-header"><Link className="brand" href="/projects">agentcloud_</Link><div className="organization-header-actions"><EmployeeMenu /></div></header>
+  return <>
   <main className="organization-page"><div className="section-heading"><h1>People & organizations</h1><button className="button" disabled={!data || busy} onClick={() => createDialog.current?.showModal()}>New organization</button></div>
     {error && <p className="auth-error" role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     {!data ? <p>Loading organizations…</p> : <>

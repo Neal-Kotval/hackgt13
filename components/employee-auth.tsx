@@ -51,7 +51,7 @@ export function SignIn({ signup = false, invite = "", verified = false, verifica
     <Link href={`${signup || checkEmail ? "/sign-in" : "/sign-up"}${suffix}`}>{signup || checkEmail ? "Back to sign in" : "Create an account"}</Link></div>
   </section></main>;
 }
-export function EmployeeMenu() {
+export function EmployeeMenu({ navigation = true }: { navigation?: boolean }) {
   const { data } = client.useSession();
   const { data: organizations } = client.useListOrganizations();
   const { data: active } = client.useActiveOrganization();
@@ -61,7 +61,7 @@ export function EmployeeMenu() {
       const result = await client.organization.setActive({ organizationId: e.target.value });
       if (result.error) setError("Could not switch organization"); else window.location.assign("/projects");
     }}><option value="" disabled>Select organization</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</Select></label>}
-    <Link className="button ghost" href="/organizations">People & organizations</Link>
+    {navigation && <Link className="button ghost" href="/organizations">People & organizations</Link>}
     <span className="local-label">{data?.user?.name || "employee"}</span>
     <button className="button ghost" onClick={async () => {try {const result=await client.signOut();if(result.error)setError("Sign-out failed");else window.location.assign("/sign-in");}catch{setError("Sign-out failed");}}}>Sign out</button>
     {error && <span role="alert">{error}</span>}

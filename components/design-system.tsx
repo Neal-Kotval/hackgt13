@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Select } from "@/components/ui/select";
 import { useState } from "react";
 
@@ -33,11 +32,6 @@ export default function DesignSystem() {
   const [action, setAction] = useState("Try a control to inspect its interaction state.");
   return (
     <div className="ds-page">
-      <header className="ds-header">
-        <Link className="brand" href="/projects">agentcloud<span aria-hidden="true" /></Link>
-        <span className="tag cyan">Design reference · v4</span>
-        <Link className="ds-back" href="/projects">Back to projects ↗</Link>
-      </header>
       <main className="ds-main">
         <section className="ds-intro" aria-labelledby="design-title">
           <div className="eyebrow">One source of truth · app/tokens.css</div>

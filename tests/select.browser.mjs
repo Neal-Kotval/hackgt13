@@ -163,13 +163,12 @@ try {
     ).toBe("");
     await page.keyboard.press("Escape");
 
+    if (width <= 768) await page.getByRole("button", { name: "Open navigation" }).click();
     await page.getByRole("link", { name: "Resources", exact: true }).click();
     await expect(
-      page.getByRole("link", { name: "Resources", exact: true }),
+      page.locator('.site-nav-link[href$="/resources"]'),
     ).toHaveAttribute("aria-current", "page");
-    await expect(
-      page.getByRole("link", { name: "Workspace", exact: true }),
-    ).toHaveAttribute("aria-current", "page");
+    await expect(page.locator('.site-nav-link[aria-current="page"]')).toHaveCount(1);
     await page.goto(origin + "/organizations");
     await page
       .getByRole("button", { name: "Grant project access", exact: true })
@@ -180,6 +179,7 @@ try {
     await expect(
       page.getByText("Choose an option.", { exact: true }),
     ).toHaveCount(2);
+    if (width <= 768) await page.getByRole("button", { name: "Open navigation" }).click();
     await page.getByRole("combobox", { name: "Active organization" }).click();
     const listbox = page.getByRole("listbox");
     await expect(listbox).toBeVisible();
@@ -200,6 +200,21 @@ try {
       ),
     ).toBeTruthy();
     await page.keyboard.press("Escape");
+    if (width <= 768) {
+      await expect(page.locator(".site-sidebar")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.locator(".site-sidebar")).not.toBeVisible();
+      await expect(page.getByRole("button", { name: "Open navigation" })).toBeFocused();
+    }
+    for (const destination of ["Projects", "People & organizations", "Overview", "Task board", "Services", "Activity", "Resources", "Requests", "Runs", "Graph", "Inference", "Review", "Agents", "CLI connection", "Design system"]) {
+      if (width <= 768) await page.getByRole("button", { name: "Open navigation" }).click();
+      const link = page.locator(".site-navigation").getByRole("link", { name: destination, exact: true });
+      const href = await link.getAttribute("href");
+      await link.click();
+      await expect(page).toHaveURL(origin + href);
+      await expect(page.locator('.site-nav-link[aria-current="page"]')).toHaveText(destination);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    }
     expect(errors).toEqual([]);
     console.log(
       `PASS ${width}px: keyboard/typeahead, form submission, empty values, required validation, dialog portal, navigation and menu bounds`,
