@@ -462,7 +462,7 @@ h1 {
   font-size: var(--text-base);
   font-weight: var(--font-weight-medium);
 }
-.section-heading > a,
+.section-heading > a:not(.button),
 .section-heading > button:not(.button) {
   border: 0;
   background: var(--color-transparent);
