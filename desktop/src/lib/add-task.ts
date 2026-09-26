@@ -3,37 +3,51 @@ export type AddTaskFormInput = {
   title: string;
   instructions: string;
   agentId: string;
+  environmentId?: string;
+};
+
+export type AddTaskPayload = {
+  type: "addTask";
+  projectId: string;
+  title: string;
+  owner: string;
+  instructions: string;
+  environmentId?: string;
 };
 
 /**
- * Build today's POST /api/state addTask body.
- * Server only persists title + owner (+ optional dependency). Instructions are
- * folded into title (≤200) until a dedicated field exists — never invent
- * environmentId / startAgent fields.
+ * Build POST /api/state addTask body.
+ * Sends title, owner, instructions, and optional verified environmentId.
  */
-export function buildAddTaskPayload(
-  input: AddTaskFormInput,
-): { type: "addTask"; projectId: string; title: string; owner: string } {
+export function buildAddTaskPayload(input: AddTaskFormInput): AddTaskPayload {
   const title = input.title.trim();
   const instructions = input.instructions.trim();
   const owner = input.agentId.trim();
+  const environmentId = input.environmentId?.trim() || undefined;
   if (!input.projectId.trim()) {
     throw new Error("Choose a project before creating a task.");
   }
   if (!title) {
     throw new Error("Title is required.");
   }
+  if (title.length > 200) {
+    throw new Error("Title must be at most 200 characters.");
+  }
   if (!instructions) {
     throw new Error("Instructions are required.");
+  }
+  if (instructions.length > 4000) {
+    throw new Error("Instructions must be at most 4000 characters.");
   }
   if (!owner) {
     throw new Error("Choose an agent owner.");
   }
-  const combined = `${title} — ${instructions}`;
   return {
     type: "addTask",
     projectId: input.projectId.trim(),
-    title: combined.slice(0, 200),
+    title,
     owner,
+    instructions,
+    ...(environmentId ? { environmentId } : {}),
   };
 }

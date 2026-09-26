@@ -79,6 +79,8 @@ export type ProjectTaskSnapshot = {
   title: string;
   owner: string;
   status: string;
+  instructions?: string;
+  environmentId?: string;
 };
 
 export type ProjectResourceSnapshot = {

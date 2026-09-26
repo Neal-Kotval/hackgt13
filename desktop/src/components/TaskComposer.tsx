@@ -41,6 +41,7 @@ export function TaskComposer({
         title,
         instructions,
         agentId,
+        environmentId,
       });
       const result = await postAction(payload);
       const updated = result.state.projects.find((row) => row.id === project.id);
@@ -77,11 +78,9 @@ export function TaskComposer({
       <h2 id="task-composer-title">Create task</h2>
       <p className="brand-meta">
         Submits to the shared backend (<code>POST /api/state</code>{" "}
-        <code>addTask</code>). Local chat threads are not tasks. Today the
-        server stores title + owner only — instructions are folded into the
-        title (max 200 characters). Environment selection is recorded here for
-        the machine-first path but is not sent until the API supports it; agent
-        start stays unavailable.
+        <code>addTask</code>). Local chat threads are not tasks. Title,
+        instructions, owner, and optional verified environment id are persisted
+        on the server. Agent start stays unavailable until a runner exists.
       </p>
       <form onSubmit={(event) => void submit(event)}>
         <label htmlFor="task-title">
