@@ -1256,8 +1256,14 @@ function AgentSetup({
     agentId: string;
   } | null>(null);
   const [client, setClient] = useState("Codex");
+  useEffect(() => {
+    if (window.location.hash !== "#agent-setup") return;
+    const setup = document.getElementById("agent-setup");
+    setup?.focus({ preventScroll: true });
+    setup?.scrollIntoView();
+  }, []);
   return (
-    <div className="setup-layout connect-layout">
+    <div id="agent-setup" tabIndex={-1} className="setup-layout connect-layout">
       <section>
         <SectionTitle label="Connect an agent" />
         <p className="section-description">
@@ -1507,7 +1513,8 @@ function DesktopPage({
             <p>Choose a role and generate a scoped connection token.</p>
             <Link
               className="button secondary"
-              href={`/projects/${project.id}/settings`}
+              href={`/projects/${project.id}/settings#agent-setup`}
+              onClick={() => document.getElementById("agent-setup")?.focus({ preventScroll: true })}
             >
               Agent setup <ArrowRight />
             </Link>
