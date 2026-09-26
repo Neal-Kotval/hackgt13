@@ -3,6 +3,7 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import { migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
+import { migrateRunpodCleanup } from "../lib/runpod-reconcile.mjs";
 import { preflightRunpod, workOneRunpodJob } from "../lib/runpod-worker.mjs";
 
 function setup() {
@@ -14,6 +15,7 @@ function setup() {
     CREATE TABLE project_membership (user_id TEXT NOT NULL, project_id TEXT NOT NULL, role TEXT NOT NULL);`);
   migrateRunBoxJobs(db);
   migrateRunpodEvidence(db);
+  migrateRunpodCleanup(db);
   db.prepare("INSERT INTO user VALUES ('employee-1', 1)").run();
   db.prepare("INSERT INTO member VALUES ('employee-1', 'org-1', 'owner')").run();
   db.prepare("INSERT INTO project_organization VALUES ('project-1', 'org-1')").run();
@@ -94,8 +96,8 @@ test("missing SSH host pin leaves a visible retry without another Pod create", a
 test("missing independent cleanup guard blocks Runpod POST before catalog checks", async () => {
   const { db, job } = setup();
   const service = provider(job.id);
-  const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker", connection: {},
-    checkSshConfig() {}, verify: async () => { throw new Error("must not verify"); } });
+  const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker",
+    verify: async () => { throw new Error("must not verify"); } });
   assert.equal(result.state, "allocating");
   assert.equal(result.retry, true);
   assert.deepEqual(service.calls, []);
