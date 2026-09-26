@@ -6,7 +6,7 @@ The infrastructure definition lives in [`infra/aws-auth/`](infra/aws-auth/). Ter
 
 ## Prerequisites and deploy
 
-1. Use AWS CLI credentials for the intended account and Region. Install the AWS CLI Session Manager plugin, Terraform, Doppler CLI, Python 3, and Node.js locally. The Doppler project/config in `doppler.yaml` must expose the stable `BETTER_AUTH_SECRET` already used by the local app. Keep the same secret with the same persistent data directory across redeploys.
+1. Use AWS CLI credentials for the intended account and Region. Install the AWS CLI Session Manager plugin, Terraform, Doppler CLI, Python 3, and Node.js locally. The deployment's `init-secret.sh` explicitly reads `BETTER_AUTH_SECRET` from `hackgt/dev_personal`; this is separate from the shared `hackgt/dev` secret selected by `doppler.yaml` for local testing. Keep the staging secret with the same persistent data directory across redeploys.
 2. Review `terraform -chdir=infra/aws-auth plan` and apply it deliberately. Read `infra/aws-auth/README.md` for account, cost, and Terraform state handling. Wait for the instance to appear **Online** in SSM. The host needs outbound connectivity for SSM, S3, Secrets Manager, OS packages, and npm; its security group has no inbound rules.
 3. From the repository root, run:
 
