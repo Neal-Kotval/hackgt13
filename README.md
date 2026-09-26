@@ -180,3 +180,7 @@ The token check enforces the visual-system rules; it does not replace visual ins
 ## Next implementation milestone
 
 Add transactional run/decision records and server-side resource policy, attach or create a real Linux run environment, and execute one real agent GPU task while mirroring its work. Demonstrate an allowed and a denied resource action at the execution boundary. Keep API authorization separate from shell isolation: an unrestricted SSH connection is trusted access until the execution boundary enforces stronger restrictions. Add a second agent and artifact publication in later phases.
+
+### Dropdown interaction verification
+
+After `npm run build`, run `npm run test:select:browser` to exercise themed dropdown keyboard navigation, form values, required validation, dialog menus, navigation states, and responsive bounds in headless Chrome. It uses temporary accounts/data and port 3162, then removes its test data. The shared dropdown also has an interactive specimen at `/design-system#components`.

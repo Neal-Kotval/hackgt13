@@ -1,4 +1,5 @@
 "use client";
+import { Select } from "@/components/ui/select";
 import { EmployeeMenu } from "./employee-auth";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -189,7 +190,7 @@ export function CloudApp() {
     (label === "Workspace" &&
       !isProjects &&
       !isSetup &&
-      page === "dashboard") ||
+      ["dashboard", "resources", "requests", "runs", "graph", "inference", "desktop"].includes(page)) ||
     (label === "Review" && page === "review") ||
     (label === "Connect" && page === "agents");
   if (!state)
@@ -661,7 +662,7 @@ export function CloudApp() {
                     <SectionTitle
                       label="Activity stream"
                       action={
-                        <select
+                        <Select
                           aria-label="Filter activity"
                           value={filter}
                           onChange={(e) => setFilter(e.target.value)}
@@ -673,7 +674,7 @@ export function CloudApp() {
                               {a.name}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       }
                     />
                     <ActivityFeed project={project} filter={filter} />
@@ -898,7 +899,7 @@ function StatusSelect({
   busy: boolean;
 }) {
   return (
-    <select
+    <Select
       className={`status-select ${task.status.replace(" ", "-")}`}
       aria-label={`Status for ${task.title}`}
       value={task.status}
@@ -910,7 +911,7 @@ function StatusSelect({
       {["queued", "in progress", "blocked", "done"].map((s) => (
         <option key={s}>{s}</option>
       ))}
-    </select>
+    </Select>
   );
 }
 function TaskTable({
@@ -1259,11 +1260,11 @@ function Setup({
           </label>
           <label>
             Template
-            <select name="template">
+            <Select name="template">
               <option>Next.js + Node API</option>
               <option>React + Python API</option>
               <option>Empty workspace</option>
-            </select>
+            </Select>
           </label>
           <fieldset>
             <legend>Compute source</legend>
@@ -1377,7 +1378,7 @@ function TaskForm({
       </label>
       <label>
         Assign to
-        <select
+        <Select
           name="owner"
           required
           defaultValue={project.agents[0]?.id || ""}
@@ -1390,18 +1391,18 @@ function TaskForm({
               {a.name} — {a.role}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label>
         Depends on
-        <select name="dependency" defaultValue="">
+        <Select name="dependency" defaultValue="">
           <option value="">No dependency</option>
           {project.tasks.map((task) => (
             <option key={task.id} value={task.id}>
               {task.title}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <button
         className="button primary"

@@ -1,4 +1,5 @@
 "use client";
+import { Select } from "@/components/ui/select";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { authClient as client } from "@/lib/auth-client";
@@ -56,10 +57,10 @@ export function EmployeeMenu() {
   const { data: active } = client.useActiveOrganization();
   const [error, setError] = useState("");
   return <>
-    {organizations && organizations.length > 0 && <label className="organization-switcher"><span>Organization</span><select aria-label="Active organization" value={active?.id || ""} onChange={async e => {
+    {organizations && organizations.length > 0 && <label className="organization-switcher"><span>Organization</span><Select aria-label="Active organization" value={active?.id || ""} onChange={async e => {
       const result = await client.organization.setActive({ organizationId: e.target.value });
       if (result.error) setError("Could not switch organization"); else window.location.assign("/projects");
-    }}><option value="" disabled>Select organization</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</select></label>}
+    }}><option value="" disabled>Select organization</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</Select></label>}
     <Link className="button ghost" href="/organizations">People & organizations</Link>
     <span className="local-label">{data?.user?.name || "employee"}</span>
     <button className="button ghost" onClick={async () => {try {const result=await client.signOut();if(result.error)setError("Sign-out failed");else window.location.assign("/sign-in");}catch{setError("Sign-out failed");}}}>Sign out</button>
