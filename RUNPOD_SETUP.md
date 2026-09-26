@@ -16,3 +16,9 @@ After SSH proof, `runpod_gpu_verification` stores the non-root account/UID, work
 - No Runpod Pod has been launched or GPU verification observed by this implementation. Tests use a mock provider and verifier.
 
 The AWS G6 attempt and current Free-plan block remain recorded in [AWS_SETUP.md](AWS_SETUP.md).
+
+## Pin a live Pod's direct SSH host key
+
+After allocation reports a direct IPv4 address and mapped SSH port, open that same Pod in the authenticated [Runpod web terminal](https://docs.runpod.io/pods/connect-to-a-pod). Run `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` there and record the `SHA256:` fingerprint. If that host key file is absent, investigate the Pod's SSH daemon configuration; do not accept an unverified network scan.
+
+On the staging host, run `runuser -u agentcloud -- /usr/bin/node-22 /opt/agentcloud/current/scripts/runpod-pin-host-key.mjs <Pod IPv4> <mapped SSH port> <trusted SHA256 fingerprint>`. The command scans only the named IPv4 and port, compares its Ed25519 key with the fingerprint obtained through the web terminal, and adds it to `/var/lib/agentcloud/runpod/known_hosts` only on an exact match. A second call with the same key is safe; a changed key fails and requires investigation. The worker's next retry uses strict SSH host-key checking against that file.
