@@ -7,7 +7,7 @@ REGION="${3:-}"
 RELEASE="/opt/agentcloud/releases/$REVISION"
 
 systemctl is-active --quiet amazon-ssm-agent || { echo 'Amazon SSM agent is not active.' >&2; exit 1; }
-dnf install -y nodejs22 nodejs22-npm tar gzip >/dev/null
+dnf install -y nodejs22 nodejs22-npm tar gzip make gcc-c++ >/dev/null
 command -v curl >/dev/null 2>&1 || dnf install -y curl-minimal >/dev/null
 command -v aws >/dev/null 2>&1 || dnf install -y awscli >/dev/null
 if ! id agentcloud >/dev/null 2>&1; then
