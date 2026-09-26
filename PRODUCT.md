@@ -17,6 +17,8 @@ The target HackGT MVP is one governed remote GPU task:
 
 The GPU machine may be a pre-existing host internally named “Cresix”; creating a run environment on it is distinct from procuring a new GPU. Two-agent collaboration, shared private services, and durable artifact homes are valuable extensions after this MVP works. A saved SSH address, heartbeat, agent card, or scripted animation alone does not satisfy the outcome.
 
+The first managed hosting option is planned to be an EC2 GPU run box. An existing SSH GPU host remains a supported attachment path so the first real proof does not depend on a new cloud quota. Both use the same request, policy, run, event, and verification contract described in [BACKEND_PLAN.md](BACKEND_PLAN.md). The UI must identify which provider and machine performed work; it must never imply AgentCloud launched EC2 when it only attached an existing host.
+
 ## Current implementation boundary
 
 This repository is the web application and a local coordination foundation. New installations start empty. Projects, agents, tasks, services, handoffs, and activity appear only when users or connected clients create them; the application contains no seeded project or replay workflow.
@@ -45,6 +47,8 @@ See [ROADMAP.md](ROADMAP.md) for acceptance gates before claiming the remote dem
 
 The human attaches an existing machine or later provisions one, selects the project and agent identity, and verifies the connection. The human may also attach a separate resource target, such as a GPU host reachable over SSH. The agent works in the intended remote environment, with access to the files, tools, network, and resources actually granted. An SSH connection grants trusted shell access unless an enforced execution boundary narrows it. A saved host address or a heartbeat is not evidence that the agent reached the machine or ran a workload. For a GPU claim, verify that the agent can reach the device and execute a representative workload.
 
+The request, permission decision, box allocation, GPU verification, and agent execution are separate steps in the human view. A person can inspect the decision reason and the evidence behind `ready`; a failed probe leaves the box in a failure state with a concrete next action. Stopping an attached host run stops the run process but does not claim to power off the host. An EBS-backed EC2 instance retains attached volume data when stopped; termination follows the recorded volume-retention policy.
+
 ### Create and resume a project
 
 The Projects screen lists saved projects. Setup collects a name, repository URL, template, and intended compute source. Compute choices must describe whether they are configured, connected, or unavailable. A saved project remains accessible after a browser refresh and application restart with the same data directory.
@@ -69,7 +73,7 @@ Review groups work by agent and connects changes to tasks and handoffs. Eventual
 
 | Surface | Responsibility |
 | --- | --- |
-| Web UI | Current project coordination; planned employee login, resource requests, and a control surface mirroring real remote work |
+| Web UI | Current project coordination, local request records, run activity view, and graph projection; planned employee login, enforceable decisions, and a control surface mirroring real remote work |
 | CLI / future desktop shell | Select project and identity; establish a real connection; show status; later launch configured tools and open the remote editor/terminal |
 | Backend | Current coordination validation and attribution; planned employee policy decisions and resource lifecycle |
 | Future run-box service | Attach or provision Linux execution; clone repositories; manage agent worktrees and temporary development services |

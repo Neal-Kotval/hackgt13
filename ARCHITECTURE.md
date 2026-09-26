@@ -25,6 +25,21 @@ flowchart LR
 
 `lib/types.ts` defines the shared public contract. Initial state contains no projects. `lib/store.ts` validates domain operations and owns disk writes. `lib/http.ts` handles bounded JSON requests and browser-origin validation. The CLI has no external runtime dependencies beyond Node with built-in fetch.
 
+## Proposed remote-backend shape
+
+[BACKEND_PLAN.md](BACKEND_PLAN.md) is the implementation contract for the next backend slices. It proposes one transactional control-plane database, a job/outbox-backed worker, provider-specific box adapters, and replayable run events. None of those components is deployed in the current app.
+
+| Boundary | Planned responsibility | Explicit limit |
+| --- | --- | --- |
+| Authenticated API | Employee sessions, project membership, requests, policy decisions, scoped reads/writes | Current human routes are unauthenticated |
+| Transactional store | Decisions, jobs, box identities, runs, events, and idempotent transitions | Current JSON queue protects only one Node process |
+| Run-box worker | Claim approved jobs, call a provider, verify outcomes, reconcile drift | Never accept an arbitrary browser command as a provisioning job |
+| Provider adapter | Attach an existing SSH host or launch/stop EC2 using the same lifecycle contract | A stored hostname or EC2 API success is not a ready run box |
+| Remote runner | Start the actual agent and workload, emit bounded attributed events | Heartbeat and model execution are distinct |
+| Event stream | Snapshot plus replay cursor after reconnect | Current SSE sends whole local-state snapshots and has no durable cursor |
+
+For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU host remains the quickest proof path if it is available. Both paths must verify the execution identity, workspace, GPU operation, and stop result. AWS Systems Manager may provide management access without inbound SSH, but IAM access to the instance does not establish file or command restrictions inside an agent's shell. [AWS Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
+
 ## Routes
 
 | Route | Behavior |
@@ -60,10 +75,10 @@ The intended remote architecture keeps development endpoints inside an organizat
 
 The HackGT MVP is now a governed single-agent GPU run, specified in [MVP_SPEC.md](MVP_SPEC.md). The first remote-computer milestone is to attach to a user-controlled Linux host, verify its identity, and create or attach a real run environment there. A GPU may be on that host or on a separate SSH resource target reachable from it. Verify task-critical access from the agent's actual execution environment; this is not proof that AgentCloud procured or isolated a GPU. The control plane records intended targets separately from verified connections and completed work.
 
-The planned path is employee OIDC login → server-side resource policy → provisioner → identified remote run environment → actual agent/command event stream → authenticated control surface. The box performs the work; the web app displays what the remote runner reports and what the server verifies. One real agent adapter and one known GPU host are enough for the MVP. Employee, agent session, and remote execution identities must remain distinct. The current JSON store and unauthenticated human routes do not provide these properties.
+The planned path is employee OIDC login → server-side resource policy → provisioner → identified remote run environment → actual agent/command event stream → authenticated control surface. The box performs the work; the web app displays what the remote runner reports and what the server verifies. One real agent adapter and one known GPU host are enough for the MVP. Employee, agent session, and remote execution identities must remain distinct. The current JSON store and unauthenticated human routes do not provide these properties. [BACKEND_PLAN.md](BACKEND_PLAN.md) defines separate request, box, run, and GPU-verification state machines.
 
-1. Add one employee identity-provider integration, project roles, server-side sessions, and authenticated human APIs. Replace the JSON store with a transactional database before production multi-user deployment.
-2. Add a run-box worker that creates or attaches a remote environment on known Linux capacity, validates repository URLs, clones safely, and records machine, account, and worktree identity. Keep provider/model credentials separate from remote execution credentials.
+1. Add transactional decision/job/run storage, one employee identity-provider integration, project roles, server-side sessions, and authenticated human APIs. Keep the existing JSON state readable during migration. Do not enable multi-user access on the current unauthenticated JSON API.
+2. Add a run-box worker that first attaches a known Linux host, then implements EC2 as the first managed provider behind the same contract. Validate repository URLs, clone safely, and record machine, account, and worktree identity. Keep provider/model credentials separate from remote execution credentials.
 3. Launch one real agent adapter on that environment and stream bounded command/session events. Verify the GPU workload and one authorized/denied resource action at the actual SSH or execution boundary. Treat unrestricted SSH as trusted access.
 4. Add a second independent agent and private development service discovery, then artifact homes with independent storage and serving lifecycles. See [FEATURE_SPEC.md](FEATURE_SPEC.md) for temporary-service and publication behavior.
 5. Add integration review, diffs, explicit merges, and stronger execution-boundary restrictions where needed. Enforce approvals, expiry, budgets, and any advertised access restrictions at the boundary that controls the resource.
@@ -72,4 +87,4 @@ The desired desktop shell should wrap the CLI after remote adapters work. It sho
 
 ## Verification
 
-`npm test` exercises persistence, simultaneous writes, cross-project/identity denial, task ownership, dependency enforcement, cross-agent discovery and handoffs, unsupported execution denial, URL validation, credential redaction, and request validation. Production build/type checks and browser UI checks are separate verification layers.
+`npm test` exercises the current local persistence and resource records, simultaneous writes, cross-project/identity denial, task ownership, dependency enforcement, cross-agent discovery and handoffs, unsupported execution denial, URL validation, credential redaction, and request validation. These tests do not verify employee login, provider calls, or remote GPU execution. Production build/type checks and browser UI checks are separate verification layers.

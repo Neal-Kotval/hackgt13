@@ -6,6 +6,8 @@ An employee signs in, asks an agent to do work that needs a GPU, and watches the
 
 The GPU machine used in the demo may be a pre-existing host named “Cresix.” Creating a run environment on that host is provisioning; merely saving its SSH address is not. The demo must identify exactly which machine, account, container, worktree, and credential boundary it actually creates or attaches. It must not claim to have procured a new GPU if the host already exists.
 
+AgentCloud should support that known-host path and use EC2 as its first managed run-box provider. The demo may use either path. A provider response alone does not make a box ready: the worker must verify the remote account, workspace, GPU device, and representative workload from the environment where the agent will run. [BACKEND_PLAN.md](BACKEND_PLAN.md) specifies the proposed worker and state contract.
+
 ## User flow
 
 1. **Employee login:** A human signs in through one working identity provider. AgentCloud creates a server-side session and associates that employee with a project role. The unauthenticated dashboard/API used by the current local prototype cannot serve this flow.
@@ -26,6 +28,12 @@ The GPU machine used in the demo may be a pre-existing host named “Cresix.” 
 | GPU target | One actual GPU reachable from the run environment; verify device and workload rather than trusting a label |
 
 The control plane talks to the box; the box performs the work. The MVP may run an existing agent CLI on the box and stream its real events. It does not need to implement a new model loop. An MCP interface or Coder integration can be added to the same policy and resource API later; neither is required to prove the first remote run.
+
+## Operational proof sequence
+
+The demo record should contain one unbroken chain of IDs: employee → request → policy decision → box → agent run → GPU verification → result. For an existing host, capture host-key identity and the dedicated remote account. For EC2, capture instance ID, Region, instance profile, workspace volume, and stop confirmation. Expose safe identifiers and evidence summaries to the human; keep secrets and private network details server-side.
+
+Before the run starts, show that the chosen workload is unavailable in the local environment and record the specific reason. During the run, emit actual command start, bounded output, exit status, and device/workload verification with timestamps. After the run, reconnect and inspect the same workspace/result. A second identity then attempts the forbidden resource action; record both the API denial and the execution-boundary denial. An unrestricted shell is labeled trusted access and leaves the execution-boundary denial gate incomplete.
 
 ## Permission boundary
 

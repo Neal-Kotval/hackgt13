@@ -35,6 +35,8 @@ The project control plane now includes Resources, Requests, Runs, Graph, and Inf
 
 The target HackGT MVP is employee login, a real remote run environment, server-enforced resource permission, one agent completing a GPU task, and a control surface mirroring actual work. Two-agent collaboration is a later extension. This repository does not yet fulfill the MVP. See [MVP_SPEC.md](MVP_SPEC.md) and [ROADMAP.md](ROADMAP.md) for concrete acceptance gates.
 
+The proposed backend uses one provider-neutral run-box contract: attach an existing SSH GPU host first when available, then implement EC2 as the first managed provider. [BACKEND_PLAN.md](BACKEND_PLAN.md) defines the records, worker, lifecycle, verification gates, and AWS decisions. This is planning documentation; the current app does not launch boxes.
+
 ## Explore the application
 
 - **Projects:** saved projects and project creation.
@@ -105,6 +107,7 @@ The token check enforces the visual-system rules; it does not replace visual ins
 | [FEATURE_SPEC.md](FEATURE_SPEC.md) | Planned run-box and artifact-home lifecycles and acceptance |
 | [DESIGN.md](DESIGN.md) | Visual system, token rules, component patterns, and responsive behavior |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Application, storage, API, CLI, and future infrastructure boundaries |
+| [BACKEND_PLAN.md](BACKEND_PLAN.md) | Proposed identity, worker, run-box provider, events, and EC2 implementation contract |
 | [ROADMAP.md](ROADMAP.md) | Dependency-ordered delivery phases and acceptance gates |
 | [VERIFICATION.md](VERIFICATION.md) | Recorded check results, remaining verification, and browser-tool limitations |
 | [AGENTS.md](AGENTS.md) | Contributor rules for design, testing, collaboration, and truthful capabilities |
@@ -117,4 +120,4 @@ The token check enforces the visual-system rules; it does not replace visual ins
 
 ## Next implementation milestone
 
-Add employee login and server-side policy, attach or create a real Linux run environment, and execute one real agent GPU task while mirroring its work. Demonstrate an allowed and a denied resource action at the execution boundary. Keep API authorization separate from shell isolation: an unrestricted SSH connection is trusted access until the execution boundary enforces stronger restrictions. Add a second agent and artifact publication in later phases.
+Add transactional run/decision records, employee login and server-side policy, attach or create a real Linux run environment, and execute one real agent GPU task while mirroring its work. Demonstrate an allowed and a denied resource action at the execution boundary. Keep API authorization separate from shell isolation: an unrestricted SSH connection is trusted access until the execution boundary enforces stronger restrictions. Add a second agent and artifact publication in later phases.

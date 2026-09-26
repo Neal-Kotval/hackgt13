@@ -2,9 +2,25 @@
 
 Ship one governed remote GPU task before expanding into multiple agents or an infrastructure catalog. This is a dependency-ordered roadmap, not a claim that the remote MVP already works. [MVP_SPEC.md](MVP_SPEC.md) defines the HackGT acceptance gates.
 
-## 0 — Web and local coordination foundation (current work)
+## Next implementation increments
+
+These are reviewable slices within phases 1–4, in the order they should land. [BACKEND_PLAN.md](BACKEND_PLAN.md) defines the proposed records and worker/provider contract.
+
+| Slice | Build | Exit evidence |
+| --- | --- | --- |
+| A. Durable contract | Database migrations for employee membership, request decisions, box jobs, runs, events, and verification; import path for existing local projects; idempotent state transitions | Restart and retry a job without losing a decision, duplicating a box, or reclassifying a local draft as an allocation |
+| B. Identity and decision | One working OIDC provider, server sessions, project roles, and a policy check before allocation | Two real test employees get different server decisions; unauthenticated mutation fails |
+| C. Known-host box | Worker and existing-host provider with pinned host identity, remote account/workspace evidence, stop and reconciliation | Attached box passes a GPU workload from the intended execution account; failed probe never shows ready |
+| D. Managed EC2 box | EC2 adapter under the same provider interface, with account/Region quota check, instance identity, Systems Manager management path, EBS retention, stop confirmation | Real launch, verification, stop/restart, and workspace recovery; request/box IDs tie each result to the same run |
+| E. Real agent run | One supported agent adapter, bounded command/result events, event replay, and an authorized/denied resource test | Agent completes the GPU task; dashboard mirrors actual work; reconnect and denial evidence pass [MVP_SPEC.md](MVP_SPEC.md) |
+
+The known-host path can complete the HackGT proof if AWS GPU quota or capacity is unavailable. EC2 is the first managed provider, not a prerequisite for proving the run contract on existing capacity. Do not start a GPU instance merely to populate UI state.
+
+## 0 — Web and local coordination foundation (implemented locally)
 
 Deliver the token-based React/Next.js app, project setup, roster, tasks, service records, handoffs, activity streaming, disk persistence, and a CLI connection protocol. Start with an empty project list and guide the user through creating real coordination records. Do not ship seeded projects or replay controls.
+
+The current repository also has local resource catalog/request records, inference configuration drafts, a run-activity view, and a graph projection of saved records. Requests remain unevaluated; these screens do not add remote infrastructure.
 
 Acceptance:
 
@@ -18,17 +34,22 @@ This phase does not provide a remote machine, execute a model, or guarantee file
 
 ## 1 — Employee login and resource policy
 
-Add one working employee identity-provider integration, server-side sessions, project roles, and resource request decisions. Keep employee, agent, and remote execution identities distinct. Local development may use one organization; it must not be presented as production tenant isolation.
+Add one working employee identity-provider integration, server-side sessions, project roles, and resource request decisions. First migrate decisions and job records to transactional storage with explicit migrations and a path for existing local state. Keep employee, agent, and remote execution identities distinct. Local development may use one organization; it must not be presented as production tenant isolation.
 
 Acceptance:
 
 - Two employees can sign in and receive different server-enforced decisions for the same resource request.
 - Unauthenticated access to human mutation APIs is denied; a UI-only role change cannot bypass the backend.
 - Decisions record the employee, task, resource, action, and reason without exposing credentials.
+- An approved request creates one idempotent worker job; a retry does not create another allocation. A denied request creates no provider job.
 
 ## 2 — Remote agent run box
 
-Build an agent run-box provider interface and one real Linux implementation. Attach a known SSH machine first, including a GPU host when that is the resource the task needs; add hosted provisioning only after the same contract works. The run box is the agent's remote computer, not the permanent home of a published output.
+Build an agent run-box provider interface and one real Linux implementation. Attach a known SSH machine first, including a GPU host when that is the resource the task needs; implement EC2 as the first managed provider after the same contract works. The run box is the agent's remote computer, not the permanent home of a published output.
+
+**2a — Known host:** pin/approve the host key, use a named execution account, create or identify the workspace, and run both a GPU device probe and representative workload there. Stopping this run must report whether the host itself remains on.
+
+**2b — EC2:** check the selected account/Region's GPU quota and capacity before depending on it for the demo. Launch one identified instance per active run, record the instance and workspace volume, use Systems Manager where supported, and confirm stop/restart and EBS retention behavior. Select G6 or G6e from the workload's measured requirements. AWS lists the default On-Demand G/VT quota as zero; request a quota increase early if necessary. [AWS quotas](https://docs.aws.amazon.com/ec2/latest/instancetypes/ec2-instance-quotas.html), [GPU instance specifications](https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html)
 
 Acceptance:
 
@@ -39,6 +60,8 @@ Acceptance:
 - Stop/restart the application and reconnect to the same working files and installed dependencies while that run box is retained.
 - Record provider, workspace identity, connection state, and attributed provisioning events.
 - Label unrestricted SSH execution as trusted access.
+- Retry or restart the worker without duplicating a box; reconcile a provider resource that exists while the database says allocation failed.
+- Record a failed stop as failed or stopping until the provider confirms the process/instance state.
 
 Depends on phase 0's project and event records and phase 1's employee authorization. If a GPU host is already owned, provisioning means creating a real run environment on that capacity; it does not mean purchasing or creating the GPU machine.
 
@@ -52,6 +75,7 @@ Acceptance:
 - A command runs in the intended workspace and emits attributed start, completion, and error events.
 - Disconnect and reconnect preserve the project and do not create duplicate ownership.
 - The dashboard distinguishes transport connection, model execution, and idle state.
+- Each run event has a stable run ID, ordered sequence, timestamp, actor, kind, and bounded output/evidence reference; reconnect resumes without duplicating commands.
 
 ## 4 — Governed GPU task and control surface (HackGT MVP)
 
@@ -63,6 +87,7 @@ Acceptance:
 - A second identity is denied by both the resource API and the SSH/execution boundary being claimed; an allowed command still works.
 - The dashboard displays actual session, command, output, and resource states with attribution. Transport connection and model execution are distinct.
 - Reconnect to the same project work, then stop or release the run environment and show its actual state.
+- Show one traceable chain from authenticated employee and decision through provider box, agent session, GPU result, and stop evidence.
 - Do not claim SSH path or command restrictions, credential revocation, or cost shutdown without demonstrating each at its enforcement boundary.
 
 ## Inference API and resource graph stretch
@@ -121,7 +146,15 @@ Acceptance:
 
 ## Later
 
-Snapshots and rollback, graphical desktop access, notifications, file sync, managed GPU purchasing, production tenant isolation, durable database/event infrastructure, quotas, and billing. Access to an existing SSH GPU host belongs to phase 2; procuring GPUs belongs here. Prioritize these from observed demo limitations rather than adding decorative controls.
+Snapshots and rollback, graphical desktop access, notifications, file sync, managed GPU purchasing, production tenant isolation, multi-region database/event scaling, quotas, and billing. Access to an existing SSH GPU host belongs to phase 2; procuring GPUs belongs here. Prioritize these from observed demo limitations rather than adding decorative controls.
+
+## External decisions before the remote milestone
+
+- Choose one employee identity provider and supply two test identities with distinct project roles.
+- Supply a known SSH GPU host and execution account, or an AWS account/Region with confirmed GPU quota, plus the required host or IAM trust setup.
+- Choose a repository and a small GPU workload with a checkable output and a specific local limitation.
+- Decide whether an attached host offers trusted shell access or a separately enforced command/OS boundary; specify the denied action to test.
+- Set stop, volume retention, and spending expectations before launching an EC2 GPU box.
 
 ## Release evidence
 

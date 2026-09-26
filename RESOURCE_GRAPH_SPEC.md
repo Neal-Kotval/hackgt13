@@ -6,6 +6,8 @@ AgentCloud should show how people, agents, run environments, scarce resources, s
 
 The first graph can be a projection of ordinary persisted records. A graph database is unnecessary until queries or scale justify it. Every node and edge carries an organization/project scope, owner, lifecycle state, source of truth, and last verified time where applicable. Requested and reported relationships are visually distinct from verified ones.
 
+The current UI projects only local project records and shows unlinked records separately. The proposed durable run, allocation, and verification records in [BACKEND_PLAN.md](BACKEND_PLAN.md) supply the first evidence-backed `runs_on`, `allocates`, and `can_access` edges. A request-to-resource edge remains a request even after a policy decision; the graph adds a separate allocation edge only after the worker records a real provider result.
+
 ## Resource model
 
 | Node | Examples | Key state |
