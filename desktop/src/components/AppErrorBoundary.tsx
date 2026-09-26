@@ -26,7 +26,7 @@ export class AppErrorBoundary extends Component<Props, State> {
           <code>just desktop</code> from the repo root.        </p>
         <button
           type="button"
-          className="btn btn-primary"
+          className="button primary"
           onClick={() => this.setState({ error: null })}
         >
           Try again

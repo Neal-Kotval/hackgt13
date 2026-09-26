@@ -83,60 +83,72 @@ export function TaskComposer({
         the machine-first path but is not sent until the API supports it; agent
         start stays unavailable.
       </p>
-      <form className="auth-form" onSubmit={(event) => void submit(event)}>
-        <label htmlFor="task-title">Title</label>
-        <input
-          id="task-title"
-          name="title"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          maxLength={200}
-          required
-          disabled={pending}
-        />
-        <label htmlFor="task-instructions">Instructions</label>
-        <textarea
-          id="task-instructions"
-          name="instructions"
-          value={instructions}
-          onChange={(event) => setInstructions(event.target.value)}
-          rows={4}
-          required
-          disabled={pending}
-        />
-        <label htmlFor="task-agent">Agent</label>
-        <select
-          id="task-agent"
-          aria-label="Agent"
-          value={agentId}
-          onChange={(event) => setAgentId(event.target.value)}
-          required
-          disabled={pending}
-        >
-          {project.agents.map((agent) => (
-            <option key={agent.id} value={agent.id}>
-              {agent.name} ({agent.role}) · {agent.status}
-            </option>
-          ))}
-        </select>
-        <label htmlFor="task-environment">Environment / resource</label>
-        <select
-          id="task-environment"
-          aria-label="Environment"
-          value={environmentId}
-          onChange={(event) => setEnvironmentId(event.target.value)}
-          disabled={pending || project.resources.length === 0}
-        >
-          {project.resources.length === 0 ? (
-            <option value="">None registered — connect a machine on the web</option>
-          ) : (
-            project.resources.map((resource) => (
-              <option key={resource.id} value={resource.id}>
-                {resource.name} · {resource.kind} · {resource.status}
+      <form onSubmit={(event) => void submit(event)}>
+        <label htmlFor="task-title">
+          Title
+          <input
+            id="task-title"
+            name="title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            maxLength={200}
+            required
+            disabled={pending}
+          />
+        </label>
+        <label htmlFor="task-instructions">
+          Instructions
+          <textarea
+            id="task-instructions"
+            name="instructions"
+            value={instructions}
+            onChange={(event) => setInstructions(event.target.value)}
+            rows={4}
+            required
+            disabled={pending}
+          />
+        </label>
+        <label htmlFor="task-agent">
+          Agent
+          <select
+            id="task-agent"
+            className="control-select"
+            aria-label="Agent"
+            value={agentId}
+            onChange={(event) => setAgentId(event.target.value)}
+            required
+            disabled={pending}
+          >
+            {project.agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name} ({agent.role}) · {agent.status}
               </option>
-            ))
-          )}
-        </select>
+            ))}
+          </select>
+        </label>
+        <label htmlFor="task-environment">
+          Environment / resource
+          <select
+            id="task-environment"
+            className="control-select"
+            aria-label="Environment"
+            value={environmentId}
+            onChange={(event) => setEnvironmentId(event.target.value)}
+            disabled={pending || project.resources.length === 0}
+          >
+            {project.resources.length === 0 ? (
+              <option value="">
+                None registered — connect a machine on the web
+              </option>
+            ) : (
+              project.resources.map((resource) => (
+                <option key={resource.id} value={resource.id}>
+                  {resource.name} · {resource.kind} · {resource.status}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
         {!canStartLater ? (
           <p className="credential-banner" role="status">
             No verified environment on this project. You can still create a
@@ -152,14 +164,14 @@ export function TaskComposer({
         <div className="composer-actions">
           <button
             type="submit"
-            className="btn btn-primary"
+            className="button primary"
             disabled={
               pending || !title.trim() || !instructions.trim() || !agentId
             }
           >
             {pending ? "Creating…" : "Create task"}
           </button>
-          <button type="button" className="btn btn-ghost" disabled>
+          <button type="button" className="button ghost" disabled>
             Start agent (unavailable)
           </button>
         </div>

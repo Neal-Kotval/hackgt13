@@ -351,7 +351,7 @@ export default function App() {
 
   if (!auth) {
     return (
-      <div className="auth-screen" role="status">
+      <div className="auth-page" role="status">
         <p className="auth-loading">Checking employee session…</p>
       </div>
     );

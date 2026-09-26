@@ -41,7 +41,7 @@ export function ThreadList({
         </div>
         <button
           type="button"
-          className="btn btn-primary"
+          className="button primary"
           onClick={onCreate}
           disabled={busy}
         >
@@ -73,7 +73,7 @@ export function ThreadList({
               </button>
               <button
                 type="button"
-                className="btn btn-ghost thread-delete"
+                className="button ghost thread-delete"
                 aria-label={`Delete ${thread.title}`}
                 disabled={busy}
                 onClick={() => {
