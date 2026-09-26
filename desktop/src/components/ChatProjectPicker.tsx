@@ -83,7 +83,7 @@ export function ChatProjectPicker({
   return (
     <div className="chat-project-picker">
       <label className="composer-hint" htmlFor="chat-project">
-        Project agent
+        Project
       </label>
       <select
         id="chat-project"

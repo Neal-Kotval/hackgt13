@@ -884,20 +884,37 @@ select.control-select:hover:not(:disabled),
 .main {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   background: var(--color-bg);
 }
 
 .main-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
   min-height: var(--header-height);
+  min-width: 0;
   padding: var(--space-4) var(--page-gutter);
   border-bottom: var(--border-width) solid var(--color-border);
   background: var(--color-bg);
+}
+
+.chat-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  min-width: 0;
+}
+
+.chat-heading h1 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .main-header h1 {
@@ -974,14 +991,15 @@ select.control-select:hover:not(:disabled),
 
 .chat-project-picker {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  margin: 0;
   max-width: var(--content-narrow);
 }
 
 .chat-project-picker select.control-select {
-  width: 100%;
+  width: var(--sidebar-width-wide);
 }
 
 .composer {

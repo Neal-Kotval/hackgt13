@@ -37,7 +37,7 @@ export function Composer({
           disabled={disabled}
           placeholder={
             disabled
-              ? "Select a project to message its agent"
+              ? "Select or create a chat to compose a message"
               : "Message the project agent"
           }
           onChange={(event) => onChange(event.target.value)}

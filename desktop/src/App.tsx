@@ -471,21 +471,13 @@ export default function App() {
           />
           <main className="main">
             <header className="main-header">
-              <div>
-                <h1>{activeThread?.title ?? "No chat selected"}</h1>
-                <p className="brand-meta">
-                  Project agent chat — does not create AgentCloud tasks. Threads
-                  stay on this machine; replies come from the selected project
-                  agent via the shared backend.
-                </p>
+              <div className="chat-heading">
+                <h1>{activeThread?.title ?? "Project chat"}</h1>
                 <ChatProjectPicker
                   selectedId={chatProjectId}
                   onSelect={updateChatProjectId}
                 />
               </div>
-              {credentials ? (
-                <p className="brand-meta">{credentials.message}</p>
-              ) : null}
             </header>
             {activeThread ? (
               <Conversation
@@ -495,16 +487,15 @@ export default function App() {
             ) : (
               <div className="conversation">
                 <div className="main-empty" role="status">
-                  Select a project above, then type below to start. The first
-                  send creates a local thread; replies go through that project’s
-                  agent on AgentCloud. New chat is optional for another empty
-                  thread.
+                  Type below to start. The first send creates the thread. New
+                  chat is only for another empty thread.
+                  {credentials ? ` ${credentials.message}` : ""}
                 </div>
               </div>
             )}
             <Composer
               value={draft}
-              disabled={!chatProjectId}
+              disabled={false}
               sending={sending}
               error={error}
               onChange={(value) => {
