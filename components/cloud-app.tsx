@@ -1259,7 +1259,7 @@ function Setup({
             </small>
           </label>
           <label>
-            Template
+            <span className="visually-hidden">Template</span>
             <Select name="template">
               <option>Next.js + Node API</option>
               <option>React + Python API</option>
@@ -1377,7 +1377,7 @@ function TaskForm({
         />
       </label>
       <label>
-        Assign to
+        <span className="visually-hidden">Assign to</span>
         <Select
           name="owner"
           required
@@ -1394,7 +1394,7 @@ function TaskForm({
         </Select>
       </label>
       <label>
-        Depends on
+        <span className="visually-hidden">Depends on</span>
         <Select name="dependency" defaultValue="">
           <option value="">No dependency</option>
           {project.tasks.map((task) => (

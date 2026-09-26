@@ -57,7 +57,7 @@ export function EmployeeMenu() {
   const { data: active } = client.useActiveOrganization();
   const [error, setError] = useState("");
   return <>
-    {organizations && organizations.length > 0 && <label className="organization-switcher"><span>Organization</span><Select aria-label="Active organization" value={active?.id || ""} onChange={async e => {
+    {organizations && organizations.length > 0 && <label className="organization-switcher"><span className="visually-hidden"><span>Organization</span></span><Select aria-label="Active organization" value={active?.id || ""} onChange={async e => {
       const result = await client.organization.setActive({ organizationId: e.target.value });
       if (result.error) setError("Could not switch organization"); else window.location.assign("/projects");
     }}><option value="" disabled>Select organization</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</Select></label>}

@@ -199,7 +199,7 @@ export function ResourceCatalog({ project, onAction }: ResourceProps) {
               />
             </label>
             <label>
-              Type
+              <span className="visually-hidden">Type</span>
               <Select
                 value={kind}
                 onChange={(event) =>
@@ -428,7 +428,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
             </p>
           </div>
           <label>
-            Catalog resource
+            <span className="visually-hidden">Catalog resource</span>
             <Select
               value={resourceId}
               onChange={(event) => setResourceId(event.target.value)}
@@ -443,7 +443,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
           </label>
           {!resourceId && (
             <label>
-              Resource type
+              <span className="visually-hidden">Resource type</span>
               <Select
                 value={kind}
                 onChange={(event) =>
@@ -461,7 +461,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
           {!resourceId && kind === "gpu" && (
             <div className="resource-price-summary">
               <label>
-                GPU profile
+                <span className="visually-hidden">GPU profile</span>
                 <Select value={demoGpuProfile.id} disabled>
                   <option value={demoGpuProfile.id}>
                     {demoGpuProfile.label} · {demoGpuProfile.instanceType}
@@ -469,7 +469,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                 </Select>
               </label>
               <label>
-                Requested duration
+                <span className="visually-hidden">Requested duration</span>
                 <Select
                   value={durationHours}
                   onChange={(event) =>
@@ -509,7 +509,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
             </div>
           )}
           <label>
-            Task
+            <span className="visually-hidden">Task</span>
             <Select
               value={taskId}
               onChange={(event) => setTaskId(event.target.value)}
@@ -523,7 +523,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
             </Select>
           </label>
           <label>
-            Agent
+            <span className="visually-hidden">Agent</span>
             <Select
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
@@ -772,7 +772,7 @@ export function InferenceDraft({ project, onAction }: ResourceProps) {
               />
             </label>
             <label>
-              Access scope
+              <span className="visually-hidden">Access scope</span>
               <Select
                 value={accessScope}
                 onChange={(event) => setAccessScope(event.target.value)}
@@ -784,7 +784,7 @@ export function InferenceDraft({ project, onAction }: ResourceProps) {
               <small>Intent only; no access rule is enforced.</small>
             </label>
             <label>
-              Lifetime
+              <span className="visually-hidden">Lifetime</span>
               <Select
                 value={lifetime}
                 onChange={(event) => setLifetime(event.target.value)}
