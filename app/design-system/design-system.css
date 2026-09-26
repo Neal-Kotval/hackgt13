@@ -14,6 +14,8 @@
 .ds-color { height: var(--space-20); border-bottom: var(--border-width) solid var(--color-border); }
 .ds-color-bg { background: var(--color-bg); }
 .ds-color-surface { background: var(--color-surface); }
+.ds-color-selected { background: var(--color-selected); }
+.ds-color-border { background: var(--color-border); }
 .ds-color-surface-raised { background: var(--color-surface-raised); }
 .ds-color-text { background: var(--color-text); }
 .ds-color-muted { background: var(--color-muted); }
@@ -32,9 +34,9 @@
 .ds-type-meta { display: flex; flex-direction: column; gap: var(--space-1); }
 .ds-type-meta code { color: var(--color-accent); font-size: var(--text-xs); }
 .ds-type-meta span { color: var(--color-subtle); font-size: var(--text-xs); }
-.ds-type-hero { font-size: var(--text-hero); line-height: var(--leading-tight); letter-spacing: var(--tracking-tight); }
-.ds-type-3xl { font-size: var(--text-3xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-tight); }
-.ds-type-xl { font-size: var(--text-xl); }
+.ds-type-hero { font-family: var(--font-heading); font-weight: var(--font-weight-semibold); font-size: var(--text-hero); line-height: var(--leading-tight); letter-spacing: var(--tracking-tight); }
+.ds-type-2xl { font-family: var(--font-heading); font-weight: var(--font-weight-semibold); font-size: var(--text-2xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-tight); }
+.ds-type-xl { font-family: var(--font-heading); font-weight: var(--font-weight-semibold); font-size: var(--text-xl); }
 .ds-type-base { font-size: var(--text-base); }
 .ds-type-sm { font-size: var(--text-sm); color: var(--color-muted); }
 .ds-type-xs { font-size: var(--text-xs); color: var(--color-subtle); }
@@ -73,7 +75,7 @@
   .ds-section-title { gap: var(--space-3); }
   .ds-type-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
   .ds-type-meta { flex-direction: row; flex-wrap: wrap; gap: var(--space-3); }
-  .ds-type-hero { font-size: var(--text-3xl); }
+  .ds-type-hero { font-family: var(--font-heading); font-weight: var(--font-weight-semibold); font-size: var(--text-3xl); }
   .ds-spacing { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: var(--space-4); }
   .ds-contract { padding: var(--space-5); gap: var(--space-6); }
   .ds-back { flex-basis: 100%; }
