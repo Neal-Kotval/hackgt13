@@ -12,8 +12,10 @@ const colors = [
   ["text", "Text", "Primary information"],
   ["muted", "Muted", "Supporting context"],
   ["subtle", "Subtle", "Quiet metadata"],
-  ["accent", "Cyan", "Actions and focus"],
-  ["pink", "Magenta", "Agent identity"],
+  ["accent", "Teal", "Actions and focus"],
+  ["info", "Blue", "Information and context"],
+  ["pink", "Violet", "Agent identity"],
+  ["danger", "Coral", "Errors and destructive actions"],
   ["success", "Success", "Healthy and complete"],
   ["warning", "Warning", "Attention required"],
 ] as const;
@@ -86,7 +88,7 @@ export default function DesignSystem() {
           <div className="ds-contract-files"><code>app/tokens.css</code><span>Palette, scales, semantic aliases</span><code>DESIGN.md</code><span>Rules, exceptions, and review criteria</span><code>npm run tokens:check</code><span>Check application styles against the contract</span></div>
         </section>
       </main>
-      <footer className="ds-footer"><span>AgentCloud · Design system</span><span>Square controls. Quiet surfaces. Visible progress.</span></footer>
+      <footer className="ds-footer"><span>AgentCloud · Design system</span><span>Geometric layouts. Rounded components. Purposeful color.</span></footer>
     </div>
   );
 }

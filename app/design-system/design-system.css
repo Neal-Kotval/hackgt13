@@ -101,3 +101,6 @@
   font-size: var(--text-sm);
   color: var(--color-secondary);
 }
+
+.ds-color-info { background: var(--color-info); }
+.ds-color-danger { background: var(--color-danger); }
