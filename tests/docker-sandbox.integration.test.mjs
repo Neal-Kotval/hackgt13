@@ -8,7 +8,7 @@ import Database from "better-sqlite3";
 import { migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
 import { migrateSshKeys, normalizePublicKey, registerSshKey } from "../lib/ssh-keys.mjs";
 import { getRunBoxSshEndpoint, knownHostsLine, migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
-import { createDockerSandboxProvider } from "../lib/docker-sandbox-provider.mjs";
+import { createDockerSandboxProvider, sandboxInstallId } from "../lib/docker-sandbox-provider.mjs";
 import { runSandboxSsh, workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
 
 // Real Docker end to end: image build, container, sshd, key injection, stop.
@@ -29,7 +29,8 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
   const directory = mkdtempSync(path.join(os.tmpdir(), "agentcloud-sandbox-it-"));
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
-  const provider = createDockerSandboxProvider();
+  // Isolated from any live worker on this Docker host.
+  const provider = createDockerSandboxProvider({ installId: sandboxInstallId(directory) });
   let jobId;
   try {
     db.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, emailVerified INTEGER NOT NULL);
@@ -110,4 +111,13 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     db.close();
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("docker-local sandbox containers are scoped to one install", async () => {
+  const calls = [];
+  const docker = async (args) => { calls.push(args); return ""; };
+  const first = createDockerSandboxProvider({ docker, installId: sandboxInstallId("/tmp/install-a") });
+  await first.listManaged();
+  assert.notEqual(sandboxInstallId("/tmp/install-a"), sandboxInstallId("/tmp/install-b"));
+  assert.ok(calls[0].includes(`label=agentcloud.install=${sandboxInstallId("/tmp/install-a")}`));
 });
