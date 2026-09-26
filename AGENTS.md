@@ -45,6 +45,8 @@ Run the checks appropriate to the change. The repository exposes `npm run check`
 
 ## Product truth and security
 
+- Manage AgentCloud AWS resources through `infra/aws/` Terraform. Import preexisting account resources before modifying them, review the plan before apply, and never commit Terraform state or AWS credentials.
+
 - Start with empty real project state. Do not add seeded projects, fake agent activity, sample diffs, or sample test results to the running product.
 - A saved repository URL is not a completed clone; a branch name is not a created worktree; a registered endpoint is not a verified running service.
 - A transport heartbeat is not evidence that Codex or Claude executed a task.

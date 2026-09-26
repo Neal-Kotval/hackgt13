@@ -78,6 +78,11 @@ export interface ResourceRequest {
   taskId?: string;
   agentId?: string;
   purpose: string;
+  requestedBy?: {
+    employeeId: string;
+    organizationId: string;
+    projectRoleAtRequest: "owner" | "member";
+  };
   computePreference?: {
     provider: "aws-ec2";
     profileId: string;

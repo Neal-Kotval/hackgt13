@@ -44,7 +44,7 @@ flowchart LR
 | Remote runner | Start the actual agent and workload, emit bounded attributed events | Heartbeat and model execution are distinct |
 | Event stream | Snapshot plus replay cursor after reconnect | Current SSE sends whole local-state snapshots and has no durable cursor |
 
-For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU host remains the quickest proof path if it is available. Both paths must verify the execution identity, workspace, GPU operation, and stop result. AWS Systems Manager may provide management access without inbound SSH, but IAM access to the instance does not establish file or command restrictions inside an agent's shell. [AWS Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
+For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU host remains the quickest proof path if it is available. Both paths must verify the execution identity, workspace, GPU operation, and stop result. AgentCloud AWS resources are defined and managed in [Terraform](infra/aws/); the current foundation has a launch template and expiry guard but no deployed run box or EC2 worker. AWS Systems Manager may provide management access without inbound SSH, but IAM access to the instance does not establish file or command restrictions inside an agent's shell. [AWS Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
 
 ## Routes
 
@@ -55,7 +55,7 @@ For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU 
 | `POST /api/actions` | Alias of the human mutation endpoint |
 | `GET /api/events` | Default SSE messages containing complete state on state changes, including heartbeat expiry; comments keep connection alive |
 | `POST /api/agent` | Bearer-scoped `connect`, `heartbeat`, `context`, `task`, `service`, and `handoff` operations |
-| `POST /api/resources` | Authenticated project-member catalog registrations, resource requests, and inference configuration drafts; no allocation or policy approval |
+| `POST /api/resources` | Verified project-member catalog registrations, resource requests, and inference configuration drafts; requests record server-derived employee, organization, and project role at submission, with no allocation or policy approval |
 
 Human mutations accept `{type, projectId, ...fields}` and return `{state, ...result}`. Creating a project returns `id`; creating an agent returns `agentId` and the one-time plaintext `token`. API errors use `{error}` with appropriate 400, 401, 403, 404, or 409 status codes. Internal errors return a generic 500 response.
 

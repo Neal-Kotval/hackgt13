@@ -83,13 +83,15 @@ Run `npm test`, `npm run check`, `npm run tokens:check`, and `npm run build`. Au
 
 The backend stores project, agent, task, service, handoff, resource catalog, resource request, inference draft, and event records on local disk. Agent credentials are stored as hashes and scoped to a project and identity. A CLI client can establish a real coordination connection. Browser views receive state updates through server-sent events.
 
+The Requests form can save a one- or two-hour preference for the small `g6.xlarge` GPU demo profile and shows a dated AWS compute-price estimate. A verified employee with project membership submits it; the server records that employee, organization, and effective project role. This is a planning quote only; storage, network, and taxes are excluded, GPU quota may be unavailable, and the requested duration is not enforced. Saving the request still makes no policy decision and launches no machine. A future worker must recheck authorization, re-price, and enforce expiry before allocation.
+
 The application starts empty. Create a project, add agent identities, and connect clients to populate actual coordination records. There are no seeded projects, agent fixtures, or replay controls. Review provides working handoff records and explicitly empty Changes and Checks panels for future Git diffs and test execution. The application does not launch Codex or Claude, provision a server, clone a repository through the product flow, create worktrees through the product flow, run tests, or merge changes. A local Git provider library exists but is not wired to the API or UI. A newly created project saves setup metadata; compute provisioning remains pending.
 
 The project control plane now includes Resources, Requests, Runs, Graph, and Inference screens. A catalog entry is registered metadata, not connected capacity. A request is persisted with policy `not_evaluated`; it is neither approved nor allocated. Inference configurations are drafts only. Runs show actual stored coordination events and transport heartbeats, with command results empty until a real runner sends them. The graph projects persisted relationships and does not imply a verified allocation.
 
 The target HackGT MVP is employee login, a real remote run environment, server-enforced resource permission, one agent completing a GPU task, and a control surface mirroring actual work. Two-agent collaboration is a later extension. This repository does not yet fulfill the MVP. See [MVP_SPEC.md](MVP_SPEC.md) and [ROADMAP.md](ROADMAP.md) for concrete acceptance gates.
 
-The proposed backend uses one provider-neutral run-box contract: attach an existing SSH GPU host first when available, then implement EC2 as the first managed provider. [BACKEND_PLAN.md](BACKEND_PLAN.md) defines the records, worker, lifecycle, verification gates, and AWS decisions. This is planning documentation; the current app does not launch boxes.
+The proposed backend uses one provider-neutral run-box contract: attach an existing SSH GPU host first when available, then implement EC2 as the first managed provider. [BACKEND_PLAN.md](BACKEND_PLAN.md) defines the records, worker, lifecycle, verification gates, and AWS decisions. AWS resources are managed through [Terraform](infra/aws/); the current app does not launch boxes.
 
 ## Explore the application
 
@@ -162,7 +164,7 @@ The token check enforces the visual-system rules; it does not replace visual ins
 | [DESIGN.md](DESIGN.md) | Visual system, token rules, component patterns, and responsive behavior |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Application, storage, API, CLI, and future infrastructure boundaries |
 | [BACKEND_PLAN.md](BACKEND_PLAN.md) | Proposed identity, worker, run-box provider, events, and EC2 implementation contract |
-| [AWS_SETUP.md](AWS_SETUP.md) | Live AWS GPU demo preflight, spending policy, quota request, and launch gates |
+| [AWS_SETUP.md](AWS_SETUP.md) | Live AWS GPU demo preflight, Terraform workflow, spending policy, quota request, and launch gates |
 | [ROADMAP.md](ROADMAP.md) | Dependency-ordered delivery phases and acceptance gates |
 | [VERIFICATION.md](VERIFICATION.md) | Recorded check results, remaining verification, and browser-tool limitations |
 | [AGENTS.md](AGENTS.md) | Contributor rules for design, testing, collaboration, and truthful capabilities |
