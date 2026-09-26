@@ -22,6 +22,14 @@ test("remote bridge isolates sessions and guards the loopback browser boundary",
     process.env.AGENTCLOUD_REMOTE_BACKEND_URL = value;
     assert.throws(remoteBackendURL);
   }
+  for (const origin of ["http://127.0.0.1:3002", "http://localhost:3002", "http://[::1]:3002"]) {
+    process.env.AGENTCLOUD_REMOTE_BACKEND_URL = origin;
+    assert.equal(remoteBackendURL().origin, origin);
+  }
+  for (const origin of ["http://192.168.1.2:3002", "http://127.0.0.1.evil.test", "http://localhost@evil.test"]) {
+    process.env.AGENTCLOUD_REMOTE_BACKEND_URL = origin;
+    assert.throws(remoteBackendURL);
+  }
   process.env.AGENTCLOUD_REMOTE_BACKEND_URL = upstream;
   let calls = [];
   globalThis.fetch = async (url, init) => {

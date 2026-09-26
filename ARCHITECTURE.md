@@ -108,3 +108,7 @@ JSON still stores coordination data. There is no cross-store transaction: failed
 ## Optional shared-backend frontend preview
 
 `just dev-aws` runs local Next.js UI with `AGENTCLOUD_REMOTE_BACKEND_URL` selected from Doppler's `AGENTCLOUD_URL`. The loopback-only `proxy.ts` API bridge and `lib/page-auth.ts` server-rendered guards use the same remote employee session. API responses, live event streams, and auth cookie changes remain tied to the selected backend. Self-hosted mode stays the default; the preview does not read the local account database or silently fall back to it when AWS is unavailable. Public hosting uses the regular same-origin app deployment, not this development bridge.
+
+## Local Docker simulation
+
+`compose.yaml` builds the real backend as a non-root Node 22 container, with persistent SQLite/JSON state and captured mail in a named volume. Its generated auth secret stays private in that volume, outside Docker image layers and Terraform state. `just dev-docker` connects the local frontend bridge to loopback port 3002. Remote bridge HTTP is accepted only for literal loopback hosts; other upstreams require HTTPS. `infra/local` is an alternative Docker Terraform root, separate from both AWS roots and never automatically applied. The simulator verifies local application flows, not AWS IAM, EC2 allocation, GPU availability, or agent execution.

@@ -36,6 +36,16 @@ A fresh checkout can run the web app, API, and Better Auth locally with the shar
 
 For the shared account, open the `AGENTCLOUD_URL` from Doppler in a browser, or run `just desktop-doppler` after `just desktop-setup`. The local Next.js server started by `just dev-doppler` still uses its own database; setting `AGENTCLOUD_URL` does not redirect that server's routes to AWS. The CloudFront hostname remains stable through EC2 restarts but must be updated in Doppler if the Terraform distribution is replaced.
 
+### Docker backend simulation (no AWS)
+
+With Docker running, use `just sim-up`, then `just dev-docker`. The frontend is at `http://127.0.0.1:3001` and the isolated backend at `http://127.0.0.1:3002`. Both use the same container database. To change the backend port, set `AGENTCLOUD_SIM_PORT` consistently for both commands. This mode deliberately ignores the shared AWS URL, requires no Doppler or AWS credentials, and does not provision cloud compute. The container runs the real account, organization, project, and resource APIs; GPU/EC2 execution is not simulated as successful.
+
+The simulation starts empty. Sign up with a new local account; AWS accounts are not copied. Verification emails are captured privately in the data volume. To retrieve your own link, run `docker compose exec backend node scripts/docker/mail-link.mjs your@email.com`. Open the link on port 3002 and then sign in on port 3001. The command prints a sensitive, expiring verification link; do not share it in logs or tickets.
+
+The Compose volume keeps accounts, sessions, projects, mail, and an automatically generated auth secret across container restarts. `just sim-down` stops the container without deleting this data. Do not use `down --volumes` unless you intend to erase the simulation. Ports bind only to loopback. The image excludes local secrets, databases, and Terraform state.
+
+[Local Terraform](infra/local/README.md) describes the same backend as an alternative to Compose. Its Docker resources use separate names and data. Existing [AWS app Terraform](infra/aws-auth/README.md) and [AWS GPU Terraform](infra/aws/README.md) remain separate roots. Validation is not provisioning; this workflow does not run any AWS apply or deploy command.
+
 ### Local frontend with shared AWS data
 
 Run `just dev-aws` (or `doppler run --project hackgt --config dev -- npm run dev:aws`) to serve the local frontend at `http://127.0.0.1:3001` against the shared `AGENTCLOUD_URL`. Sign in with an existing verified AWS account. Authentication, organizations, projects, resource requests, run-box controls, and live events go to that backend; mutations affect shared data. No AWS credentials, local auth setup, or copied database are required.
