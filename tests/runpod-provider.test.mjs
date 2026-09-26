@@ -135,6 +135,19 @@ test("uncertain create with no visible pod or duplicate markers fails closed", a
   assert.equal(timedOut.calls.filter((call) => call.method === "POST").length, 1);
 });
 
+test("create callback runs only when a POST is about to be attempted", async () => {
+  let attempts = 0;
+  const beforePost = () => { attempts++; };
+  const listFailed = harness([new Error("GET unavailable")]);
+  await assert.rejects(listFailed.provider.createPod(spec, { onBeforePost: beforePost }));
+  assert.equal(attempts, 0);
+  assert.deepEqual(listFailed.calls.map((call) => call.method), ["GET"]);
+  const ambiguous = harness([list([]), new Error("POST timed out"), list([])]);
+  await assert.rejects(ambiguous.provider.createPod(spec, { onBeforePost: beforePost }), RunpodAmbiguousCreateError);
+  assert.equal(attempts, 1);
+  assert.deepEqual(ambiguous.calls.map((call) => call.method), ["GET", "POST", "GET"]);
+});
+
 test("upstream errors and malformed replies never expose API keys or response bodies", async () => {
   const rejected = harness([json({ detail: `Bearer ${key}` }, 403)]);
   await assert.rejects(rejected.provider.listPods(), (error) => error.status === 403 && !String(error).includes(key));

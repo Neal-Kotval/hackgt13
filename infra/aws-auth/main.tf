@@ -142,6 +142,15 @@ resource "aws_vpc_security_group_egress_rule" "https" {
   description       = "Outbound HTTPS only"
 }
 
+resource "aws_vpc_security_group_egress_rule" "runpod_ssh" {
+  security_group_id = aws_security_group.instance.id
+  ip_protocol       = "tcp"
+  from_port         = 1024
+  to_port           = 65535
+  cidr_ipv4         = "0.0.0.0/0"
+  description       = "Outbound mapped SSH port for approved Runpod Pods"
+}
+
 data "aws_ec2_managed_prefix_list" "cloudfront" {
   name = "com.amazonaws.global.cloudfront.origin-facing"
 }
@@ -211,7 +220,8 @@ resource "aws_instance" "app" {
     aws_iam_role_policy_attachment.ssm,
     aws_iam_role_policy.artifact_read,
     aws_iam_role_policy.runtime_secret_read,
-    aws_vpc_security_group_egress_rule.https
+    aws_vpc_security_group_egress_rule.https,
+    aws_vpc_security_group_egress_rule.runpod_ssh
   ]
 }
 

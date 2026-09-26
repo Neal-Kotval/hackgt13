@@ -38,8 +38,8 @@ const projectId = (await store.action({ type: "createProject", name: "GPU test",
 fixture.grantMembership(owner.id, projectId, "owner");
 fixture.grantMembership(member.id, projectId, "member");
 const actor = (user, role) => ({ employeeId: user.id, organizationId: fixture.organization.id, projectRole: role });
-async function gpuRequest(user, role) {
-  return (await store.resourceAction({ type: "requestResource", projectId, kind: "gpu", purpose: "GPU smoke", gpuProfileId: "g6-l4-small", durationHours: 1 }, actor(user, role))).request;
+async function gpuRequest(user, role, gpuProfileId = "g6-l4-small") {
+  return (await store.resourceAction({ type: "requestResource", projectId, kind: "gpu", purpose: "GPU smoke", gpuProfileId, durationHours: 1 }, actor(user, role))).request;
 }
 function request(url, body, cookie) {
   return new Request(`http://localhost:3000${url}`, {
@@ -140,6 +140,8 @@ test("one-step owner path records the request with server-derived requester and 
   assert.equal(await requestCount(), before + 1);
   const listed = await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, owner.cookie))).json();
   assert.ok(listed.jobs.some((item) => item.id === job.id && item.resource_request_id === decision.resource_request_id));
+  // Release the single active Runpod slot for later tests (no worker runs here).
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE id = ?").run(job.id);
 });
 
 test("one-step member path records a denied decision without a job, once under concurrent retries", async () => {
@@ -190,4 +192,22 @@ test("one-step local Docker sandbox path refuses cleanly while the provider is u
   assert.equal(response.status, 409);
   assert.match((await response.json()).error, /not available on this server/);
   assert.equal(await requestCount(), before);
+});
+
+test("Runpod approval is owner scoped, profile pinned, and duplicate allocation returns conflict", async () => {
+  const saved = await gpuRequest(owner, "owner", "runpod-rtx-4090");
+  const input = { projectId, resourceRequestId: saved.id, idempotencyKey: "runpod-approval-1" };
+  assert.equal((await boxes.POST(request("/api/run-boxes", input, member.cookie))).status, 403);
+  const response = await boxes.POST(request("/api/run-boxes", input, owner.cookie));
+  assert.equal(response.status, 201);
+  const { decision, job } = await response.json();
+  assert.equal(decision.provider, "runpod");
+  assert.equal(decision.profile_id, "runpod-rtx-4090");
+  assert.equal(job.state, "queued");
+  assert.equal(job.provider_resource_id, null);
+  const next = await gpuRequest(owner, "owner", "runpod-rtx-4090");
+  const duplicate = await boxes.POST(request("/api/run-boxes", {
+    projectId, resourceRequestId: next.id, idempotencyKey: "runpod-approval-2",
+  }, owner.cookie));
+  assert.equal(duplicate.status, 409);
 });

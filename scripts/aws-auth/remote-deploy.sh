@@ -91,6 +91,12 @@ systemctl enable --now agentcloud.service >/dev/null
 systemctl enable --now agentcloud-mail-reader.service >/dev/null
 systemctl restart agentcloud.service
 systemctl restart agentcloud-mail-reader.service
+if systemctl is-enabled --quiet agentcloud-gpu-worker.service; then
+  systemctl restart agentcloud-gpu-worker.service
+fi
+if systemctl is-enabled --quiet agentcloud-runpod-worker.service; then
+  systemctl restart agentcloud-runpod-worker.service
+fi
 for _ in {1..30}; do
   if curl -fsS --max-time 3 http://127.0.0.1:3000/sign-in >/dev/null; then
     echo "AgentCloud staging healthy at revision $REVISION (loopback only)."

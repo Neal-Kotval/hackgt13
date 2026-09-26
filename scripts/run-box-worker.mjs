@@ -15,6 +15,8 @@ import { migrateSshKeys } from "../lib/ssh-keys.mjs";
 import { migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
 import { createDockerSandboxProvider } from "../lib/docker-sandbox-provider.mjs";
 import { reconcileDockerSandboxes, workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
+import { loadRunpodApiKey } from "../lib/runpod-secret.mjs";
+import { checkRunpodExpiryGuard } from "./runpod-expiry-preflight.mjs";
 
 const mode = process.argv[2];
 const providerName = process.argv[3] || "aws-ec2";
@@ -41,19 +43,23 @@ async function awsCycle() {
 }
 
 async function runpodCycle() {
-  const provider = createRunpodProvider({ apiKey: process.env.RUNPOD_API_KEY });
+  const provider = createRunpodProvider({ apiKey: await loadRunpodApiKey() });
   const db = getDatabase();
   migrateRunBoxJobs(db);
   migrateRunpodEvidence(db);
   migrateRunpodCleanup(db);
-  const reconciled = await reconcileRunpodJobs(db, provider, { workerId, requestStop: requestRunBoxStop });
+  const reconciled = await reconcileRunpodJobs(db, provider, { workerId, requestStop: requestRunBoxStop,
+    checkCleanupGuard: checkRunpodExpiryGuard });
   if (reconciled.some((item) => item.status === "retry"))
     throw new Error("Runpod cleanup remains unconfirmed; refusing another allocation");
   const connection = {
     keyFile: process.env.AGENTCLOUD_RUNPOD_SSH_KEY_FILE,
     publicKey: process.env.AGENTCLOUD_RUNPOD_SSH_PUBLIC_KEY,
+    // Optional operator pins written by scripts/runpod-pin-host-key.mjs; they override the injected key.
+    knownHostsFile: process.env.AGENTCLOUD_RUNPOD_KNOWN_HOSTS_FILE || "/var/lib/agentcloud/runpod/known_hosts",
   };
-  const result = await workOneRunpodJob(db, provider, { workerId, connection, verify: verifyRunpodSsh });
+  const result = await workOneRunpodJob(db, provider, { workerId, connection, verify: verifyRunpodSsh,
+    checkCleanupGuard: checkRunpodExpiryGuard });
   if (result) console.log(`Processed Runpod job ${result.jobId}: ${result.state}${result.retry ? " (verification pending)" : ""}`);
   return result;
 }

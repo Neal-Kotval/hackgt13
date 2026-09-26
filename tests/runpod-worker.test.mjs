@@ -12,6 +12,7 @@ import { migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
 import { migrateRunpodCleanup } from "../lib/runpod-reconcile.mjs";
 import { preflightRunpod, RUNPOD_SSH_USER, validateRunpodSshConfig, workOneRunpodJob } from "../lib/runpod-worker.mjs";
+import { runpodPodName } from "../lib/runpod-provider.mjs";
 
 function setup() {
   const db = new Database(":memory:");
@@ -35,15 +36,18 @@ function setup() {
   return { db, job };
 }
 
-function provider(jobId, overrides = {}) {
+function provider(job, overrides = {}) {
   const calls = [];
-  const pod = { id: "pod123", name: `agentcloud-${jobId}--exp-1790460000`, status: "RUNNING",
+  const expiresAt = new Date(Math.floor((Date.parse(job.created_at) + job.max_duration_minutes * 60_000) / 1_000) * 1_000);
+  const pod = { id: "pod123", name: runpodPodName(job.id, expiresAt), status: "RUNNING",
+    gpuId: "NVIDIA GeForce RTX 4090", gpuCount: 1,
+    image: "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404", cloud: "SECURE", diskGb: 50,
     ssh: { direct: { host: "203.0.113.10", port: 30222, username: "root" } } };
   return { calls,
     async listGpuTypes() { calls.push("catalog"); return [{ id: "NVIDIA GeForce RTX 4090", availability: "HIGH", secureHourlyUsd: .49 }]; },
     async listPods() { calls.push("list"); return []; },
     async findPodByJobId() { calls.push("find"); return null; },
-    async createPod(input) { calls.push(["create", input]); return pod; },
+    async createPod(input, { onBeforePost }) { await onBeforePost(); calls.push(["create", input]); return pod; },
     async getPod(id) { calls.push(["get", id]); return pod; }, ...overrides };
 }
 
@@ -56,20 +60,42 @@ function proof(jobId) {
 
 test("Runpod preflight requires catalog price, availability, and no other managed Pod", async () => {
   const { db, job } = setup();
-  const service = provider(job.id);
+  const service = provider(job);
   assert.equal((await preflightRunpod(service, job)).hourlyUsd, .49);
-  await assert.rejects(preflightRunpod(provider(job.id, { async listGpuTypes() {
+  await assert.rejects(preflightRunpod(provider(job, { async listGpuTypes() {
     return [{ id: "NVIDIA GeForce RTX 4090", availability: "HIGH", secureHourlyUsd: null }];
   } }), job), /price unavailable/);
-  await assert.rejects(preflightRunpod(provider(job.id, { async listPods() {
+  await assert.rejects(preflightRunpod(provider(job, { async listPods() {
     return [{ name: "agentcloud-another-job", id: "other" }];
   } }), job), /Another managed Runpod Pod/);
   db.close();
 });
 
+test("changed Pod profile cannot be verified or marked ready", async () => {
+  const { db, job } = setup();
+  const service = provider(job, { async createPod(input, { onBeforePost }) { await onBeforePost(); return { id: "pod123", name: runpodPodName(input.jobId, input.expiresAt),
+    gpuId: "NVIDIA A100", gpuCount: 1, image: input.image, cloud: input.cloud, diskGb: input.diskGb }; } });
+  await assert.rejects(workOneRunpodJob(db, service, { workerId: "runpod-worker", connection: {},
+    checkSshConfig() {}, checkCleanupGuard: async () => true, verify: async () => { throw new Error("must not verify"); } }),
+  /no longer matches approved profile/);
+  assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM runpod_gpu_verification").get().count, 0);
+  db.close();
+});
+
+test("provider lookup failure before POST leaves no ambiguous create marker", async () => {
+  const { db, job } = setup();
+  const service = provider(job, { async createPod() { throw new Error("Runpod list unavailable"); } });
+  await assert.rejects(workOneRunpodJob(db, service, { workerId: "runpod-worker", connection: {},
+    checkSshConfig() {}, checkCleanupGuard: async () => true, verify: async () => {} }), /list unavailable/);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM runpod_create_attempt").get().count, 0);
+  assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+  db.close();
+});
+
 test("approved Runpod job reaches ready only after SSH and durable GPU proof", async () => {
   const { db, job } = setup();
-  const service = provider(job.id);
+  const service = provider(job);
   const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker",
     connection: { keyFile: "/private/key", knownHostsFile: "/private/hosts", publicKey: "ssh-ed25519 AAAA" },
     checkSshConfig() {}, checkCleanupGuard: async () => true, verify: async (approved, connection) => {
@@ -81,12 +107,14 @@ test("approved Runpod job reaches ready only after SSH and durable GPU proof", a
   assert.equal(db.prepare("SELECT repo_revision FROM run_box_job WHERE id = ?").get(job.id).repo_revision, "a".repeat(40));
   assert.equal(db.prepare("SELECT gpu_device FROM runpod_gpu_verification WHERE job_id = ?").get(job.id).gpu_device, "NVIDIA GeForce RTX 4090");
   assert.equal(service.calls.filter((call) => Array.isArray(call) && call[0] === "create").length, 1);
+  assert.equal(service.calls.find((call) => Array.isArray(call) && call[0] === "create")[1].expiresAt,
+    new Date(Math.floor((Date.parse(job.created_at) + job.max_duration_minutes * 60_000) / 1_000) * 1_000).toISOString());
   db.close();
 });
 
 test("missing SSH host pin leaves a visible retry without another Pod create", async () => {
   const { db, job } = setup();
-  const service = provider(job.id);
+  const service = provider(job);
   const settings = { workerId: "runpod-worker", connection: {}, checkSshConfig() {},
     checkCleanupGuard: async () => true,
     verify: async () => { throw new Error("Host key verification failed"); } };
@@ -103,7 +131,7 @@ test("missing SSH host pin leaves a visible retry without another Pod create", a
 
 test("missing independent cleanup guard blocks Runpod POST before catalog checks", async () => {
   const { db, job } = setup();
-  const service = provider(job.id);
+  const service = provider(job);
   const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker",
     verify: async () => { throw new Error("must not verify"); } });
   assert.equal(result.state, "allocating");
@@ -113,10 +141,25 @@ test("missing independent cleanup guard blocks Runpod POST before catalog checks
   db.close();
 });
 
+test("guard losing freshness during catalog preflight blocks Runpod POST", async () => {
+  const { db, job } = setup();
+  const service = provider(job);
+  let checks = 0;
+  const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker", connection: {},
+    checkSshConfig() {}, checkCleanupGuard: async () => ++checks === 1,
+    verify: async () => { throw new Error("must not verify"); } });
+  assert.equal(result.state, "allocating");
+  assert.equal(result.retry, true);
+  assert.equal(checks, 2);
+  assert.equal(service.calls.some((call) => Array.isArray(call) && call[0] === "create"), false);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM runpod_create_attempt").get().count, 0);
+  db.close();
+});
+
 test("stop request before allocation does not create a Pod", async () => {
   const { db, job } = setup();
   requestRunBoxStop(db, job.id, "owner");
-  const service = provider(job.id);
+  const service = provider(job);
   const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker", verify: async () => {} });
   assert.equal(result.state, "stopping");
   assert.equal(service.calls.length, 0);
@@ -142,7 +185,7 @@ test("Runpod create pins a generated host key and verify trusts only that key", 
   registerSshKey(db, "employee-2", { label: "Member laptop", publicKey: memberKey });
   registerSshKey(db, "outsider", { label: "Outsider", publicKey: ed25519PublicKey() });
   const operatorKey = ed25519PublicKey();
-  const service = provider(job.id);
+  const service = provider(job);
   let seen;
   const result = await workOneRunpodJob(db, service, { workerId: "runpod-worker",
     connection: { keyFile: "/private/key", publicKey: `${operatorKey} operator@worker` },
@@ -204,7 +247,7 @@ test("recovered Pod from an interrupted create keeps its recorded host key pin",
   const { db, job } = setup();
   migrateSshKeys(db);
   const pinned = ed25519PublicKey();
-  const service = provider(job.id);
+  const service = provider(job);
   const pod = await service.getPod("pod123");
   service.calls.length = 0;
   service.findPodByJobId = async () => { service.calls.push("find"); return pod; };
@@ -222,4 +265,17 @@ test("recovered Pod from an interrupted create keeps its recorded host key pin",
   assert.equal(input.env, undefined);
   assert.equal(getRunBoxSshEndpoint(db, job.id).hostPublicKey, pinned);
   db.close();
+});
+
+test("an operator-pinned host key overrides the injected key only for its exact Pod address", async () => {
+  const { operatorPinnedHostKey } = await import("../lib/runpod-worker.mjs");
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(`${tmpdir()}/agentcloud-pin-`);
+  const key = ed25519PublicKey();
+  writeFileSync(`${dir}/known_hosts`, `[203.0.113.10]:30222 ${key}\n`);
+  assert.equal(operatorPinnedHostKey(`${dir}/known_hosts`, "203.0.113.10", 30222), key);
+  assert.equal(operatorPinnedHostKey(`${dir}/known_hosts`, "203.0.113.10", 30223), null);
+  assert.equal(operatorPinnedHostKey(`${dir}/missing`, "203.0.113.10", 30222), null);
+  assert.equal(operatorPinnedHostKey(undefined, "203.0.113.10", 30222), null);
 });

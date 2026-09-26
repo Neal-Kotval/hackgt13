@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import { claimRunBoxJob, migrateRunBoxJobs, recordRunBoxAllocation, requestRunBoxStop,
   saveRunBoxDecision, transitionRunBoxJob } from "../lib/run-box-jobs.mjs";
 import { migrateRunpodCleanup, reconcileRunpodJobs } from "../lib/runpod-reconcile.mjs";
+import { runpodPodName } from "../lib/runpod-provider.mjs";
 
 function setup({ allocated = true } = {}) {
   const db = new Database(":memory:");
@@ -29,9 +30,12 @@ function provider(pods, { stillPresent = false, failDelete = false } = {}) {
     async getPod(id) { calls.push(["get", id]); return stillPresent ? pods.find((pod) => pod.id === id) || null : null; } };
 }
 
+function name(job) { return runpodPodName(job.id,
+  new Date(Math.floor((Date.parse(job.created_at) + job.max_duration_minutes * 60_000) / 1_000) * 1_000)); }
+
 test("active Runpod job remains allocated until stop or expiry", async () => {
   const { db, job } = setup();
-  const service = provider([{ id: "pod123", name: `agentcloud-${job.id}` }]);
+  const service = provider([{ id: "pod123", name: name(job) }]);
   assert.deepEqual(await reconcileRunpodJobs(db, service, { workerId: "worker", requestStop: requestRunBoxStop,
     checkCleanupGuard: async () => true }), []);
   assert.deepEqual(service.calls, ["list"]);
@@ -40,7 +44,7 @@ test("active Runpod job remains allocated until stop or expiry", async () => {
 
 test("loss of independent guard terminates even an otherwise active Pod", async () => {
   const { db, job } = setup();
-  const service = provider([{ id: "pod123", name: `agentcloud-${job.id}` }]);
+  const service = provider([{ id: "pod123", name: name(job) }]);
   const result = await reconcileRunpodJobs(db, service, { workerId: "worker", requestStop: requestRunBoxStop });
   assert.equal(result[0].status, "stopped");
   assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
@@ -51,7 +55,7 @@ test("loss of independent guard terminates even an otherwise active Pod", async 
 test("stop waits for Pod disappearance before durable stopped evidence", async () => {
   const { db, job } = setup();
   requestRunBoxStop(db, job.id, "owner");
-  const pod = { id: "pod123", name: `agentcloud-${job.id}` };
+  const pod = { id: "pod123", name: name(job) };
   const pending = provider([pod], { stillPresent: true });
   assert.equal((await reconcileRunpodJobs(db, pending, { workerId: "worker", requestStop: requestRunBoxStop }))[0].status, "retry");
   assert.notEqual(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
@@ -64,7 +68,7 @@ test("stop waits for Pod disappearance before durable stopped evidence", async (
 
 test("tagged orphan is terminated but cannot be assigned to a job", async () => {
   const { db, job } = setup({ allocated: false });
-  const orphan = { id: "orphan", name: "agentcloud-11111111-1111-4111-8111-111111111111" };
+  const orphan = { id: "orphan", name: runpodPodName("11111111-1111-4111-8111-111111111111", new Date(Date.now() + 3_600_000)) };
   const result = await reconcileRunpodJobs(db, provider([orphan]), { workerId: "worker", requestStop: requestRunBoxStop });
   assert.deepEqual(result.map((item) => [item.status, item.orphan]), [["stopped", true]]);
   assert.equal(db.prepare("SELECT provider_resource_id FROM run_box_job WHERE id = ?").get(job.id).provider_resource_id, null);
