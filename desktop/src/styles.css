@@ -309,6 +309,44 @@ input:focus-visible,
   margin-top: var(--space-2);
 }
 
+.task-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: var(--content-narrow);
+  padding: var(--space-4);
+  border: var(--border-width) var(--border-style) var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.task-composer h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.task-composer textarea,
+.task-composer select {
+  min-height: var(--control-height);
+  padding: var(--space-3);
+  border: var(--border-width) var(--border-style) var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.task-composer textarea {
+  min-height: calc(var(--control-height) * 2);
+  resize: vertical;
+}
+
+.task-composer .composer-actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width, 14rem) minmax(0, 1fr);
