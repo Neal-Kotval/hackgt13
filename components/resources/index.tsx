@@ -21,7 +21,8 @@ import type {
   ResourceRequest,
   ResourceStatus,
 } from "@/lib/types";
-import { demoGpuDurations, demoGpuProfile, localDockerSandboxProfile, runpodGpuProfile } from "@/lib/resource-profiles";
+import { demoGpuDurations, demoGpuProfile, localDockerSandboxProfile, runpodGpuProfile, runpodGpuProfiles } from "@/lib/resource-profiles";
+import { runBoxHardwareLabel } from "./run-box-label";
 import "./resources.css";
 
 type ResourceAction = (input: Record<string, unknown>) => Promise<unknown>;
@@ -32,9 +33,15 @@ type RunBoxJob = {
   provider: "aws-ec2" | "runpod" | "docker-local";
   state: "queued" | "allocating" | "connecting" | "verifying" | "ready" | "stopping" | "stopped" | "failed";
   provider_resource_id: string | null;
+  profile_id?: string | null;
   max_duration_minutes: number;
   stop_requested_at: string | null;
   created_at: string;
+};
+
+const gpuProfileLabels: Record<string, string> = {
+  ...Object.fromEntries(runpodGpuProfiles.map((profile) => [profile.id, profile.label])),
+  [demoGpuProfile.id]: `AWS EC2 · ${demoGpuProfile.label}`,
 };
 
 const resourceKinds: { value: ResourceKind; label: string }[] = [
@@ -491,7 +498,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
           <p className="resource-eyebrow">Access and allocation</p>
           <h2 id="resource-requests-title">Requests</h2>
           <p>
-            Save a resource request, then approve a bounded GPU job. The worker
+            Save a resource request, then approve a bounded run box. The worker
             reports allocation and cleanup separately.
           </p>
         </div>
@@ -502,7 +509,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
             <h3>New request</h3>
               <p className="resource-note">
                 Saving a request does not start a machine. Project owners can
-                approve a GPU job from the request history.
+                approve a run box from the request history.
             </p>
           </div>
           <label>
@@ -717,7 +724,7 @@ function RequestCard({
           <div>
             <dt>{request.computePreference.provider === "docker-local" ? "Environment plan" : "GPU plan"}</dt>
             {request.computePreference.provider === "docker-local" ? (
-              <dd>{localDockerSandboxProfile.label} · CPU only, no GPU, no provider cost · {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}</dd>
+              <dd>{localDockerSandboxProfile.label} · no GPU, no provider cost · {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}</dd>
             ) : request.computePreference.provider === "runpod" ? (
               <dd>{request.computePreference.gpuId} · Runpod Secure Cloud · up to ${request.computePreference.maxHourlyUsd.toFixed(2)}/hour for {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}; live price pending</dd>
             ) : (
@@ -744,17 +751,18 @@ function RequestCard({
         <ShieldWarning aria-hidden="true" />
         <div>
           <strong>Permission: {job ? "approved" : decision.status.replace("_", " ")}</strong>
-          <p>{job ? "A project owner approved this GPU job. Allocation and readiness are shown below." : decision.reason}</p>
+          <p>{job ? "A project owner approved this run box. Allocation and readiness are shown below." : decision.reason}</p>
         </div>
       </div>
       {job ? (
         <div className="resource-job">
           <div className="resource-detail-title">
-            <h4>GPU run box</h4>
+            <h4>Run box</h4>
             <span className={`resource-badge resource-badge--${job.state}`}>
               {job.state}
             </span>
           </div>
+          <p className="resource-note">{runBoxHardwareLabel(job, gpuProfileLabels)}</p>
           <dl className="resource-facts resource-facts--compact">
             <div><dt>Provider</dt><dd>{job.provider === "runpod" ? "Runpod" : job.provider === "docker-local" ? "Local Docker" : "AWS EC2"}{job.provider_resource_id ? ` · ${job.provider_resource_id}` : " · not allocated"}</dd></div>
             <div><dt>Approved limit</dt><dd>{job.max_duration_minutes} minutes</dd></div>
@@ -786,7 +794,7 @@ function RequestCard({
         </div>
       ) : request.status === "requested" && (
         <p className="resource-note">
-          No resource has been allocated or started. A project owner must approve a GPU job.
+          No resource has been allocated or started. A project owner must approve a run box.
         </p>
       )}
     </article>
