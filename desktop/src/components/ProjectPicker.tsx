@@ -213,7 +213,7 @@ export function ProjectPicker({
         <h2>Machine-first reminder</h2>
         <p>
           Connect and verify environments on the web first. Desktop authors
-          tasks against the shared backend; Local chat does not create
+          tasks against the shared backend; Project chat does not create
           AgentCloud tasks.
         </p>
       </div>
