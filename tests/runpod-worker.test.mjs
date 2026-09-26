@@ -39,7 +39,7 @@ function provider(job, overrides = {}) {
   return { calls,
     async listGpuTypes() { calls.push("catalog"); return [{ id: "NVIDIA GeForce RTX 4090", availability: "HIGH", secureHourlyUsd: .49 }]; },
     async listPods() { calls.push("list"); return []; },
-    async createPod(input) { calls.push(["create", input]); return pod; },
+    async createPod(input, { onBeforePost }) { await onBeforePost(); calls.push(["create", input]); return pod; },
     async getPod(id) { calls.push(["get", id]); return pod; }, ...overrides };
 }
 
@@ -65,13 +65,23 @@ test("Runpod preflight requires catalog price, availability, and no other manage
 
 test("changed Pod profile cannot be verified or marked ready", async () => {
   const { db, job } = setup();
-  const service = provider(job, { async createPod(input) { return { id: "pod123", name: runpodPodName(input.jobId, input.expiresAt),
+  const service = provider(job, { async createPod(input, { onBeforePost }) { await onBeforePost(); return { id: "pod123", name: runpodPodName(input.jobId, input.expiresAt),
     gpuId: "NVIDIA A100", gpuCount: 1, image: input.image, cloud: input.cloud, diskGb: input.diskGb }; } });
   await assert.rejects(workOneRunpodJob(db, service, { workerId: "runpod-worker", connection: {},
     checkSshConfig() {}, checkCleanupGuard: async () => true, verify: async () => { throw new Error("must not verify"); } }),
   /no longer matches approved profile/);
   assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM runpod_gpu_verification").get().count, 0);
+  db.close();
+});
+
+test("provider lookup failure before POST leaves no ambiguous create marker", async () => {
+  const { db, job } = setup();
+  const service = provider(job, { async createPod() { throw new Error("Runpod list unavailable"); } });
+  await assert.rejects(workOneRunpodJob(db, service, { workerId: "runpod-worker", connection: {},
+    checkSshConfig() {}, checkCleanupGuard: async () => true, verify: async () => {} }), /list unavailable/);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM runpod_create_attempt").get().count, 0);
+  assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
   db.close();
 });
 
