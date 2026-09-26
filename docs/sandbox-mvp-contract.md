@@ -32,7 +32,7 @@ POST   /api/ssh-keys { label, publicKey } -> 201 { key: { id, label, fingerprint
 DELETE /api/ssh-keys/:id            -> { ok: true }   (sets revoked_at; own keys only)
 ```
 
-All require a verified employee session (cookie). Plaintext private keys are never accepted.
+All require a verified employee session (cookie). Plaintext private keys are never accepted; non-ed25519 or malformed keys return 400. Deleting an unknown, already revoked, or another user's key returns 404. Mutations reject a mismatched `Origin` (403); requests without `Origin` (the desktop main process) are accepted on the strength of the session cookie. Revoking a key also stops `/connection` from authorizing it, even on environments where it was injected.
 
 `authorizedKeysForProject(db, projectId)` returns non-revoked public keys of every user with owner/member access to the project at allocation time. Keys registered **after** allocation are not present on that environment (documented MVP limitation).
 
@@ -43,7 +43,7 @@ Table `run_box_ssh_endpoint` (module `lib/run-box-ssh.mjs`): `job_id` (PK, FK `r
 - `recordRunBoxSshEndpoint(db, jobId, { host, port, username, hostPublicKey, authorizedFingerprints })`
 - `getRunBoxSshEndpoint(db, jobId)` -> row or `null`
 
-Workers record the endpoint before verification and verify with a `known_hosts` built from `host_public_key`.
+Workers record the endpoint before verification and verify with a `known_hosts` built from `host_public_key`. For Runpod, `username` is the non-root `agentcloud` account; root holds only the operator key. The Runpod host private key is passed in the Pod env, so it is visible to the Runpod account holder (see RUNPOD_SETUP.md).
 
 ## Connection API
 
@@ -62,7 +62,7 @@ GET /api/run-boxes/:id/connection
 
 ## Environments listing (existing, extended)
 
-`GET /api/run-boxes?projectId=` keeps its shape and adds per job: `profileId`, `ssh: { host, port, username } | null`, `desktopUrl` (`agentcloud://open?...` only when `ready`), `access: "trusted-shell"`.
+`GET /api/run-boxes?projectId=` keeps its shape and adds per job: `profileId`, `ssh: { host, port, username } | null` (non-null only when `ready` and an endpoint is recorded), `desktopUrl` (`agentcloud://open?...` only when `ready`, otherwise `null`), `access: "trusted-shell"`.
 
 `POST /api/run-boxes` gains a one-step owner path: `{ projectId, profileId, durationHours, idempotencyKey }` creates the resource request and decision together. Members receive a denied decision (existing `runbox-v1` policy).
 
