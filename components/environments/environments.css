@@ -11,6 +11,12 @@
   outline-offset: var(--focus-offset);
 }
 
+/* The shared resource form stretches inputs; radios keep their intrinsic size. */
+.environment-form input[type="radio"] {
+  width: auto;
+  flex-shrink: 0;
+}
+
 .environment-options .compute-option > svg {
   flex-shrink: 0;
   width: var(--icon-md);

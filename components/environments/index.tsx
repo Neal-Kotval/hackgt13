@@ -496,7 +496,7 @@ function EnvironmentCard({
       <div className="resource-detail-title">
         <div className="environment-title">
           <h4 id={titleId}>{profileLabel(job)}</h4>
-          <span className="environment-phase">{copy.phase}</span>
+          {copy.phase !== copy.label && <span className="environment-phase">{copy.phase}</span>}
         </div>
         <span className={`resource-badge resource-badge--${job.state}`}>{copy.label}</span>
       </div>
@@ -560,7 +560,9 @@ function EnvironmentCard({
           <p className="resource-note">
             {job.state === "ready"
               ? "No SSH endpoint is recorded for this environment."
-              : "An SSH endpoint appears after the worker records one."}
+              : ["stopping", "stopped", "failed"].includes(job.state)
+                ? "No SSH access is offered for an environment in this state."
+                : "An SSH endpoint appears after the worker records one."}
           </p>
         )}
       </div>
