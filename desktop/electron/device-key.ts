@@ -22,6 +22,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import type { SecureBlobStore } from "./session-store.ts";
+import type { DeviceKeyStatus } from "../src/lib/types.ts";
 
 const KEY_TYPE = "ssh-ed25519";
 
@@ -221,14 +222,6 @@ export class DeviceKeyStore {
   }
 }
 
-export type DeviceKeyStatus = {
-  fingerprint: string | null;
-  label: string | null;
-  registered: boolean;
-  persistent: boolean;
-  message: string;
-};
-
 export type HumanFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
 /** POST /api/ssh-keys { label, publicKey } — idempotent per user + fingerprint. */
@@ -271,4 +264,80 @@ export async function registerDeviceKey(
     throw new Error("Server registered a different key fingerprint than this device's key.");
   }
   return { id: parsed.key.id, fingerprint: parsed.key.fingerprint };
+}
+
+/**
+ * Ensures this device's key exists and is registered for the signed-in
+ * employee. Registration is idempotent server-side, so it runs once per
+ * sign-in / app launch. Exposes only public status.
+ */
+export class DeviceKeyRegistrar {
+  private readonly store: DeviceKeyStore;
+  private readonly label: string;
+  private readonly request: HumanFetch;
+  private inflight: Promise<DeviceKeyStatus> | null = null;
+  private current: DeviceKeyStatus;
+
+  constructor(store: DeviceKeyStore, label: string, request: HumanFetch) {
+    this.store = store;
+    this.label = label.trim().slice(0, 80) || "AgentCloud desktop";
+    this.request = request;
+    this.current = {
+      state: "unavailable",
+      fingerprint: null,
+      label: this.label,
+      persistent: false,
+      message: "Sign in to register this device's SSH key.",
+    };
+  }
+
+  status(): DeviceKeyStatus {
+    return this.current;
+  }
+
+  /** Forget registration state (e.g. after sign-out); keeps the device key. */
+  reset(): void {
+    this.inflight = null;
+    this.current = { ...this.current, state: "unavailable", message: "Sign in to register this device's SSH key." };
+  }
+
+  ensureRegistered(): Promise<DeviceKeyStatus> {
+    if (this.current.state === "registered") return Promise.resolve(this.current);
+    if (this.inflight) return this.inflight;
+    this.inflight = (async () => {
+      try {
+        const key = this.store.ensure();
+        this.current = {
+          state: "registering",
+          fingerprint: key.fingerprint,
+          label: this.label,
+          persistent: this.store.isPersistent,
+          message: "Registering this device's SSH key…",
+        };
+        await registerDeviceKey(this.request, this.label, key.publicKey);
+        this.current = {
+          ...this.current,
+          state: "registered",
+          message: this.store.isPersistent
+            ? "Device SSH key registered. It is included in environments created from now on."
+            : "Device SSH key registered for this session only (OS encryption unavailable; key is not saved).",
+        };
+      } catch (error) {
+        this.current = {
+          ...this.current,
+          state: "error",
+          message: error instanceof Error ? error.message : "Device key registration failed.",
+        };
+      } finally {
+        this.inflight = null;
+      }
+      return this.current;
+    })();
+    return this.inflight;
+  }
+
+  /** Private key for the SSH transport. Main process only — never send over IPC. */
+  privateKey(): string {
+    return this.store.ensure().privateKey;
+  }
 }

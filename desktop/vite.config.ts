@@ -40,7 +40,9 @@ export default defineConfig({
           build: {
             outDir: "dist-electron",
             rollupOptions: {
-              external: ["electron"],
+              // ssh2 loads optional native bindings at runtime; keep it a
+              // node_modules dependency instead of bundling it.
+              external: ["electron", "ssh2"],
             },
           },
         },
