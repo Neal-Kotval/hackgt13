@@ -51,7 +51,7 @@ after(async () => { db.close(); await rm(directory, { recursive: true, force: tr
 
 test("approval API binds a saved request to verified owner and rejects cross-project or duplicate decisions", async () => {
   const saved = await gpuRequest(owner, "owner");
-  const input = { projectId, resourceRequestId: saved.id, idempotencyKey: "approval-test-1" };
+  const input = { projectId, resourceRequestId: saved.id, idempotencyKey: "approval-test-1", repoUrl: "https://attacker.example/other.git" };
   assert.equal((await boxes.POST(request("/api/run-boxes", input))).status, 401);
   assert.equal((await boxes.POST(request("/api/run-boxes", input, member.cookie))).status, 403);
   const approved = await boxes.POST(request("/api/run-boxes", input, owner.cookie));
@@ -60,6 +60,8 @@ test("approval API binds a saved request to verified owner and rejects cross-pro
   assert.equal(decision.outcome, "approved");
   assert.equal(job.state, "queued");
   assert.equal(job.max_duration_minutes, 60);
+  assert.equal(job.repo_url, "https://example.com/repo");
+  assert.equal(job.repo_revision, null);
   const retry = await boxes.POST(request("/api/run-boxes", input, owner.cookie));
   assert.equal((await retry.json()).job.id, job.id);
   assert.equal((await boxes.POST(request("/api/run-boxes", { ...input, idempotencyKey: "different-key" }, owner.cookie))).status, 409);
