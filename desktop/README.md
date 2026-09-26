@@ -137,7 +137,7 @@ Follows [docs/sandbox-mvp-contract.md](../docs/sandbox-mvp-contract.md).
 
 ### Using a local server on another port
 
-Set `AGENTCLOUD_URL=http://127.0.0.1:3010` in `desktop/.env` (or the shell) before `just desktop`. Plain `http` on loopback works because API calls run in the main process. A saved session keeps the origin it signed in against, so sign out first when switching servers.
+Set `AGENTCLOUD_URL=http://127.0.0.1:3010` in `desktop/.env` (or the shell) before `just desktop`. Plain `http` on loopback works because API calls run in the main process. A saved session keeps the origin it signed in against, so sign out and relaunch when switching servers.
 
 ## Persistence
 
