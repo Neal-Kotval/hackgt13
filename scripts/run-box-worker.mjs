@@ -11,6 +11,7 @@ import { verifyRunpodSsh } from "../lib/runpod-ssh-proof.mjs";
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
 import { migrateRunpodCleanup, reconcileRunpodJobs } from "../lib/runpod-reconcile.mjs";
 import { workOneRunpodJob } from "../lib/runpod-worker.mjs";
+import { loadRunpodApiKey } from "../lib/runpod-secret.mjs";
 
 const mode = process.argv[2];
 const providerName = process.argv[3] || "aws-ec2";
@@ -37,7 +38,7 @@ async function awsCycle() {
 }
 
 async function runpodCycle() {
-  const provider = createRunpodProvider({ apiKey: process.env.RUNPOD_API_KEY });
+  const provider = createRunpodProvider({ apiKey: await loadRunpodApiKey() });
   const db = getDatabase();
   migrateRunBoxJobs(db);
   migrateRunpodEvidence(db);
