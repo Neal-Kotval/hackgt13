@@ -6,11 +6,11 @@ import {createCodexSessionService,migrateCodexSessions} from '../lib/codex-sessi
 const tick=()=>new Promise(r=>setImmediate(r));
 const base={projectId:'p',agentId:'a',createdBy:'owner',runBoxId:'box'};
 function fixture(){
- const db=new Database(':memory:');let signedIn=false;const calls=[];const notifications=new Map();
+ const db=new Database(':memory:');let signedIn=false;const calls=[];const notifications=new Map();const closed=[];
  const options={db,dataDir:'/tmp/chat-test',sweepMs:0,targets:{describe:id=>({projectId:id==='other-project'?'q':'p',provider:'docker-local',profileId:'test',state:'ready',codexState:'ready',workspacePath:'/workspace',serverKeyInstalled:true})},
- runtimeFactory:async o=>{notifications.set(o.sessionId,o.onNotification);return {close(){},async request(method,params){calls.push({id:o.sessionId,method,params});if(method==='account/read')return {account:signedIn?{type:'chatgpt'}:null};if(method.startsWith('thread/'))return {thread:{id:params.threadId||`thread-${o.sessionId}`,turns:[]}};return {};}};}};
+ runtimeFactory:async o=>{notifications.set(o.sessionId,o.onNotification);return {close(){closed.push(o.sessionId);o.onExit();},async request(method,params){calls.push({id:o.sessionId,method,params});if(method==='account/read')return {account:signedIn?{type:'chatgpt'}:null};if(method.startsWith('thread/'))return {thread:{id:params.threadId||`thread-${o.sessionId}`,turns:[]}};return {};}};}};
  let service=createCodexSessionService(options);
- return {db,calls,notifications,get service(){return service;},signIn(){signedIn=true;},signOut(){signedIn=false;},restart(){service.close();service=createCodexSessionService(options);},close(){service.close();db.close();}};
+ return {db,calls,notifications,closed,get service(){return service;},signIn(){signedIn=true;},signOut(){signedIn=false;},restart(){service.close();service=createCodexSessionService(options);},close(){service.close();db.close();}};
 }
 test('new chats require authenticated environment setup, are independent and idempotent',async()=>{
  const f=fixture();const input={...base,newChat:true,requestId:randomUUID()};
@@ -59,4 +59,33 @@ test('migration preserves canonical legacy rows and creates multiple chat slots 
  const old=db.prepare("SELECT * FROM codex_session WHERE id='old'").get();assert.equal(old.title,'Old history');assert.equal(old.chat_request_id,null);assert.equal(old.thread_id,'old-thread');
  db.prepare("INSERT INTO codex_session(id,project_id,agent_id,created_by,status,created_at,updated_at,run_box_id,chat_request_id) VALUES ('new','p','a','owner','ready','now','now','box','request')").run();
  assert.deepEqual(db.pragma('foreign_key_check'),[]);assert.equal(db.prepare('SELECT count(*) AS n FROM codex_session_event').get().n,1);db.close();
+});
+
+test('delete removes independent chat history, rejects running/setup, and ignores late callbacks',async()=>{
+ const f=fixture();f.signIn();const setup=f.service.initialize(base);await tick();
+ const chat=f.service.initialize({...base,newChat:true,requestId:randomUUID()});await tick();
+ await assert.rejects(f.service.delete(setup.id),/setup sessions cannot/);
+ await f.service.action(chat.id,{action:'message',text:'saved history',requestId:randomUUID()});
+ await assert.rejects(f.service.delete(chat.id),/Stop the active response/);
+ f.notifications.get(chat.id)('turn/completed',{turn:{id:'t',status:'completed'}});
+ f.service.setConversationStatus(chat.id,{projectId:'p',status:'done',actor:{id:'owner',name:'Owner'}});
+ assert.deepEqual(await f.service.delete(chat.id),{deleted:true,id:chat.id});
+ assert.ok(f.closed.includes(chat.id));assert.ok(!f.closed.includes(setup.id));
+ f.notifications.get(chat.id)('item/agentMessage/delta',{itemId:'late',delta:'late output'});
+ assert.throws(()=>f.service.get(chat.id),e=>e.status===404);
+ for(const table of ['codex_session_event','codex_turn_request','codex_conversation_status','codex_conversation_status_change'])
+   assert.equal(f.db.prepare(`SELECT count(*) AS n FROM ${table} WHERE session_id=?`).get(chat.id).n,0);
+ assert.deepEqual(f.db.pragma('foreign_key_check'),[]);
+ f.restart();assert.throws(()=>f.service.get(chat.id),e=>e.status===404);assert.equal(f.service.get(setup.id).id,setup.id);f.close();
+});
+test('rename validates titles, survives first message and restart, and permits active chats',async()=>{
+ const f=fixture();f.signIn();const setup=f.service.initialize(base);await tick();
+ const chat=f.service.initialize({...base,newChat:true,requestId:randomUUID()});await tick();
+ for(const title of ['', '   ',null,'x'.repeat(121)])assert.throws(()=>f.service.rename(chat.id,title),e=>e.status===400);
+ assert.equal(f.service.rename(chat.id,'  My chat  ').session.title,'My chat');
+ await f.service.action(chat.id,{action:'message',text:'Different automatic title',requestId:randomUUID()});
+ assert.equal(f.service.get(chat.id).title,'My chat');
+ assert.equal(f.service.rename(chat.id,'Active chat').session.title,'Active chat');
+ assert.equal(f.service.rename(setup.id,'Setup history').session.title,'Setup history');
+ f.restart();assert.equal(f.service.get(chat.id).title,'Active chat');f.close();
 });

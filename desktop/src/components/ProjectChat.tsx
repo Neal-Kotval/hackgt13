@@ -42,14 +42,14 @@ class CodexRequestError extends Error {
     super(message);
   }
 }
-async function request<T>(path: string, body?: object): Promise<T> {
+async function request<T>(path: string, body?: object, method = "POST"): Promise<T> {
   const response = await desktopApi().fetchHuman(
     path,
-    body
+    body || method !== "POST"
       ? {
-          method: "POST",
+          method,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: body ? JSON.stringify(body) : undefined,
         }
       : undefined,
   );
@@ -99,7 +99,30 @@ export function ProjectChat({
   const [pendingEnvironment, setPendingEnvironment] = useState<string | null>(null);
   const pendingEnvironmentRef = useRef<string | null>(null);
   const [targetNotice, setTargetNotice] = useState<string | null>(null);
-  const newChatRequests = useRef<Record<string, string>>({});
+  const [draftAgentId, setDraftAgentId] = useState("");
+  const navigationEpoch = useRef(0);
+  const [draftMode, setDraftMode] = useState(false);
+  const draftModeRef = useRef(false);
+  const draftStarts = useRef<Record<string, { requestId: string; sessionId?: string; turn?: { text: string; requestId: string } }>>({});
+  const hiddenDraftSessions = useRef(new Set<string>());
+  const deletedSessions = useRef(new Set<string>());
+  const historyRevision = useRef(0);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState("");
+  const [renamingId, setRenamingId] = useState("");
+  const [ownerProject, setOwnerProject] = useState("");
+  function setDraftActive(value: boolean) {
+    draftModeRef.current = value;
+    setDraftMode(value);
+  }
+  useEffect(() => {
+    let cancelled = false;
+    setOwnerProject("");
+    if (projectId) void request<{ permissions?: { edit?: boolean } }>(`/api/projects/${encodeURIComponent(projectId)}/settings`)
+      .then(data => { if (!cancelled && data.permissions?.edit) setOwnerProject(projectId); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId]);
   const [setupRequired, setSetupRequired] = useState<Record<string, boolean>>({});
   const [attachments, setAttachments] = useState<
     Record<string, ChatAttachment[]>
@@ -143,6 +166,8 @@ export function ProjectChat({
         if (cancelled) return;
         setProjects(state.projects);
         if (deepLink?.ok) {
+          navigationEpoch.current++;
+          setDraftActive(false);
           if (!state.projects.some((p) => p.id === deepLink.target.projectId)) {
             blockAutoProject.current = true;
             desiredSession.current = deepLink.target.codexSessionId || null;
@@ -211,17 +236,19 @@ export function ProjectChat({
     setActionError(null);
     const poll = async () => {
       try {
+        const revision = historyRevision.current;
         const data = await request<{ enabled: boolean; sessions: unknown }>(
           `/api/codex-sessions?projectId=${encodeURIComponent(projectId)}`,
         );
-        if (cancelled) return;
-        const list = parseCodexSessions(data.sessions).filter(item => item.target.kind === "runBox");
+        if (cancelled || revision !== historyRevision.current) return;
+        const list = parseCodexSessions(data.sessions).filter(item => item.target.kind === "runBox" && !deletedSessions.current.has(item.id));
         setSessions(list);
         setSessionsFor(projectId);
         setError(null);
         const requested = desiredSession.current;
         if (requested) {
           if (list.some((s) => s.id === requested)) {
+            setDraftActive(false);
             desiredSession.current = null;
             setSessionId(requested);
             setActionError(null);
@@ -229,7 +256,7 @@ export function ProjectChat({
             setActionError(
               "The linked Codex session is not available in this project.",
             );
-        } else if (!pendingEnvironmentRef.current)
+        } else if (!pendingEnvironmentRef.current && !draftModeRef.current)
           setSessionId((current) => {
             if (list.some((s) => s.id === current)) return current;
             const selected = sessionForTarget(list, targetChoiceRef.current);
@@ -293,18 +320,19 @@ export function ProjectChat({
       timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
+        const revision = historyRevision.current;
         const data = await request<{ session: unknown; events: Event[] }>(
           `/api/codex-sessions/${encodeURIComponent(sessionId)}`,
         );
         const parsed = parseCodexSession(data.session);
-        if (!cancelled && parsed?.target.kind === "runBox" && parsed.projectId === projectId) {
+        if (!cancelled && revision === historyRevision.current && parsed?.target.kind === "runBox" && parsed.projectId === projectId) {
           setSnapshot({ session: parsed, events: data.events });
           setError(null);
           const first = data.events.find((event) => event.kind === "user");
           if (first)
             setTitles((current) => ({
               ...current,
-              [parsed.id]: first.text.split("\n")[0],
+              [parsed.id]: parsed.title || first.text.split("\n")[0],
             }));
         }
       } catch (err) {
@@ -327,7 +355,7 @@ export function ProjectChat({
     snapshot.session.projectId === projectId
       ? snapshot.session
       : undefined;
-  const draftKey = sessionId || `project:${projectId}`;
+  const draftKey = draftMode ? `draft:${projectId}:${targetChoice}:${draftAgentId}` : sessionId || `project:${projectId}`;
   const draft = drafts[draftKey] || "";
   const draftAttachments = attachments[draftKey] || [];
   const messageText = [
@@ -339,16 +367,6 @@ export function ProjectChat({
     .filter(Boolean)
     .join("\n\n");
   const project = projects.find((p) => p.id === projectId);
-  function codexAgentId(): string | null {
-    const current = sessions.find((s) => s.id === sessionId)?.agentId;
-    if (current) return current;
-    if (sessions[0]?.agentId) return sessions[0].agentId;
-    return (
-      project?.agents.find((a) => a.client?.toLowerCase() === "codex")?.id ??
-      null
-    );
-  }
-
   async function signInWithChatGpt() {
     if (!projectId || !selectedBox) return;
     const runBoxId = selectedBox.id;
@@ -377,48 +395,128 @@ export function ProjectChat({
     }
   }
 
-  async function openEnvironmentSession(runBoxId: string) {
-    const agentId = codexAgentId();
-    if (!projectId || !agentId) {
-      setActionError(
-        "Complete environment setup on the website before starting a chat.",
-      );
+  function newDraft() {
+    if (busy || attaching) return;
+    navigationEpoch.current++;
+    setDraftAgentId(selectedSession?.agentId || draftAgentId || sessionForTarget(sessions, currentTarget)?.agentId || "");
+    setDraftActive(true);
+    setTargetChoice(currentTarget);
+    requestEnvironment(null);
+    desiredSession.current = null;
+    setSessionId("");
+    setSnapshot(null);
+    setActionError(null);
+    setBroadcastNotice(null);
+    onSelectConversation?.();
+  }
+
+  async function sendDraft() {
+    if (busy || !draftModeRef.current || !selectedBox || !messageText) return;
+    if (messageText.length > 16000) {
+      setActionError("Keep the message and attached context within 16,000 characters.");
       return;
     }
+    const agentId = draftAgentId || sessionForTarget(sessions, currentTarget)?.agentId;
+    if (!agentId) return;
+    const epoch = navigationEpoch.current;
+    const key = draftKey;
+    const start = draftStarts.current[key] ??= { requestId: crypto.randomUUID() };
+    // Keep both identities through lost creation/send responses.
+    const turn = start.turn?.text === messageText ? start.turn : { text: messageText, requestId: crypto.randomUUID() };
+    start.turn = turn;
     setBusy(true);
     setActionError(null);
     try {
-      const result = await request<{ session: unknown }>(
-        "/api/codex-sessions",
-        { projectId, agentId, runBoxId, newChat: true, requestId: newChatRequests.current[runBoxId] ??= crypto.randomUUID() },
-      );
-      const created = parseCodexSession(result.session);
-      // Require the independent-chat contract; older servers may return the canonical setup session.
-      if (!created || targetKey(created.target) !== `runBox:${runBoxId}` || created.isSetupSession !== false) {
-        setActionError(
-          "This alto server does not support independent environment chats yet. Update the server, then try again.",
-        );
-        return;
+      if (!start.sessionId) {
+        const result = await request<{ session: unknown }>("/api/codex-sessions", {
+          projectId, agentId, runBoxId: selectedBox.id, newChat: true, requestId: start.requestId,
+        });
+        const created = parseCodexSession(result.session);
+        if (!created || created.projectId !== projectId || targetKey(created.target) !== currentTarget || created.isSetupSession !== false)
+          throw new Error("Update the alto server to start independent chats.");
+        start.sessionId = created.id;
+        hiddenDraftSessions.current.add(created.id);
       }
-      delete newChatRequests.current[runBoxId];
-      setSetupRequired((current) => ({ ...current, [`runBox:${runBoxId}`]: false }));
-      setSessions((current) => [
-        ...current.filter((s) => s.id !== created.id),
-        created,
-      ]);
-      setSessionId(created.id);
-      onSelectConversation?.();
-    } catch (err) {
-      if (err instanceof CodexRequestError && err.code === "environment_setup_required")
-        setSetupRequired((current) => ({ ...current, [`runBox:${runBoxId}`]: true }));
-      setActionError(
-        err instanceof Error
-          ? err.message
-          : "Could not start Codex on this environment.",
-      );
-    } finally {
-      setBusy(false);
-    }
+      const id = start.sessionId;
+      let ready = false;
+      // Initialization is asynchronous. Do not lose the user's first message.
+      for (let attempt = 0; attempt < 120; attempt++) {
+        const snapshot = await request<{ session: unknown }>(`/api/codex-sessions/${encodeURIComponent(id)}`);
+        const current = parseCodexSession(snapshot.session);
+        if (current?.status === "ready" || current?.status === "running") { ready = true; break; }
+        if (attempt === 0 && (current?.status === "error" || current?.status === "stopped")) {
+          await request(`/api/codex-sessions/${encodeURIComponent(id)}`, { action: "resume" });
+          continue;
+        }
+        if (current?.status !== "initializing") throw new Error(current?.error || "Codex could not start. Your draft is saved; try again after reconnecting.");
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      if (!ready) throw new Error("Codex is still starting. Your draft is saved; try sending again shortly.");
+      setSetupRequired(current => ({ ...current, [currentTarget]: false }));
+      const result = await request<{ session: unknown }>(`/api/codex-sessions/${encodeURIComponent(id)}`, { action: "message", ...turn });
+      const updated = parseCodexSession(result.session);
+      if (!updated) throw new Error("Could not confirm the message. Try again to recover this chat.");
+      hiddenDraftSessions.current.delete(id);
+      historyRevision.current++;
+      if (epoch === navigationEpoch.current)
+        setSessions(current => [...current.filter(item => item.id !== id), updated]);
+      setTitles(current => ({ ...current, [id]: updated.title && updated.title !== "New chat" ? updated.title : turn.text.split("\n")[0] }));
+      setDrafts(current => ({ ...current, [key]: messageText === turn.text ? "" : current[key] }));
+      if (messageText === turn.text) setAttachments(current => ({ ...current, [key]: [] }));
+      delete draftStarts.current[key];
+      if (epoch === navigationEpoch.current) {
+        setDraftActive(false);
+        setSessionId(id);
+      }
+    } catch (cause) {
+      if (cause instanceof CodexRequestError && cause.code === "ambiguous_turn" && start.sessionId) {
+        const id = start.sessionId;
+        hiddenDraftSessions.current.delete(id);
+        pending.current[id] = turn;
+        setAmbiguous(current => ({ ...current, [id]: true }));
+        setDrafts(current => ({ ...current, [id]: current[key] || "", [key]: "" }));
+        setAttachments(current => ({ ...current, [id]: current[key] || [], [key]: [] }));
+        delete draftStarts.current[key];
+        if (epoch === navigationEpoch.current) { setDraftActive(false); setSessionId(id); }
+      }
+      if (cause instanceof CodexRequestError && cause.code === "environment_setup_required")
+        setSetupRequired(current => ({ ...current, [currentTarget]: true }));
+      setActionError(cause instanceof Error ? cause.message : "Could not start the chat. Your draft is saved.");
+    } finally { setBusy(false); }
+  }
+
+  async function deleteChat(id: string) {
+    if (busy) return;
+    setBusy(true); setDeletingId(id); setHistoryError(null); historyRevision.current++;
+    try {
+      await request(`/api/codex-sessions/${encodeURIComponent(id)}`, undefined, "DELETE");
+      deletedSessions.current.add(id);
+      setSessions(current => current.filter(item => item.id !== id));
+      setDrafts(current => { const next = { ...current }; delete next[id]; return next; });
+      setAttachments(current => { const next = { ...current }; delete next[id]; return next; });
+      delete pending.current[id];
+      if (id === sessionId) {
+        setDraftAgentId(sessionForTarget(sessions.filter(item => item.id !== id), currentTarget)?.agentId || "");
+        setDraftActive(true); setTargetChoice(currentTarget); setSessionId(""); setSnapshot(null);
+      }
+    } catch (cause) {
+      setHistoryError(cause instanceof Error ? cause.message : "Could not delete the chat.");
+    } finally { historyRevision.current++; setBusy(false); setDeletingId(""); }
+  }
+
+  async function renameChat(id: string, title: string) {
+    if (busy) return;
+    setBusy(true); setRenamingId(id); setHistoryError(null); historyRevision.current++;
+    try {
+      const result = await request<{ session: unknown }>(`/api/codex-sessions/${encodeURIComponent(id)}`, { title }, "PATCH");
+      const updated = parseCodexSession(result.session);
+      if (!updated) throw new Error("Could not confirm the new chat name.");
+      setSessions(current => current.map(item => item.id === id ? updated : item));
+      setSnapshot(current => current?.session.id === id ? { ...current, session: updated } : current);
+      setTitles(current => ({ ...current, [id]: updated.title || title }));
+    } catch (cause) {
+      setHistoryError(cause instanceof Error ? cause.message : "Could not rename the chat.");
+    } finally { historyRevision.current++; setBusy(false); setRenamingId(""); }
   }
 
   // Resolve an environment request once sessions and environments are loaded.
@@ -433,6 +531,7 @@ export function ProjectChat({
       return;
     const existing = sessionForTarget(sessions, `runBox:${pendingEnvironment}`);
     if (existing) {
+      setDraftActive(false);
       requestEnvironment(null);
       setTargetChoice(`runBox:${pendingEnvironment}`);
       setSessionId(existing.id);
@@ -655,6 +754,9 @@ export function ProjectChat({
     }
   }
   function chooseProject(id: string) {
+    if (busy) return;
+    navigationEpoch.current++;
+    setDraftActive(false);
     setCreateError(null);
     requestEnvironment(null);
     setTargetChoice("");
@@ -667,11 +769,13 @@ export function ProjectChat({
     onSelectConversation?.();
   }
   function chooseTarget(key: string) {
-    if (!key) return;
+    if (!key || busy) return;
+    navigationEpoch.current++;
     desiredSession.current = null;
     requestEnvironment(null);
     setActionError(null);
     setTargetChoice(key);
+    if (draftModeRef.current) { setDraftAgentId(sessionForTarget(sessions, key)?.agentId || ""); setSessionId(""); setSnapshot(null); return; }
     const existing = sessionForTarget(sessions, key);
     if (existing) {
       chooseAgent(existing.id);
@@ -683,6 +787,9 @@ export function ProjectChat({
     setTargetNotice("Sign in with ChatGPT to use Codex on this environment.");
   }
   function chooseAgent(id: string) {
+    if (busy) return;
+    navigationEpoch.current++;
+    setDraftActive(false);
     requestEnvironment(null);
     desiredSession.current = null;
     setSessionId(id);
@@ -730,6 +837,7 @@ export function ProjectChat({
   );
   const notificationPeers = targetAgents.filter(item => item.id !== sessionId && item.isSetupSession !== true && item.status !== "stopped");
   const otherAgentCount = notificationPeers.length;
+  const draftReady = draftMode && !selectedBoxUnavailable && targetAgents.some(item => item.status === "ready" || item.status === "running");
   const environmentName = selectedSession
     ? sessionTargetLabel(selectedSession.target)
     : "Environment";
@@ -754,13 +862,13 @@ export function ProjectChat({
   );
   const firstUser = messages.find((event) => event.kind === "user");
   const title = hasConversation
-    ? firstUser?.text.split("\n")[0] ||
+    ? titles[sessionId] || session?.title || firstUser?.text.split("\n")[0] ||
       (session ? agentName(session) : "Project chat")
     : "New chat";
   const sidebar = (close: () => void) => (
     <ChatHistory
       viewerId={viewerId}
-      threads={sessions.filter((item) => targetKey(item.target) === currentTarget).map((item) => ({
+      threads={sessions.filter((item) => targetKey(item.target) === currentTarget && !hiddenDraftSessions.current.has(item.id)).map((item) => ({
         id: item.id,
         title:
           titles[item.id] || item.title ||
@@ -772,8 +880,15 @@ export function ProjectChat({
         createdBy: item.createdBy,
         createdByName: item.createdByName,
         agentName: agentName(item),
+        canRename: ownerProject === projectId || item.createdBy === viewerId,
+        canDelete: item.isSetupSession === false && item.status !== "running" && (ownerProject === projectId || item.createdBy === viewerId),
       }))}
       selectedId={sessionId}
+      error={historyError}
+      deletingId={deletingId}
+      renamingId={renamingId}
+      onDelete={id => void deleteChat(id)}
+      onRename={(id, title) => void renameChat(id, title)}
       busy={busy || attaching || !currentTarget || !targetAgents.some((item) => item.status === "ready" || item.status === "running")}
       loading={loading}
       setupUrl={projectId ? settingsUrl : undefined}
@@ -782,7 +897,7 @@ export function ProjectChat({
         close();
       }}
       onCreate={() => {
-        if (currentTarget.startsWith("runBox:")) void openEnvironmentSession(currentTarget.slice("runBox:".length));
+        newDraft();
         close();
       }}
     />
@@ -903,7 +1018,7 @@ export function ProjectChat({
             <p>{codexBlockedReason(selectedBox) ?? "This environment is not ready for Codex yet."}</p>
             <div className="codex-sign-in-actions"><a className="button" href={`${webBaseUrl.replace(/\/$/, "")}/projects/${projectId}/environments?environment=${selectedBox.id}`} target="_blank" rel="noreferrer">View environment <ArrowUpRight aria-hidden="true" /></a></div>
           </section>}
-          {!selectedBoxUnavailable && selectedBox && (session?.status === "auth_required" || setupRequired[currentTarget] || (currentTarget && !selectedSession)) && (
+          {!selectedBoxUnavailable && selectedBox && (session?.status === "auth_required" || setupRequired[currentTarget] || (currentTarget && !selectedSession && !draftReady)) && (
             <section className="codex-sign-in" aria-labelledby="environment-setup-title">
               <div className="chat-setup-heading"><span className="chat-setup-icon"><Robot aria-hidden="true" /></span><div><h2 id="environment-setup-title">Connect Codex</h2><p>Sign in with ChatGPT to start chatting in this environment.</p></div></div>
               <div className="codex-sign-in-actions">
@@ -943,9 +1058,9 @@ export function ProjectChat({
           )}
           <Composer
             value={draft}
-            disabled={!session || busy || attaching}
+            disabled={(!session && !draftReady) || busy || attaching}
             sendDisabled={
-              session?.status !== "ready" || Boolean(ambiguous[sessionId])
+              (!draftReady && session?.status !== "ready") || Boolean(ambiguous[sessionId])
             }
             sending={working}
             error={actionError}
@@ -954,7 +1069,7 @@ export function ProjectChat({
                 ? hasConversation
                   ? `Message ${agentName(session)}`
                   : `Ask ${agentName(session)} to work on ${project?.name || "this project"}`
-                : currentTarget ? "Sign in with ChatGPT to start chatting" : "Choose an environment to start chatting"
+                : draftReady ? "Message Codex" : currentTarget ? "Sign in with ChatGPT to start chatting" : "Choose an environment to start chatting"
             }
             context={hasConversation ? context("toolbar") : undefined}
             attachments={draftAttachments}
@@ -970,7 +1085,7 @@ export function ProjectChat({
             onChange={(value) =>
               setDrafts((current) => ({ ...current, [draftKey]: value }))
             }
-            onSend={() => void act("message")}
+            onSend={() => draftMode ? void sendDraft() : void act("message")}
             onStop={() => void act("interrupt")}
           />
           {session && otherAgentCount > 0 && (

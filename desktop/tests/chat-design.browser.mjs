@@ -175,7 +175,7 @@ try {
   await expect(input).toHaveValue('Unrelated unsent draft');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByLabel('Choose text context files').setInputFiles({ name: 'draft.md', mimeType: 'text/markdown', buffer: Buffer.from('Preserve this attachment.') });
-  await page.getByRole('button', { name: 'review-agent', exact: false }).click();
+  await page.locator('.chat-history-item').filter({hasText:'review-agent'}).click();
   await expect(input).toHaveAttribute('placeholder', 'Ask review-agent to work on UI verification');
   await expect(input).toHaveValue('');
   await page.locator('.chat-history-item').filter({ hasText: 'For a local connection verification' }).click();
@@ -183,15 +183,15 @@ try {
   await expect(page.getByRole('button', { name: 'Remove draft.md' })).toBeVisible();
   await page.evaluate(() => { window.__test.setupRequired = true; });
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  await input.fill('Independent chat history');
+  await page.getByRole('button', {name:'Send message'}).click();
   await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toBeVisible();
   await page.evaluate(() => { window.__test.setupRequired = false; });
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toHaveCount(0);
-  await expect(input).toHaveValue('');
+  await expect(input).toHaveValue('Independent chat history');
+  await page.getByRole('button', { name: 'Send message' }).click();
   expect(await page.evaluate(() => window.__test.created.newChat)).toBe(true);
   expect(await page.evaluate(() => window.__test.created.runBoxId)).toBe('box-1');
-  await input.fill('Independent chat history');
-  await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.locator('.message[data-role="user"]')).toHaveCount(1);
   await selectEnvironment('second-workspace');
   await expect(page.locator('.chat-history-item')).toHaveCount(0);
