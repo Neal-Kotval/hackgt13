@@ -12,10 +12,10 @@ The infrastructure definition lives in [`infra/aws-auth/`](infra/aws-auth/). Ter
 
    ```sh
    bash scripts/aws-auth/init-secret.sh
-   bash scripts/aws-auth/deploy.sh
+   AGENTCLOUD_PLATFORM_ADMIN_EMAIL=operator@example.com bash scripts/aws-auth/deploy.sh
    ```
 
-   `init-secret.sh` copies `BETTER_AUTH_SECRET` from Doppler into AWS Secrets Manager by stdin without printing it. It preserves an existing AWS value and sessions. `deploy.sh` archives **committed `HEAD`**, uploads it to `s3://<Terraform artifact_bucket_name>/releases/app.tar.gz`, checks its SHA-256 on EC2, installs Node.js 22 and dependencies, builds Next.js, runs auth migrations, and restarts systemd. Commit all intended app changes before deploying. The deployment reports the exact Git revision and fails if SSM is offline or the local health check fails. The 2 GiB swap file supports building on `t3.small`; installation and build still need outbound package access and may take several minutes.
+   Replace the example email with the verified AgentCloud account that may approve AWS organizations. `deploy.sh` requires this value and installs it in the server-only systemd service environment; redeploy with the same email to retain admin access. `init-secret.sh` copies `BETTER_AUTH_SECRET` from Doppler into AWS Secrets Manager by stdin without printing it. It preserves an existing AWS value and sessions. `deploy.sh` archives **committed `HEAD`**, uploads it to `s3://<Terraform artifact_bucket_name>/releases/app.tar.gz`, checks its SHA-256 on EC2, installs Node.js 22 and dependencies, builds Next.js, runs auth migrations, and restarts systemd. Commit all intended app changes before deploying. The deployment reports the exact Git revision and fails if SSM is offline or the local health check fails. The 2 GiB swap file supports building on `t3.small`; installation and build still need outbound package access and may take several minutes.
 4. Share the `public_url` Terraform output with teammates:
 
    ```sh
