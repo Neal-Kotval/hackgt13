@@ -2,7 +2,7 @@ import { getDatabase } from "../../../../../lib/auth.mjs";
 import { requireEmployee, requireMembership } from "../../../../../lib/employee";
 import { failure } from "../../../../../lib/http";
 import { InputError } from "../../../../../lib/store";
-import { getRunBoxJob, migrateRunBoxJobs } from "../../../../../lib/run-box-jobs.mjs";
+import { getRunBoxJob, isAwsMachineProfile, migrateRunBoxJobs } from "../../../../../lib/run-box-jobs.mjs";
 import { listSshKeys, migrateSshKeys } from "../../../../../lib/ssh-keys.mjs";
 import { runBoxVisibleTo } from "../../../../../lib/run-box-access.mjs";
 import { getRunBoxSshEndpoint, knownHostsLine, migrateRunBoxSsh } from "../../../../../lib/run-box-ssh.mjs";
@@ -46,6 +46,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       hostPublicKey: endpoint.hostPublicKey,
       knownHostsLine: knownHostsLine(endpoint),
       access: "trusted-shell",
+      // Catalog AWS machines admit SSH only from registered /32s: the desktop must first
+      // register its IPv4 through POST /api/run-boxes/:id/ssh-access (HAC-166).
+      networkAccess: isAwsMachineProfile(job.profile_id) ? "requester-ipv4" : null,
       authorized: true,
     });
   } catch (error) {

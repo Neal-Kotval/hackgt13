@@ -471,3 +471,84 @@ test("HAC-166: desktop registers its IPv4 for a ready aws-cpu environment", asyn
     delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
   }
 });
+
+test("sized AWS environments: every catalog machine is allowed, disk is validated, and jobs carry machine and diskGb", async () => {
+  const { machines } = await import(path.join(directory, "machine-catalog.mjs"));
+  const create = (body, cookie = owner.cookie) => boxes.POST(request("/api/run-boxes", { projectId, durationHours: 1, ...body }, cookie));
+  const stopAws = () => db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
+  stopAws();
+
+  // Disk validation happens before anything is recorded.
+  const before = await requestCount();
+  for (const [body, pattern] of [
+    [{ profileId: "aws-gpu-t4", diskGb: 20, idempotencyKey: "sized-bad-1" }, /Disk must be one of 100 GiB for T4/],
+    [{ profileId: "aws-gpu-l4", diskGb: 50, idempotencyKey: "sized-bad-2" }, /Disk must be one of 100 GiB/],
+    [{ profileId: "aws-cpu-large", diskGb: 30, idempotencyKey: "sized-bad-3" }, /Disk must be one of 20, 50, 100 GiB for Large/],
+    [{ profileId: "aws-cpu", diskGb: 200, idempotencyKey: "sized-bad-4" }, /Disk must be one of/],
+    [{ profileId: "aws-cpu", diskGb: "50", idempotencyKey: "sized-bad-5" }, /Disk must be one of/],
+    [{ profileId: "local-docker-sandbox", diskGb: 50, idempotencyKey: "sized-bad-6" }, /only be chosen for AWS machines/],
+    [{ profileId: "runpod-rtx-4090", diskGb: 50, idempotencyKey: "sized-bad-7" }, /only be chosen for AWS machines/],
+  ]) {
+    const response = await create(body);
+    assert.equal(response.status, 400, JSON.stringify(body));
+    assert.match((await response.json()).error, pattern);
+  }
+  assert.equal(await requestCount(), before);
+
+  // Every catalog machine queues one approved aws-ec2 job with its profile ID and disk.
+  for (const machine of machines) {
+    const diskGb = machine.kind === "gpu" ? 100 : 50;
+    const response = await create({ profileId: machine.id, diskGb, idempotencyKey: `sized-${machine.id}` });
+    assert.equal(response.status, 201, machine.id);
+    const { job } = await response.json();
+    assert.equal(job.provider, "aws-ec2");
+    assert.equal(job.profile_id, machine.id);
+    assert.equal(job.diskGb, diskGb);
+    assert.equal(job.machine.id, machine.id);
+    assert.equal(job.machine.instanceType, machine.instanceType);
+    assert.equal(job.machine.kind, machine.kind);
+    // The single-active AWS rule applies to every size.
+    const blocked = await create({ profileId: "aws-cpu", idempotencyKey: `sized-blocked-${machine.id}` });
+    assert.equal(blocked.status, 409);
+    assert.match((await blocked.json()).error, /An AWS run box is already active/);
+    // A retry with the same key returns the same job; a different disk is a different decision.
+    const retry = await create({ profileId: machine.id, diskGb, idempotencyKey: `sized-${machine.id}` });
+    assert.equal((await retry.json()).job.id, job.id);
+    const changed = await create({ profileId: machine.id, diskGb: machine.kind === "gpu" ? undefined : 100, idempotencyKey: `sized-${machine.id}` });
+    assert.equal(changed.status, machine.kind === "gpu" ? 201 : 409, machine.id);
+    stopAws();
+  }
+
+  // Omitting diskGb takes the machine's minimum; GET lists machine and diskGb.
+  const small = await (await create({ profileId: "aws-cpu", idempotencyKey: "sized-default-cpu" })).json();
+  assert.equal(small.job.diskGb, 20);
+  const listed = (await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, owner.cookie))).json()).jobs;
+  const row = listed.find((item) => item.id === small.job.id);
+  assert.deepEqual(row.machine, { id: "aws-cpu", kind: "cpu", size: "Small", instanceType: "t3.medium", vcpu: 2, memoryGib: 4, gpu: null });
+  assert.equal(row.diskGb, 20);
+  const gpuRow = listed.find((item) => item.profile_id === "aws-gpu-a10g");
+  assert.equal(gpuRow.machine.gpu.model, "NVIDIA A10G");
+  assert.equal(gpuRow.diskGb, 100);
+  const nonCatalog = listed.find((item) => item.profile_id === "runpod-rtx-4090");
+  if (nonCatalog) { assert.equal(nonCatalog.machine, null); assert.equal(nonCatalog.diskGb, null); }
+  stopAws();
+
+  // A member is denied for every size, exactly as for aws-cpu.
+  const denied = await create({ profileId: "aws-gpu-t4", idempotencyKey: "sized-member" }, member.cookie);
+  assert.equal(denied.status, 200);
+  const deniedBody = await denied.json();
+  assert.equal(deniedBody.decision.outcome, "denied");
+  assert.equal(deniedBody.job, null);
+
+  // An unapproved organization is refused for every size.
+  approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved: false,
+    maxRunMinutes: 120, monthlyMinutes: 1200, actorId: owner.id });
+  try {
+    const refused = await (await create({ profileId: "aws-cpu-medium", idempotencyKey: "sized-unapproved" })).json();
+    assert.equal(refused.decision.outcome, "denied");
+    assert.equal(refused.job, null);
+  } finally {
+    approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved: true,
+      maxRunMinutes: 120, monthlyMinutes: 1200, actorId: owner.id });
+  }
+});

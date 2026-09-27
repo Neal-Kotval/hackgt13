@@ -17,6 +17,7 @@ async function compile(source, name) {
   await writeFile(path.join(dir, name), code);
   return import(path.join(dir, name));
 }
+await copyFile(new URL('../lib/machine-catalog.mjs', import.meta.url), path.join(dir, 'machine-catalog.mjs'));
 await compile('../lib/resource-profiles.ts', 'resource-profiles.js');
 await compile('../lib/store.ts', 'store.js');
 await compile('../lib/http.ts', 'http.js');
