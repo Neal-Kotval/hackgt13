@@ -9,7 +9,6 @@ type Props = { sessionId: string; peers: Peer[]; enabled: boolean };
 type History = { messages: AgentNotification[]; nextBeforeSequence: number | null };
 type Draft = { text: string; recipient: string; pending: NotificationRequest | null };
 // Navigation preserves unsent text and ambiguous request IDs separately for each conversation.
-const drafts = new Map<string, Draft>();
 async function request<T>(path: string, body?: object): Promise<T> {
   const response = await desktopApi().fetchHuman(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : undefined);
   const result = JSON.parse(response.body);
@@ -17,9 +16,10 @@ async function request<T>(path: string, body?: object): Promise<T> {
   return result as T;
 }
 export function AgentNotifications(props: Props) {
-  return <SessionNotifications key={props.sessionId} {...props} />;
+  const drafts = useRef(new Map<string, Draft>());
+  return <SessionNotifications key={props.sessionId} {...props} drafts={drafts.current} />;
 }
-function SessionNotifications({ sessionId, peers, enabled }: Props) {
+function SessionNotifications({ sessionId, peers, enabled, drafts }: Props & { drafts: Map<string, Draft> }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => drafts.get(sessionId) ?? { text: "", recipient: "all", pending: null });
   const [messages, setMessages] = useState<AgentNotification[]>([]);
@@ -93,9 +93,9 @@ function SessionNotifications({ sessionId, peers, enabled }: Props) {
       drafts.set(sessionId, next);
       if (!alive.current) return;
       setDraft(next);
-      const sent = result.messages ?? (result.message ? [result.message] : []);
+      const sent = (result.messages ?? (result.message ? [result.message] : [])).map(message => ({ ...message, direction: "outgoing" as const }));
       setSendNotice(sent.length ? `Notification recorded for ${sent.length} conversation${sent.length === 1 ? "" : "s"}.` : "No eligible conversations received this notification.");
-      setMessages(current => mergeNotifications(current, result.messages ?? (result.message ? [result.message] : [])));
+      setMessages(current => mergeNotifications(current, sent));
     } catch (error) {
       if (alive.current) setSendError(`${error instanceof Error ? error.message : "Send failed."} Delivery may be uncertain. Retry uses the same request ID.`);
     } finally { sendingRef.current = false; if (alive.current) setSending(false); }
