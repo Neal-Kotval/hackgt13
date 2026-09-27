@@ -37,7 +37,7 @@ export function SignIn({ signup = false, invite = "", verified = false, verifica
     finally { setPending(false); }
   }
   return <main className="auth-page"><section className="auth-panel">
-    <p className="eyebrow">agentcloud</p>
+    <p className="eyebrow auth-brand">alto</p>
     <h1>{checkEmail ? "Check your email" : signup ? "Create your account" : "Sign in"}</h1>
     <p>{checkEmail ? "Open the verification link, then return here to sign in." : invite ? "Use the email address that received the invitation. You’ll review it after signing in." : signup ? "Verify your email to create an organization or join your team." : "Continue to your organizations and projects."}</p>
     {!checkEmail && <form onSubmit={submit}>

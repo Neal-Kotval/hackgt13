@@ -88,7 +88,7 @@ export default function DesignSystem() {
           <div className="ds-contract-files"><code>app/tokens.css</code><span>Palette, scales, semantic aliases</span><code>DESIGN.md</code><span>Rules, exceptions, and review criteria</span><code>npm run tokens:check</code><span>Check application styles against the contract</span></div>
         </section>
       </main>
-      <footer className="ds-footer"><span>AgentCloud · Design system</span><span>Geometric layouts. Rounded components. Purposeful color.</span></footer>
+      <footer className="ds-footer"><span>alto · Design system</span><span>Geometric layouts. Rounded components. Purposeful color.</span></footer>
     </div>
   );
 }

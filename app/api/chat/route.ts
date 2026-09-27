@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       return Response.json(
         {
           error:
-            "Server model credentials are not configured. Set OPENAI_API_KEY in the AgentCloud server environment (Doppler or local), then retry.",
+            "Server model credentials are not configured. Set OPENAI_API_KEY in the alto server environment (Doppler or local), then retry.",
         },
         { status: 503 },
       );
