@@ -1,3 +1,4 @@
+import { MotionSurface } from "./SurfaceMotion";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, GearSix, Robot, Plus } from "@phosphor-icons/react";
 import { desktopApi } from "../lib/desktop-api";
@@ -779,8 +780,9 @@ export function ProjectChat({
     />
   );
   const choosingProject = !projectId && !loading;
+  const navigationKey = `${projectId}:${currentTarget}:${sessionId}:${choosingProject}`;
   const content = choosingProject ? (
-    <div className="app-shell">
+    <MotionSurface className="app-shell" transitionKey={navigationKey}>
       <main className="project-create-page" aria-label="Create project">
         <header className="main-header"><h1>Projects</h1></header>
         <div className="project-create-content">
@@ -795,9 +797,9 @@ export function ProjectChat({
           <CreateProjectForm busy={creatingProject} error={createError} onCreate={values => void createProject(values)} />
         </div>
       </main>
-    </div>
+    </MotionSurface>
   ) : (
-    <div className="app-shell">
+    <MotionSurface className="app-shell" transitionKey={navigationKey}>
       <main className="main project-chat-main" data-empty={!hasConversation}>
         <header className="main-header">
           <h1 title={title}>{title}</h1>
@@ -978,7 +980,7 @@ export function ProjectChat({
           {broadcastNotice && <p className="project-chat-broadcast-notice" role="status">{broadcastNotice}</p>}
         </div>
       </main>
-    </div>
+    </MotionSurface>
   );
   return children({ content, sidebar, busy: busy || creatingProject || attaching || working });
 }
