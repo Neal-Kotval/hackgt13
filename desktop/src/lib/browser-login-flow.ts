@@ -24,9 +24,35 @@ export function beginBrowserLogin(bridge: LoginBridge, target: LoginTarget, noti
   const path = `/api/codex-sessions/${encodeURIComponent(target.codexSessionId)}`;
   async function request(body?: object) {
     const response = await bridge.fetchHuman(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : undefined);
-    const data = JSON.parse(response.body);
-    if (!response.ok) throw new Error(data.error || "Codex sign-in request failed.");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- server JSON, validated by callers
+    let data: Record<string, any>;
+    try { data = JSON.parse(response.body); }
+    catch {
+      // A proxy error page (for example CloudFront's 504 after 30 s) is HTML, not JSON.
+      throw new Error(`AgentCloud didn't respond in time (HTTP ${response.status}). Try again in a moment.`);
+    }
+    if (!response.ok) throw Object.assign(new Error(data.error || "Codex sign-in request failed."), { code: data.code });
     return data;
+  }
+  const pause = (ms: number) => new Promise<void>(resolve => { const timer = setTimeout(resolve, ms); wake = () => { clearTimeout(timer); resolve(); }; });
+  // Codex may still be connecting (SSH + app-server take tens of seconds on a fresh environment).
+  async function currentSession() {
+    for (let attempt = 0; ; attempt++) {
+      const session = validateLoginSession((await request()).session, target);
+      if (session.status !== "initializing" || cancelled || attempt >= 120) return session;
+      notify("Codex is still connecting to your environment…");
+      await pause(pollMs);
+    }
+  }
+  async function startLogin() {
+    for (let attempt = 0; ; attempt++) {
+      try { return await request({ action: "login", method: "browser" }); }
+      catch (error) {
+        if ((error as { code?: string }).code !== "connecting" || cancelled || attempt >= 120) throw error;
+        notify("Codex is still connecting to your environment…");
+        await pause(pollMs);
+      }
+    }
   }
   let unsubscribe = () => {};
   const subscribe = () => bridge.onChatGptSignInEvent(event => {
@@ -42,12 +68,12 @@ export function beginBrowserLogin(bridge: LoginBridge, target: LoginTarget, noti
       await prior?.done;
       if (cancelled) return;
       unsubscribe = subscribe();
-      const initial = validateLoginSession((await request()).session, target);
+      const initial = await currentSession();
       if (cancelled) return;
       if (initial.status === "ready" || initial.status === "running") { finished = true; return; }
       notify("Opening ChatGPT sign-in in your browser…");
       loginStarted = true;
-      const result = await request({ action: "login", method: "browser" });
+      const result = await startLogin();
       if (cancelled) return;
       const login = parseBrowserLogin(result.login);
       if (!login) throw new Error("The environment did not return a valid browser sign-in. Retry from Settings.");

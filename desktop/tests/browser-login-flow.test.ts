@@ -64,3 +64,32 @@ test("web cancellation closes tunnel and stops waiting", async () => {
   assert.match(errors[0], /cancelled or expired/);
   assert.ok(calls.includes("tunnel:stop")); assert.ok(calls.includes("cancelLogin"));
 });
+
+// Live (staging): sign-in started while Codex was still connecting to a fresh GPU environment;
+// the request outlasted CloudFront's 30 s limit and JSON.parse hit its HTML error page.
+test("waits for Codex to finish connecting, retries a 'connecting' answer, then signs in", async () => {
+  const { bridge, calls } = fixture(); const original = bridge.fetchHuman; let reads = 0; let loginAttempts = 0;
+  bridge.fetchHuman = async (path, init) => {
+    const body = init?.body ? JSON.parse(init.body) : null;
+    if (!body && ++reads <= 2) { calls.push("read"); return { ok: true, status: 200, body: JSON.stringify({ session: session("initializing") }) }; }
+    if (body?.action === "login" && ++loginAttempts === 1) {
+      calls.push("login");
+      return { ok: false, status: 409, body: JSON.stringify({ error: "Codex is still connecting to this environment. Try again in a few seconds.", code: "connecting" }) };
+    }
+    return original(path, init);
+  };
+  const errors: string[] = [];
+  await beginBrowserLogin(bridge, target, () => {}, () => calls.push("complete"), e => errors.push(e), 1).done;
+  assert.deepEqual(errors, []);
+  assert.equal(loginAttempts, 2);
+  assert.ok(calls.indexOf("tunnel:start") > calls.lastIndexOf("login") - 1 && calls.includes("complete"));
+});
+test("an HTML error page becomes a readable message instead of a JSON parse error", async () => {
+  const { bridge } = fixture();
+  bridge.fetchHuman = async () => ({ ok: false, status: 504, body: "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\"><HTML>504 Gateway Timeout</HTML>" });
+  const errors: string[] = [];
+  await beginBrowserLogin(bridge, target, () => {}, assert.fail, e => errors.push(e), 1).done;
+  assert.equal(errors.length, 1);
+  assert.doesNotMatch(errors[0], /Unexpected token|JSON/);
+  assert.match(errors[0], /didn't respond|try again/i);
+});
