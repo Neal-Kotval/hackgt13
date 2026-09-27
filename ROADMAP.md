@@ -156,6 +156,10 @@ Acceptance:
 
 Snapshots and rollback, graphical desktop access, notifications, file sync, managed GPU purchasing, production tenant isolation, multi-region database/event scaling, quotas, and billing. Access to an existing SSH GPU host belongs to phase 2; procuring GPUs belongs here. Prioritize these from observed demo limitations rather than adding decorative controls.
 
+## Public multi-organization launch gate (HAC-137)
+
+Public service for unrelated organizations is a separate release milestone from the local coordination foundation and single-organization GPU demo. [PUBLIC_DEPLOYMENT_BOUNDARY.md](PUBLIC_DEPLOYMENT_BOUNDARY.md) defines the threat model and mandatory evidence for identity and sessions, tenant authorization, transactional storage, worker and execution isolation, secrets, ingress, and operations. None of these gates is satisfied merely by a verified login, organization slug, private staging deployment, or successful GPU run. Keep public multi-organization traffic disabled until every gate has been demonstrated against the intended deployment and the release decision is recorded.
+
 ## External decisions before the remote milestone
 
 - Choose one employee identity provider and supply two test identities with distinct project roles.
