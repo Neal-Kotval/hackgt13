@@ -194,3 +194,16 @@
   .chat-history-more { width: var(--control-height-touch); min-height: var(--control-height-touch); }
   .chat-history-actions button, .chat-history-edit-buttons .button { min-height: var(--control-height-touch); }
 }
+
+.chat-history-error {
+  flex-shrink: 0;
+  margin: 0 var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}

@@ -13,12 +13,13 @@ type ChatHistoryProps = {
   deletingId?: string;
   onRename?: (id: string, title: string) => void;
   renamingId?: string;
+  error?: string | null;
   setupUrl?: string;
   loading: boolean;
   viewerId?: string;
 };
 
-export function ChatHistory({ threads, selectedId, busy, onSelect, onCreate, onDelete, deletingId, onRename, renamingId, setupUrl, loading, viewerId }: ChatHistoryProps) {
+export function ChatHistory({ threads, selectedId, busy, onSelect, onCreate, onDelete, deletingId, onRename, renamingId, error, setupUrl, loading, viewerId }: ChatHistoryProps) {
   const [query, setQuery] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const createButton = useRef<HTMLButtonElement>(null);
@@ -55,6 +56,7 @@ export function ChatHistory({ threads, selectedId, busy, onSelect, onCreate, onD
         <input ref={input} type="search" placeholder="Search chats, people, agents" value={query} onChange={(event) => setQuery(event.target.value)} />
         <kbd aria-hidden="true">⌘K</kbd>
       </label>
+      {error && <p className="chat-history-error" role="alert">{error}</p>}
       {owners.length ? (
         <div className="chat-history-groups">
           {owners.map(owner => (
