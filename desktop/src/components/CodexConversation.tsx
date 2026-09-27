@@ -160,7 +160,7 @@ export function CodexConversation({ events, working, emptyLabel, agentName = "Co
       const environment = event.runBoxName || environmentName;
       const copyText = event.parts?.some(part => part.type === "text") ? event.parts.filter(part => part.type === "text").map(part => part.markdown).join("\n\n") : event.text;
       return <article key={event.id} className="message" data-role={event.kind}>
-        {event.kind === "user" ? <><span className="visually-hidden">{event.actorName || "Project member"}</span><p className="message-body">{event.text}</p></> : <>
+        {event.kind === "user" ? <><span className="codex-message-author">{event.actorName || "Project member"}</span><p className="message-body">{event.text}</p></> : <>
           <div className="codex-agent-header"><span className="codex-agent-avatar"><Robot aria-hidden="true" /></span><span className="codex-agent-name">{event.agentName || agentName}</span>{environment ? <span className="codex-agent-environment">on {environment}</span> : null}</div>
           {event.parts?.length ? event.parts.map((part, partIndex) => <StructuredPart part={part} key={partIndex} />) : event.text ? <MarkdownBody text={event.text} /> : null}
           {streaming ? <span className="codex-streaming-cursor" aria-hidden="true" /> : <div className="codex-message-actions"><CopyButton text={copyText} label="Copy response" compact />{onRetry ? <button type="button" className="codex-action" aria-label="Retry" title="Retry" disabled={working || retryDisabled} onClick={() => onRetry(event.id)}><ArrowClockwise aria-hidden="true" /></button> : null}</div>}
