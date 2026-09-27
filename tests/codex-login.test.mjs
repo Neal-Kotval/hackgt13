@@ -77,10 +77,13 @@ test('browser login returns the URL and port, is never saved, and cancel is expl
   const { id } = f.service.initialize({ projectId: 'p', agentId: 'a', createdBy: 'u' });
   await tick();
   assert.equal(f.service.get(id).status, 'auth_required');
+  assert.equal(f.service.get(id).loginPending, false);
   assert.deepEqual(await f.service.action(id, { action: 'cancelLogin' }), { session: f.service.get(id), cancelled: false });
 
   const { login } = await f.service.action(id, { action: 'login', method: 'browser' });
   assert.equal(login.method, 'browser');
+  assert.equal(f.service.get(id).loginPending, true);
+  assert.equal(f.service.list('p')[0].loginPending, true);
   assert.equal(login.callbackPort, 1455);
   assert.match(login.authUrl, /^https:\/\/auth\.openai\.com\/oauth\/authorize\?/);
   assert.deepEqual(f.calls.find((c) => c.method === 'account/login/start').params, { type: 'chatgpt' });
@@ -98,6 +101,8 @@ test('browser login returns the URL and port, is never saved, and cancel is expl
 
   const cancelled = await f.service.action(id, { action: 'cancelLogin' });
   assert.equal(cancelled.cancelled, true);
+  assert.equal(cancelled.session.loginPending, false);
+  assert.equal(f.service.snapshot(id).session.loginPending, false);
   assert.deepEqual(f.calls.filter((c) => c.method === 'account/login/cancel').at(-1).params, { loginId: second.loginId });
   f.notify('account/login/completed', { loginId: second.loginId, success: false, error: 'Login cancelled' });
   assert.equal(f.service.get(id).status, 'auth_required');
@@ -108,6 +113,7 @@ test('browser login returns the URL and port, is never saved, and cancel is expl
   const third = (await f.service.action(id, { action: 'login', method: 'browser' })).login;
   f.notify('account/login/completed', { loginId: third.loginId, success: false, error: 'denied' });
   assert.match(f.service.get(id).error, /did not complete/);
+  assert.equal(f.service.get(id).loginPending, false);
   f.service.close(); f.db.close();
 });
 
