@@ -138,3 +138,14 @@ Automated:
 - Unit tests for the shared client, the SSH runtime, target selection and validation.
 - A real-Docker integration test: a docker-local sandbox session over SSH, where `codex app-server` initializes and device-code start returns a URL and code (never approved).
 - HAC-161: unit tests for browser login validation and cancel (`tests/codex-login.test.mjs`) and the desktop tunnel (`desktop/tests/codex-login-tunnel.test.ts`), and a real-Docker test (`desktop/tests/codex-browser-login.integration.test.ts`) where browser login start returns an auth.openai.com URL with a localhost redirect and the desktop tunnel forwards a request from the Mac-side port to Codex's callback server on the environment (then cancels; never signs in).
+
+## Structured execution events
+
+Snapshot events retain their stable `id`, `kind`, `text` and timestamps. Command
+and file-change events keep `kind: "command"` for older clients and add optional
+`details`: `type` (`commandExecution` or `fileChange`), `status`, and available
+`command`, `cwd`, `exitCode`, `durationMs`, `output`, `truncated`, or `changes`.
+Each change carries `path`, `kind`, `diff`, and an optional rename `movePath`.
+Only allowlisted, redacted fields are saved. Streaming deltas and completed or
+resumed items update the same record, preserving its order and creation time.
+Retention and legacy-history limits are documented in [LOCAL_CODEX.md](../LOCAL_CODEX.md#command-and-file-change-history).

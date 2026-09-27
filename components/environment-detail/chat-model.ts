@@ -1,3 +1,33 @@
+/** Structured, server-redacted evidence; never inferred from assistant prose. */
+export type CodexEventDetails = {
+  type: "commandExecution" | "fileChange";
+  status: string;
+  command?: string;
+  cwd?: string;
+  exitCode?: number | null;
+  durationMs?: number | null;
+  output?: string;
+  changes?: { path: string; kind: string; diff: string; movePath?: string }[];
+  truncated?: boolean;
+};
+
+export function parseCodexEventDetails(value: unknown): CodexEventDetails | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if ((record.type !== "commandExecution" && record.type !== "fileChange") || typeof record.status !== "string") return undefined;
+  const result: CodexEventDetails = { type: record.type, status: record.status };
+  for (const key of ["command", "cwd", "output"] as const) if (typeof record[key] === "string") result[key] = record[key];
+  for (const key of ["exitCode", "durationMs"] as const) if (record[key] === null || (typeof record[key] === "number" && Number.isFinite(record[key]))) result[key] = record[key] as number | null;
+  if (typeof record.truncated === "boolean") result.truncated = record.truncated;
+  if (Array.isArray(record.changes)) result.changes = record.changes.flatMap(value => {
+    if (!value || typeof value !== "object") return [];
+    const change = value as Record<string, unknown>;
+    if (typeof change.path !== "string" || typeof change.kind !== "string" || typeof change.diff !== "string") return [];
+    return [{ path: change.path, kind: change.kind, diff: change.diff, ...(typeof change.movePath === "string" ? { movePath: change.movePath } : {}) }];
+  });
+  return result;
+}
+
 /**
  * Pure mapping for the web environment Codex chat. Everything here reads the
  * server's `/api/codex-sessions` responses; nothing synthesizes messages.
@@ -20,6 +50,7 @@ export type ChatSession = {
 };
 
 export type ChatEvent = {
+  details?: CodexEventDetails;
   id: string;
   kind: "user" | "assistant" | "command" | "status" | "error";
   text: string;
@@ -82,10 +113,12 @@ export function parseChatEvents(value: unknown): ChatEvent[] {
     if (!entry || typeof entry !== "object") return [];
     const record = entry as Record<string, unknown>;
     if (typeof record.id !== "string" || !EVENT_KINDS.has(String(record.kind))) return [];
+    const details = parseCodexEventDetails(record.details);
     return [{
       id: record.id,
       kind: record.kind as ChatEvent["kind"],
       text: text(record.text),
+      ...(details ? { details } : {}),
       createdAt: text(record.createdAt),
       updatedAt: text(record.updatedAt),
       actorId: nullable(record.actorId),

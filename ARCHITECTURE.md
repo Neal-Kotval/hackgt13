@@ -277,3 +277,13 @@ connect to SSH, provision compute, or start an agent.
 Account preferences persist a default-one, bounded 1–5 maximum for active AWS and Runpod environments owned by the requesting employee. Ownership comes from the immutable decision record. The run-box decision transaction checks the combined active count before inserting a new job; idempotent retries return the prior result. Account settings never grant organization approval or raise reserved runtime budgets. A stop request retains its slot until AWS accepts termination; an acknowledged AWS termination releases capacity while final cleanup remains pending. Other providers and failed jobs retain capacity until cleanup is proven.
 
 Concurrent AWS environments share the Terraform-managed SSH security group. Ingress is deduplicated by source CIDR and owned by the consuming job/instance pairs in the DynamoDB `agentcloud-ssh-ingress-locks` table; EC2 owner tags are an audit and migration mirror. A conditional group lease serializes rule mutations across installs, and strongly consistent ownership reads protect the last-consumer delete. A rule is removed only after its final consumer is released. Unknown unmanaged rules are not adopted or deleted. Apply the table and worker policies before deploying this provider; unavailable locking fails closed. The group permits the union of approved source addresses to reach the instances, while per-environment SSH keys remain the authentication boundary; this is not per-environment network isolation.
+
+## Detailed session execution evidence
+
+`lib/codex-execution-details.mjs` sanitizes and bounds command and file-change
+fields before `lib/codex-sessions.mjs` stores them as optional JSON details on
+session events. A shared `components/codex-evidence.tsx` renderer exposes these
+in web environment chat and desktop chat, including output and per-file diffs.
+This is recorded execution evidence, separate from the planned project-wide Git
+review and merge workflow. See [LOCAL_CODEX.md](LOCAL_CODEX.md#command-and-file-change-history)
+for retention, streaming, redaction and recovery limits.

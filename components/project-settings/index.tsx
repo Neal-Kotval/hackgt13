@@ -38,8 +38,10 @@ const sections = [
 ] as const;
 
 async function readJson(response: Response) {
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "The request failed. Please try again.");
+  const data = await response.json().catch(() => {
+    throw new Error("Project settings are unavailable. Please try again or update the connected backend.");
+  });
+  if (!response.ok) throw new Error(data?.error || "The request failed. Please try again.");
   return data;
 }
 
@@ -70,6 +72,15 @@ export function ProjectSettings({ project, onProjectChange }: { project: Project
   const environments = useProjectJobs(project.id);
   async function load() {
     const next = await readJson(await fetch(`/api/projects/${encodeURIComponent(project.id)}/settings`, { cache: "no-store" }));
+    // A stale backend may return a page or a different API payload. Never
+    // render permission-dependent controls until the settings contract exists.
+    if (!next || next.project?.id !== project.id ||
+        typeof next.project.name !== "string" || typeof next.project.repo !== "string" ||
+        !next.project.environmentDefaults || !next.viewer || !next.organization ||
+        typeof next.permissions?.edit !== "boolean" || typeof next.permissions?.invite !== "boolean" ||
+        ![next.members, next.candidates, next.invitations, next.machines].every(Array.isArray)) {
+      throw new Error("Project settings are unavailable. Please try again or update the connected backend.");
+    }
     setData(next);
     setLoadError("");
     return next as Settings;

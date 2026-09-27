@@ -170,3 +170,13 @@ Sign-in keeps the confirmation action to the left of Create an account. Resend
 appears only for an address with a successful confirmation request in the current
 tab, including signup. Unverified-account and expired-link recovery first offers
 Send confirmation email. Changing the address hides another address's resend state.
+
+Command and file-change evidence uses one shared renderer in desktop and web chat.
+Collapsed command rows show the actual invocation and a visible execution status.
+Expanded rows separate working directory, exit code, duration, command, and output;
+copy controls act on the recorded text. File disclosures show operation, path,
+recorded addition/deletion counts, and a locally scrolling unified diff with old/new
+line numbers. Diff additions use success roles, deletions danger roles, and hunk
+headers information roles; their text markers preserve meaning without color.
+Missing, empty, legacy, and truncated evidence have distinct explanations. Counts
+refer to the displayed diff, not a claim about the complete repository state.
