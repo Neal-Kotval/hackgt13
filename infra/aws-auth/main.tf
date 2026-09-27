@@ -142,6 +142,18 @@ resource "aws_vpc_security_group_egress_rule" "https" {
   description       = "Outbound HTTPS only"
 }
 
+# HAC-166: the aws-cpu worker and the backend's Codex sessions SSH to AWS CPU environments on
+# port 22 (their public IPv4). Each box's own security group still admits only this host's /32
+# and the requesting employee's /32.
+resource "aws_vpc_security_group_egress_rule" "aws_cpu_ssh" {
+  security_group_id = aws_security_group.instance.id
+  ip_protocol       = "tcp"
+  from_port         = 22
+  to_port           = 22
+  cidr_ipv4         = "0.0.0.0/0"
+  description       = "Outbound SSH to AgentCloud aws-cpu environments"
+}
+
 resource "aws_vpc_security_group_egress_rule" "runpod_ssh" {
   security_group_id = aws_security_group.instance.id
   ip_protocol       = "tcp"
@@ -221,7 +233,8 @@ resource "aws_instance" "app" {
     aws_iam_role_policy.artifact_read,
     aws_iam_role_policy.runtime_secret_read,
     aws_vpc_security_group_egress_rule.https,
-    aws_vpc_security_group_egress_rule.runpod_ssh
+    aws_vpc_security_group_egress_rule.runpod_ssh,
+    aws_vpc_security_group_egress_rule.aws_cpu_ssh
   ]
 }
 
@@ -232,7 +245,7 @@ resource "aws_eip" "app" {
 }
 
 resource "aws_cloudfront_distribution" "app" {
-  enabled         = true
+  enabled = true
   # IPv4 only: CloudFront-Viewer-Address must be the IPv4 the employee also uses for SSH to
   # aws-cpu boxes (HAC-166). Boxes have no IPv6, so an IPv6 viewer address cannot be admitted.
   is_ipv6_enabled = false
