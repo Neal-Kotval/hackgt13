@@ -1055,6 +1055,12 @@ pre {
   gap: var(--space-3);
 }
 
+.chat-terminal {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4) var(--page-gutter);
+}
+
 .terminal-panel {
   display: flex;
   flex-direction: column;
