@@ -128,3 +128,15 @@ lifecycle. SQLite stores bounded attributed session items, while the Docker
 volume retains Codex history and workspace files. This local implementation does
 not satisfy the AWS/GPU execution or public multi-tenant milestones above. See
 [LOCAL_CODEX.md](LOCAL_CODEX.md) for setup, authentication, recovery and limits.
+
+## Desktop chat redesign (HAC-154)
+
+The current desktop navigation is Project chat and Environments; Tasks and desktop
+task authoring are removed. Backend task records and APIs remain available. Chat
+uses real project/agent Codex sessions with searchable history, Markdown/code,
+text-context attachments, and per-session in-memory drafts. New chat selects an
+existing agent conversation; separate conversation creation/deletion is not an
+implemented API. Local Docker execution and ready run-box SSH terminals are
+separate contexts. Server redaction remains unchanged, and optional file/handoff
+cards require actual backend data. The visible brand is lowercase `alto`; existing
+technical identifiers and the `agentcloud://` protocol remain compatible.

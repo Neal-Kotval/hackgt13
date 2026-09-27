@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { claimRunBoxJob, migrateRunBoxJobs, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
+import { setAwsApproval } from "../lib/aws-organization-approval.mjs";
 import { migrateSshKeys, registerSshKey } from "../lib/ssh-keys.mjs";
 import { getRunBoxSshEndpoint } from "../lib/run-box-ssh.mjs";
 import { getAwsCpuEnvironment, NO_DEVICE_KEYS, workOneAwsCpuJob } from "../lib/aws-cpu-worker.mjs";
@@ -25,12 +26,16 @@ function setup({ deviceKey = true, profileId = "aws-cpu" } = {}) {
   db.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, emailVerified INTEGER NOT NULL);
     CREATE TABLE member (userId TEXT NOT NULL, organizationId TEXT NOT NULL, role TEXT NOT NULL);
     CREATE TABLE project_organization (project_id TEXT PRIMARY KEY, organization_id TEXT NOT NULL);
-    CREATE TABLE project_membership (user_id TEXT NOT NULL, project_id TEXT NOT NULL, role TEXT NOT NULL);`);
+    CREATE TABLE project_membership (user_id TEXT NOT NULL, project_id TEXT NOT NULL, role TEXT NOT NULL);
+    CREATE TABLE organization (id TEXT PRIMARY KEY);`);
   migrateRunBoxJobs(db);
   migrateSshKeys(db);
   db.prepare("INSERT INTO user VALUES ('employee-1', 1)").run();
   db.prepare("INSERT INTO member VALUES ('employee-1', 'org-1', 'owner')").run();
   db.prepare("INSERT INTO project_organization VALUES ('project-1', 'org-1')").run();
+  // HAC-142: AWS runs need a platform approval for the organization.
+  db.prepare("INSERT INTO organization VALUES ('org-1')").run();
+  setAwsApproval(db, { organizationId: "org-1", approved: true, maxRunMinutes: 120, monthlyMinutes: 1200, actorId: "platform-admin" });
   const device = ed25519PublicKey();
   const registered = deviceKey ? registerSshKey(db, "employee-1", { label: "Mac", publicKey: device }).key : null;
   const { job, decision } = saveRunBoxDecision(db, {

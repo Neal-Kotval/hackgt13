@@ -2,7 +2,7 @@
   "name": "agentcloud-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "AgentCloud desktop chat shell (Codex-like core loop)",
+  "description": "alto desktop project chat",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit && vite build",
     "start": "electron .",
     "check": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit",
-    "test": "node --test --experimental-strip-types tests/*.test.ts"
+    "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "test:chat:browser": "node tests/chat-design.browser.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
@@ -19,6 +20,8 @@
     "@xterm/xterm": "^6.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
     "ssh2": "^1.17.0"
   },
   "devDependencies": {

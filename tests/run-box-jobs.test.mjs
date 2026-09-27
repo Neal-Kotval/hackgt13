@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { setAwsApproval } from "../lib/aws-organization-approval.mjs";
 import {
   claimRunBoxJob,
   migrateRunBoxJobs,
@@ -19,6 +20,10 @@ function database() {
   db.pragma("foreign_keys = ON");
   migrateRunBoxJobs(db);
   migrateRunBoxJobs(db);
+  db.exec("CREATE TABLE organization (id TEXT PRIMARY KEY)");
+  db.prepare("INSERT INTO organization VALUES ('organization-1')").run();
+  setAwsApproval(db, { organizationId: "organization-1", approved: true, maxRunMinutes: 120,
+    monthlyMinutes: 1200, actorId: "platform-admin" });
   return db;
 }
 
@@ -48,6 +53,28 @@ test("member denial persists a decision without a billable job", () => {
   } finally {
     db.close();
   }
+});
+
+test("AWS approval starts closed and monthly minutes are reserved at decision time", () => {
+  const db = database();
+  try {
+    setAwsApproval(db, { organizationId: "organization-1", approved: false,
+      maxRunMinutes: 60, monthlyMinutes: 60, actorId: "platform-admin" });
+    const denied = saveRunBoxDecision(db, request({ idempotencyKey: "closed", resourceRequestId: "closed" }));
+    assert.equal(denied.decision.outcome, "denied");
+    assert.equal(denied.job, null);
+    assert.match(denied.decision.reason, /Platform approval required/);
+    setAwsApproval(db, { organizationId: "organization-1", approved: true,
+      maxRunMinutes: 60, monthlyMinutes: 60, actorId: "platform-admin" });
+    const approved = saveRunBoxDecision(db, request({ idempotencyKey: "first", resourceRequestId: "first", maxDurationMinutes: 60 }));
+    assert.equal(approved.decision.outcome, "approved");
+    const over = saveRunBoxDecision(db, request({ idempotencyKey: "over", resourceRequestId: "over", maxDurationMinutes: 120 }));
+    assert.equal(over.decision.outcome, "denied");
+    assert.match(over.decision.reason, /duration/);
+    const exhausted = saveRunBoxDecision(db, request({ idempotencyKey: "exhausted", resourceRequestId: "exhausted", maxDurationMinutes: 60 }));
+    assert.equal(exhausted.decision.outcome, "denied");
+    assert.match(exhausted.decision.reason, /allowance exhausted/);
+  } finally { db.close(); }
 });
 
 test("approved job pins a validated server repository URL in the decision", () => {
@@ -95,6 +122,10 @@ test("migration upgrades existing job tables and stale workers cannot transition
     attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
     UNIQUE(provider, provider_resource_id))`);
   migrateRunBoxJobs(old);
+  old.exec("CREATE TABLE organization (id TEXT PRIMARY KEY)");
+  old.prepare("INSERT INTO organization VALUES ('organization-1')").run();
+  setAwsApproval(old, { organizationId: "organization-1", approved: true, maxRunMinutes: 120,
+    monthlyMinutes: 1200, actorId: "platform-admin" });
   const columns = old.prepare("PRAGMA table_info(run_box_job)").all().map((item) => item.name);
   assert.ok(columns.includes("stop_requested_at"));
   assert.ok(columns.includes("stop_requested_by"));
@@ -230,6 +261,10 @@ test("worker restart recovers the same allocated box from durable storage", () =
     let db = new Database(filename);
     db.pragma("foreign_keys = ON");
     migrateRunBoxJobs(db);
+    db.exec("CREATE TABLE organization (id TEXT PRIMARY KEY)");
+    db.prepare("INSERT INTO organization VALUES ('organization-1')").run();
+    setAwsApproval(db, { organizationId: "organization-1", approved: true, maxRunMinutes: 120,
+      monthlyMinutes: 1200, actorId: "platform-admin" });
     const { job } = saveRunBoxDecision(db, request());
     const beforeCrash = new Date();
     claimRunBoxJob(db, "worker-before-crash", beforeCrash);

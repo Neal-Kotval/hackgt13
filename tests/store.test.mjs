@@ -24,6 +24,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
   await writeFile(path.join(temporary, `${name}.js`), output);
 }
 await copyFile(new URL("../lib/run-box-jobs.mjs", import.meta.url), path.join(temporary, "run-box-jobs.mjs"));
+await copyFile(new URL("../lib/aws-organization-approval.mjs", import.meta.url), path.join(temporary, "aws-organization-approval.mjs"));
 const authFixture = await prepareAuth(temporary);
 const { action, getState, agentAction } = await import(
   path.join(temporary, "store.js")
