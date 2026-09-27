@@ -68,3 +68,31 @@ test('failed starts are never acknowledged as successful retries',async()=>{
  await service.action(s.id,{action:'resume'});await assert.rejects(service.action(s.id,input),e=>e.code==='ambiguous_turn');
  await service.action(s.id,{...input,requestId:randomUUID()});service.close();db.close();
 });
+test('command output and command arguments never enter snapshots or retained events',async()=>{
+ const f=fixture();const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ const secret='-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-material\n-----END OPENSSH PRIVATE KEY-----';
+ const argument='ARGUMENT_SECRET_UNIQUE';
+ const delta='STREAM_SECRET_UNIQUE';
+ f.notify('item/started',{item:{id:'cmd',type:'commandExecution',command:`printf '${argument}'`,status:'inProgress'}});
+ f.notify('item/commandExecution/outputDelta',{itemId:'cmd',delta});
+ f.notify('item/completed',{item:{id:'cmd',type:'commandExecution',command:`printf '${argument}'`,status:'completed',exitCode:0,aggregatedOutput:secret}});
+ f.notify('item/completed',{item:{id:'file',type:'fileChange',status:'completed',changes:[{path:'PRIVATE_PATH_UNIQUE'}]}});
+ const result=f.service.snapshot(s.id);
+ for(const sensitive of [secret,argument,delta,'PRIVATE_PATH_UNIQUE'])assert.equal(JSON.stringify(result).includes(sensitive),false);
+ assert.equal(f.db.prepare('SELECT text FROM codex_session_event WHERE event_id=?').get('cmd').text.includes(secret),false);
+ assert.match(result.events.find(e=>e.id==='cmd').text,/completed.*exit 0/i);
+ f.service.close();
+ const restarted=createCodexSessionService({db:f.db,dataDir:'/tmp/codex-test',runtimeFactory:async()=>{throw Error('offline');}});
+ assert.match(restarted.snapshot(s.id).events.find(e=>e.id==='cmd').text,/completed.*exit 0/i);
+ f.db.close();
+});
+test('migration removes command details already saved by older versions',async()=>{
+ const f=fixture();const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();f.service.close();
+ const secret='-----BEGIN OPENSSH PRIVATE KEY----- private-material';
+ f.db.prepare("INSERT INTO codex_session_event(session_id,event_id,kind,text,created_at,updated_at) VALUES(?,?,'command',?,?,?)").run(s.id,'legacy',`cat secret\ncompleted · exit 0\n${secret}`,'2026-01-01','2026-01-01');
+ f.db.prepare("DELETE FROM codex_session_migration WHERE name='remove-raw-command-output-v1'").run();
+ const restored=createCodexSessionService({db:f.db,dataDir:'/tmp/codex-test',runtimeFactory:async()=>{throw Error('offline');}});
+ assert.equal(JSON.stringify(restored.snapshot(s.id)).includes(secret),false);
+ assert.equal(f.db.prepare('SELECT text FROM codex_session_event WHERE event_id=?').get('legacy').text.includes(secret),false);
+ f.db.close();
+});
