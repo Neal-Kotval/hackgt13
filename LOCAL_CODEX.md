@@ -59,3 +59,11 @@ New environments must be allocated by the current worker so they include the
 backend runner key. See [docs/stage3-contract.md](docs/stage3-contract.md) for
 session ownership, reconnect, redaction, and execution boundaries. Stopping a
 session ends its SSH transport; stopping an environment tears down the machine.
+
+### Existing sandbox conflicts
+
+Only one non-stopped Docker environment is allowed per project, including imported
+container templates. Creating another returns HTTP 409 with instructions to use
+the existing environment or stop it first; it does not record another resource
+request. Stopping must finish before creating its replacement. Replaying the
+original creation key still returns the original decision and environment.
