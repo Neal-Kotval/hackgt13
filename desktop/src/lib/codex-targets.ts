@@ -19,6 +19,8 @@ export type CodexSession = {
   status: CodexSessionStatus;
   error: string | null;
   target: CodexSessionTarget;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 /** Picker option. `key` is "local" or "runBox:<id>". */
@@ -63,6 +65,8 @@ export function parseCodexSession(value: unknown): CodexSession | null {
     status,
     error: typeof record.error === "string" ? record.error : null,
     target: parseSessionTarget(record.target),
+    ...(text(record.createdAt) ? { createdAt: text(record.createdAt)! } : {}),
+    ...(text(record.updatedAt) ? { updatedAt: text(record.updatedAt)! } : {}),
   };
 }
 

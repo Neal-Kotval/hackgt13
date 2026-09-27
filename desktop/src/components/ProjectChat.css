@@ -280,3 +280,49 @@
     flex: 2;
   }
 }
+/* HAC-153: ChatGPT device sign-in for the targeted Codex session. */
+.codex-sign-in {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  margin-bottom: var(--space-3);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.codex-sign-in h2 {
+  margin: 0;
+  font-size: var(--text-base);
+}
+.codex-sign-in p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+.codex-sign-in-code-row,
+.codex-sign-in-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.codex-sign-in-code {
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-width) solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.codex-sign-in .codex-sign-in-wait {
+  color: var(--color-warning);
+}

@@ -1,5 +1,16 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { desktopApi } from "../lib/desktop-api";
+import { parseDeviceLogin, type DeviceLogin } from "../lib/chatgpt-sign-in";
+import {
+  LOCAL_TARGET_KEY,
+  deriveChatTargets,
+  parseCodexSession,
+  parseCodexSessions,
+  sessionForTarget,
+  sessionTargetLabel,
+  targetKey,
+  type CodexSession,
+} from "../lib/codex-targets";
 import type { DeepLinkParseResult, ProjectSnapshot } from "../lib/types";
 import { Composer, type ChatAttachment } from "./Composer";
 import { CodexConversation, type CodexEvent } from "./CodexConversation";
@@ -8,25 +19,15 @@ import { ChatProjectPicker } from "./ChatProjectPicker";
 import { ChatHistory } from "./ChatHistory";
 import {
   canOpenTerminal,
+  canTargetCodex,
+  codexBlockedReason,
+  isTransitional,
   runBoxStateLabel,
   type RunBoxSummary,
 } from "../lib/run-boxes";
 
-type Session = {
-  id: string;
-  projectId: string;
-  agentId: string;
-  status:
-    | "initializing"
-    | "auth_required"
-    | "ready"
-    | "running"
-    | "error"
-    | "stopped";
-  error: string | null;
-  updatedAt?: string;
-  createdAt?: string;
-};
+type Session = CodexSession;
+const TERMINAL_PREFIX = "terminal:";
 type Event = CodexEvent;
 class CodexRequestError extends Error {
   constructor(
@@ -80,6 +81,16 @@ export function ProjectChat({
   const [titles, setTitles] = useState<Record<string, string>>({});
   const [runBoxes, setRunBoxes] = useState<RunBoxSummary[]>([]);
   const [environmentError, setEnvironmentError] = useState<string | null>(null);
+  const [runBoxesFor, setRunBoxesFor] = useState("");
+  const [sessionsFor, setSessionsFor] = useState("");
+  // Codex target with no session yet (picker value when nothing is selected).
+  const [targetChoice, setTargetChoice] = useState(LOCAL_TARGET_KEY);
+  // Environment requested by a panel=codex link or Environments "Open Codex".
+  const [pendingEnvironment, setPendingEnvironment] = useState<string | null>(null);
+  const pendingEnvironmentRef = useRef<string | null>(null);
+  const [targetNotice, setTargetNotice] = useState<string | null>(null);
+  const [logins, setLogins] = useState<Record<string, DeviceLogin>>({});
+  const [codeCopied, setCodeCopied] = useState(false);
   const [attachments, setAttachments] = useState<
     Record<string, ChatAttachment[]>
   >({});
@@ -107,6 +118,11 @@ export function ProjectChat({
   const pending = useRef<Record<string, { text: string; requestId: string }>>(
     {},
   );
+  const requestEnvironment = useCallback((runBoxId: string | null) => {
+    pendingEnvironmentRef.current = runBoxId;
+    setPendingEnvironment(runBoxId);
+    setTargetNotice(null);
+  }, []);
   useEffect(() => {
     let cancelled = false;
     desktopApi()
@@ -118,6 +134,7 @@ export function ProjectChat({
           if (!state.projects.some((p) => p.id === deepLink.target.projectId)) {
             blockAutoProject.current = true;
             desiredSession.current = deepLink.target.codexSessionId || null;
+            requestEnvironment(null);
             setProjectId("");
             setSessionId("");
             setSnapshot(null);
@@ -132,6 +149,11 @@ export function ProjectChat({
           choosing.current = false;
           blockAutoProject.current = false;
           desiredSession.current = deepLink.target.codexSessionId || null;
+          requestEnvironment(
+            deepLink.target.panel === "codex" && deepLink.target.runBoxId
+              ? deepLink.target.runBoxId
+              : null,
+          );
           setProjectId(deepLink.target.projectId);
           setLinkRevision((value) => value + 1);
         } else if (!blockAutoProject.current)
@@ -150,10 +172,15 @@ export function ProjectChat({
     return () => {
       cancelled = true;
     };
-  }, [deepLink, onDeepLinkHandled, retry]);
+  }, [deepLink, onDeepLinkHandled, retry, requestEnvironment]);
   useEffect(() => {
-    if (lastProject.current !== projectId || desiredSession.current) {
+    if (
+      lastProject.current !== projectId ||
+      desiredSession.current ||
+      pendingEnvironmentRef.current
+    ) {
       setSessions([]);
+      setSessionsFor("");
       setSessionId("");
       setSnapshot(null);
       lastProject.current = projectId;
@@ -168,16 +195,18 @@ export function ProjectChat({
     setActionError(null);
     const poll = async () => {
       try {
-        const data = await request<{ enabled: boolean; sessions: Session[] }>(
+        const data = await request<{ enabled: boolean; sessions: unknown }>(
           `/api/codex-sessions?projectId=${encodeURIComponent(projectId)}`,
         );
         if (cancelled) return;
-        setSessions(data.sessions);
+        const list = parseCodexSessions(data.sessions);
+        setSessions(list);
+        setSessionsFor(projectId);
         setEnabled(data.enabled);
         setError(null);
         const requested = desiredSession.current;
         if (requested) {
-          if (data.sessions.some((s) => s.id === requested)) {
+          if (list.some((s) => s.id === requested)) {
             desiredSession.current = null;
             setSessionId(requested);
             setActionError(null);
@@ -185,11 +214,9 @@ export function ProjectChat({
             setActionError(
               "The linked Codex session is not available in this project.",
             );
-        } else if (!choosing.current)
+        } else if (!choosing.current && !pendingEnvironmentRef.current)
           setSessionId((current) =>
-            data.sessions.some((s) => s.id === current)
-              ? current
-              : data.sessions[0]?.id || "",
+            list.some((s) => s.id === current) ? current : list[0]?.id || "",
           );
       } catch (err) {
         if (!cancelled)
@@ -213,6 +240,7 @@ export function ProjectChat({
   }, [projectId, retry, linkRevision]);
   useEffect(() => {
     setRunBoxes([]);
+    setRunBoxesFor("");
     setEnvironmentError(null);
     if (!projectId) return;
     let cancelled = false;
@@ -222,11 +250,13 @@ export function ProjectChat({
         const boxes = await desktopApi().listRunBoxes(projectId);
         if (!cancelled) {
           setRunBoxes(boxes.filter((box) => box.projectId === projectId));
+          setRunBoxesFor(projectId);
           setEnvironmentError(null);
         }
       } catch {
         if (!cancelled) {
           setRunBoxes([]);
+          setRunBoxesFor(projectId);
           setEnvironmentError("Environment list unavailable.");
         }
       } finally {
@@ -238,7 +268,7 @@ export function ProjectChat({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [projectId, retry]);
+  }, [projectId, retry, linkRevision]);
   useEffect(() => {
     setSnapshot(null);
     if (!sessionId) return;
@@ -246,17 +276,18 @@ export function ProjectChat({
       timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
-        const data = await request<{ session: Session; events: Event[] }>(
+        const data = await request<{ session: unknown; events: Event[] }>(
           `/api/codex-sessions/${encodeURIComponent(sessionId)}`,
         );
-        if (!cancelled && data.session.projectId === projectId) {
-          setSnapshot(data);
+        const parsed = parseCodexSession(data.session);
+        if (!cancelled && parsed && parsed.projectId === projectId) {
+          setSnapshot({ session: parsed, events: data.events });
           setError(null);
           const first = data.events.find((event) => event.kind === "user");
           if (first)
             setTitles((current) => ({
               ...current,
-              [data.session.id]: first.text.split("\n")[0],
+              [parsed.id]: first.text.split("\n")[0],
             }));
         }
       } catch (err) {
@@ -290,6 +321,161 @@ export function ProjectChat({
   ]
     .filter(Boolean)
     .join("\n\n");
+  const project = projects.find((p) => p.id === projectId);
+  // A device code is only meaningful while the session still needs sign-in.
+  useEffect(() => {
+    if (!session || session.status === "auth_required") return;
+    setLogins((current) => {
+      if (!current[session.id]) return current;
+      const next = { ...current };
+      delete next[session.id];
+      return next;
+    });
+  }, [session]);
+  const login =
+    session?.status === "auth_required" ? logins[session.id] : undefined;
+  useEffect(() => setCodeCopied(false), [login?.userCode]);
+
+  function codexAgentId(): string | null {
+    const current = sessions.find((s) => s.id === sessionId)?.agentId;
+    if (current) return current;
+    if (sessions[0]?.agentId) return sessions[0].agentId;
+    return (
+      project?.agents.find((a) => a.client?.toLowerCase() === "codex")?.id ??
+      null
+    );
+  }
+
+  async function openEnvironmentSession(runBoxId: string) {
+    const agentId = codexAgentId();
+    if (!projectId || !agentId) {
+      setActionError(
+        "Register a Codex agent in project Settings before using Codex on an environment.",
+      );
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      const result = await request<{ session: unknown }>(
+        "/api/codex-sessions",
+        { projectId, agentId, runBoxId },
+      );
+      const created = parseCodexSession(result.session);
+      // Older servers ignore runBoxId and return the local session: never present it as remote.
+      if (!created || targetKey(created.target) !== `runBox:${runBoxId}`) {
+        setActionError(
+          "This alto server cannot run Codex on environments yet. Update the server, then try again.",
+        );
+        return;
+      }
+      choosing.current = false;
+      setSessions((current) => [
+        ...current.filter((s) => s.id !== created.id),
+        created,
+      ]);
+      setSessionId(created.id);
+      onSelectConversation?.();
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : "Could not start Codex on this environment.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Resolve an environment request once sessions and environments are loaded.
+  useEffect(() => {
+    if (
+      !pendingEnvironment ||
+      !projectId ||
+      sessionsFor !== projectId ||
+      runBoxesFor !== projectId ||
+      busy
+    )
+      return;
+    const existing = sessionForTarget(sessions, `runBox:${pendingEnvironment}`);
+    if (existing) {
+      requestEnvironment(null);
+      choosing.current = false;
+      setSessionId(existing.id);
+      return;
+    }
+    const job = runBoxes.find((row) => row.id === pendingEnvironment);
+    if (!job) {
+      if (environmentError) return; // listing failed; keep waiting for the next poll
+      requestEnvironment(null);
+      setActionError(
+        `Environment ${pendingEnvironment} was not found on this project.`,
+      );
+      return;
+    }
+    if (canTargetCodex(job)) {
+      requestEnvironment(null);
+      void openEnvironmentSession(job.id);
+      return;
+    }
+    if (
+      (isTransitional(job) && !job.stopRequested) ||
+      (job.state === "ready" && !job.stopRequested && job.codex?.state === "pending")
+    ) {
+      setTargetNotice(
+        `Waiting for environment ${job.id} (${job.state === "ready" ? "checking Codex" : runBoxStateLabel(job).toLowerCase()}). Codex opens automatically.`,
+      );
+      return;
+    }
+    requestEnvironment(null);
+    setActionError(
+      codexBlockedReason(job) ?? `Codex cannot run on environment ${job.id}.`,
+    );
+    // openEnvironmentSession reads the current render; rerunning on its identity would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingEnvironment, projectId, sessions, sessionsFor, runBoxes, runBoxesFor, busy, environmentError, requestEnvironment]);
+
+  async function signIn(id: string) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const result = await request<{ session: unknown; login?: unknown }>(
+        `/api/codex-sessions/${encodeURIComponent(id)}`,
+        { action: "login" },
+      );
+      const device = parseDeviceLogin(result.login);
+      if (!device)
+        throw new Error(
+          "The sign-in service returned an unexpected verification address.",
+        );
+      setLogins((current) => ({ ...current, [id]: device }));
+      await openSignInPage(device.verificationUrl);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Could not start ChatGPT sign-in.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function openSignInPage(url: string) {
+    try {
+      await desktopApi().openChatGptSignIn(url);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Could not open the sign-in page.",
+      );
+    }
+  }
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCodeCopied(true);
+    } catch {
+      setActionError("Could not copy the code. Select it and copy it manually.");
+    }
+  }
+
   async function attachFiles(files: File[]) {
     const key = draftKey;
     setAttaching(true);
@@ -362,15 +548,17 @@ export function ProjectChat({
         pending.current[id] = turn;
         body = { action, ...turn };
       }
-      const result = await request<{ session: Session }>(
+      const result = await request<{ session: unknown }>(
         `/api/codex-sessions/${encodeURIComponent(id)}`,
         body,
       );
-      setSnapshot((current) =>
-        current?.session.id === id
-          ? { ...current, session: result.session }
-          : current,
-      );
+      const updated = parseCodexSession(result.session);
+      if (updated)
+        setSnapshot((current) =>
+          current?.session.id === id
+            ? { ...current, session: updated }
+            : current,
+        );
       if (action === "message") {
         setAmbiguous((current) => ({ ...current, [id]: false }));
         delete pending.current[id];
@@ -392,7 +580,6 @@ export function ProjectChat({
       setBusy(false);
     }
   }
-  const project = projects.find((p) => p.id === projectId);
   const agentName = (item: Session) =>
     project?.agents.find((a) => a.id === item.agentId)?.name || "Codex";
   const statusLabel = {
@@ -420,6 +607,8 @@ export function ProjectChat({
         ? "danger"
         : "warning";
   function chooseProject(id: string) {
+    requestEnvironment(null);
+    setTargetChoice(LOCAL_TARGET_KEY);
     blockAutoProject.current = true;
     desiredSession.current = null;
     choosing.current = false;
@@ -429,48 +618,98 @@ export function ProjectChat({
     setSnapshot(null);
     onSelectConversation?.();
   }
+  function chooseTarget(key: string) {
+    if (!key) return;
+    if (key.startsWith(TERMINAL_PREFIX)) {
+      onOpenTerminal?.(projectId, key.slice(TERMINAL_PREFIX.length));
+      return;
+    }
+    desiredSession.current = null;
+    requestEnvironment(null);
+    setActionError(null);
+    setTargetChoice(key);
+    const existing = sessionForTarget(sessions, key);
+    if (existing) {
+      chooseAgent(existing.id);
+      return;
+    }
+    choosing.current = true;
+    setSessionId("");
+    setSnapshot(null);
+    onSelectConversation?.();
+    if (key !== LOCAL_TARGET_KEY)
+      void openEnvironmentSession(key.slice("runBox:".length));
+  }
   function chooseAgent(id: string) {
+    requestEnvironment(null);
     desiredSession.current = null;
     choosing.current = !id;
     setSessionId(id);
     setActionError(null);
     onSelectConversation?.();
   }
+  const selectedSession = session ?? sessions.find((s) => s.id === sessionId);
+  const currentTarget = pendingEnvironment
+    ? `runBox:${pendingEnvironment}`
+    : selectedSession
+      ? targetKey(selectedSession.target)
+      : targetChoice;
+  const codexTargets = deriveChatTargets(
+    projectId,
+    runBoxes,
+    selectedSession?.target,
+  ).map((target) => {
+    const match = sessionForTarget(sessions, target.key);
+    const unavailable = target.kind === "runBox" && !target.available;
+    return {
+      value: target.key,
+      label: target.label,
+      status: unavailable
+        ? "Unavailable"
+        : match
+          ? statusLabel[match.status]
+          : target.kind === "local"
+            ? "Not set up"
+            : "New",
+      disabled: unavailable,
+    };
+  });
+  if (pendingEnvironment && !codexTargets.some((t) => t.value === currentTarget))
+    codexTargets.push({
+      value: currentTarget,
+      label: `Environment ${pendingEnvironment.slice(0, 8)}`,
+      status: "Waiting",
+      disabled: true,
+    });
+  const terminalTargets = runBoxes.map((box) => ({
+    value: `${TERMINAL_PREFIX}${box.id}`,
+    label: `${sessionTargetLabel({ kind: "runBox", runBoxId: box.id, provider: box.provider, profileId: box.profileId, state: box.state })} · SSH terminal`,
+    status: runBoxStateLabel(box),
+    disabled: !canOpenTerminal(box),
+  }));
+  const targetAgents = sessions.filter(
+    (item) => targetKey(item.target) === currentTarget,
+  );
+  const environmentName = selectedSession
+    ? sessionTargetLabel(selectedSession.target)
+    : "Local Codex box";
   const context = (variant: "empty" | "header" | "toolbar") => (
     <ChatProjectPicker
       variant={variant}
       projectId={projectId}
       sessionId={sessionId}
       projects={projects.map((p) => ({ value: p.id, label: p.name }))}
-      agents={sessions.map((item) => ({
+      agents={targetAgents.map((item) => ({
         value: item.id,
         label: agentName(item),
       }))}
-      environments={[
-        ...(session
-          ? [
-              {
-                value: "session",
-                label: "Local Docker",
-                status: statusLabel[session.status],
-              },
-            ]
-          : []),
-        ...runBoxes.map((box) => ({
-          value: box.id,
-          label: `${box.profileId || box.id} · SSH terminal`,
-          status: runBoxStateLabel(box),
-          disabled: !canOpenTerminal(box),
-        })),
-      ]}
-      environmentValue={session ? "session" : ""}
+      environments={[...codexTargets, ...terminalTargets]}
+      environmentValue={currentTarget}
       environmentTone={environmentTone}
       disabled={busy || attaching}
       onProject={chooseProject}
       onAgent={chooseAgent}
-      onEnvironment={(id) => {
-        if (id && id !== "session") onOpenTerminal?.(projectId, id);
-      }}
+      onEnvironment={chooseTarget}
     />
   );
   const firstUser = messages.find((event) => event.kind === "user");
@@ -528,7 +767,7 @@ export function ProjectChat({
           events={messages}
           working={working}
           agentName={session ? agentName(session) : "Codex"}
-          environmentName="Local Docker"
+          environmentName={environmentName}
           retryDisabled={
             busy ||
             attaching ||
@@ -551,10 +790,14 @@ export function ProjectChat({
                   ? "Loading your conversation…"
                   : !project
                     ? "Choose a project to get started."
-                    : !enabled
-                      ? "Local Codex is not enabled on this server."
+                    : pendingEnvironment
+                      ? "Connecting Codex on the environment…"
+                      : !sessionId && currentTarget !== LOCAL_TARGET_KEY
+                        ? "Starting Codex on this environment…"
+                    : !enabled && !sessions.length
+                      ? "Local Codex is not enabled on this server. Choose an environment to run Codex there."
                       : !sessions.length
-                        ? "Connect an agent in project Settings to begin."
+                        ? "Connect an agent in project Settings, or choose an environment."
                         : !sessionId
                           ? "Choose an agent to open its conversation."
                           : "Replies come from this project's agent via alto."}
@@ -590,16 +833,81 @@ export function ProjectChat({
               {session.error}
             </p>
           )}
-          {session?.status === "auth_required" && (
-            <p className="credential-banner">
-              Finish signing in to Codex in{" "}
-              <a href={settingsUrl} target="_blank" rel="noreferrer">
-                project Settings
-              </a>
-              .
+          {targetNotice && pendingEnvironment && (
+            <p className="credential-banner" role="status">
+              {targetNotice}
             </p>
           )}
-          {!sessions.length && !loading && (
+          {session?.status === "auth_required" && (
+            <section
+              className="codex-sign-in"
+              aria-labelledby="codex-sign-in-title"
+            >
+              <h2 id="codex-sign-in-title">Sign in with ChatGPT</h2>
+              <p>
+                Codex on {environmentName} needs your ChatGPT account. Usage is
+                billed to your ChatGPT plan. The sign-in stays on{" "}
+                {session.target.kind === "runBox"
+                  ? "this environment until it stops"
+                  : "this local Codex box until it is removed"}
+                .
+              </p>
+              {login ? (
+                <>
+                  <p>Enter this code on the OpenAI page that opened in your browser:</p>
+                  <div className="codex-sign-in-code-row">
+                    <code
+                      className="codex-sign-in-code"
+                      aria-label="One-time sign-in code"
+                    >
+                      {login.userCode}
+                    </code>
+                    <button
+                      type="button"
+                      className="button ghost"
+                      onClick={() => void copyCode(login.userCode)}
+                    >
+                      {codeCopied ? "Copied" : "Copy code"}
+                    </button>
+                  </div>
+                  <p className="codex-sign-in-wait" role="status">
+                    Waiting for you to approve the sign-in. The composer unlocks
+                    when it completes.
+                  </p>
+                  <div className="codex-sign-in-actions">
+                    <button
+                      type="button"
+                      className="button ghost"
+                      disabled={busy}
+                      onClick={() => void openSignInPage(login.verificationUrl)}
+                    >
+                      Open sign-in page again
+                    </button>
+                    <button
+                      type="button"
+                      className="button ghost"
+                      disabled={busy}
+                      onClick={() => void signIn(session.id)}
+                    >
+                      Get a new code
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="codex-sign-in-actions">
+                  <button
+                    type="button"
+                    className="button primary"
+                    disabled={busy}
+                    onClick={() => void signIn(session.id)}
+                  >
+                    {busy ? "Requesting a code…" : "Sign in with ChatGPT"}
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
+          {!sessions.length && !loading && !pendingEnvironment && currentTarget === LOCAL_TARGET_KEY && (
             <a
               className="button primary"
               href={settingsUrl}
