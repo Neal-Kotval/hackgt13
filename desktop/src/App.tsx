@@ -3,6 +3,7 @@ import { ShellNav, type AppSection } from "./components/ShellNav";
 import { SignInScreen } from "./components/SignInScreen";
 import { ProjectPicker } from "./components/ProjectPicker";
 import { EnvironmentsPanel } from "./components/EnvironmentsPanel";
+import { ProjectChatTerminal } from "./components/ProjectChatTerminal";
 import { ProjectChat } from "./components/ProjectChat";
 import { desktopApi } from "./lib/desktop-api";
 import type { AuthStatus, DeepLinkParseResult } from "./lib/types";
@@ -15,14 +16,15 @@ export default function App() {
   const [section, setSection] = useState<AppSection>("local-chat");
   const [codexLink, setCodexLink] = useState<DeepLinkParseResult | null>(null);
   const [taskLink, setTaskLink] = useState<DeepLinkParseResult | null>(null);
+  const [chatRunBox, setChatRunBox] = useState<{projectId: string; runBoxId: string} | null>(null);
   const [environmentLink, setEnvironmentLink] = useState<DeepLinkParseResult | null>(null);
   const [environmentsMounted, setEnvironmentsMounted] = useState(false);
   const clearCodexLink = useCallback(() => setCodexLink(null), []);
   const clearTaskLink = useCallback(() => setTaskLink(null), []);
   const clearEnvironmentLink = useCallback(() => setEnvironmentLink(null), []);
   const routeDeepLink = useCallback((result: DeepLinkParseResult) => {
-    if (result.ok && result.target.codexSessionId) {setCodexLink(result);setSection("local-chat");}
-    else if (result.ok && result.target.runBoxId) {setEnvironmentLink(result);setEnvironmentsMounted(true);setSection("environments");}
+    if (result.ok && result.target.codexSessionId) {setChatRunBox(null);setCodexLink(result);setSection("local-chat");}
+    else if (result.ok && result.target.runBoxId) {setCodexLink(result);setChatRunBox({projectId:result.target.projectId,runBoxId:result.target.runBoxId});setSection("local-chat");}
     else {setTaskLink(result);setSection("tasks");}
   }, []);
   useEffect(() => {
@@ -40,7 +42,7 @@ export default function App() {
   }, [routeDeepLink]);
   async function signOut() {
     setSigningOut(true);setError(null);
-    try {setAuth(await desktopApi().signOut());setEnvironmentsMounted(false);setSection("local-chat");setCodexLink(null);setTaskLink(null);setEnvironmentLink(null);}
+    try {setAuth(await desktopApi().signOut());setChatRunBox(null);setEnvironmentsMounted(false);setSection("local-chat");setCodexLink(null);setTaskLink(null);setEnvironmentLink(null);}
     catch(cause){setError(cause instanceof Error ? cause.message : "Sign-out failed.");}
     finally{setSigningOut(false);}
   }
@@ -52,7 +54,11 @@ export default function App() {
       renderHistory={section === "local-chat" ? chat.sidebar : undefined}
       onSectionChange={next=>{setSection(next);if(next === "environments")setEnvironmentsMounted(true);}} onSignOut={()=>void signOut()}>
       {error && <p className="error-banner" role="alert">{error}</p>}
-      <div className="section-host" hidden={section !== "local-chat"}>{chat.content}</div>
+      <div className="section-host" hidden={section !== "local-chat" || Boolean(chatRunBox)}>{chat.content}</div>
+      {chatRunBox && <div className="section-host" hidden={section !== "local-chat"}><div className="app-shell"><main className="main">
+        <header className="main-header"><h1>Environment terminal</h1></header>
+        <ProjectChatTerminal projectId={chatRunBox.projectId} runBoxId={chatRunBox.runBoxId} onClose={()=>setChatRunBox(null)} />
+      </main></div></div>}
       {environmentsMounted && <div className="section-host" hidden={section !== "environments"}><EnvironmentsPanel webBaseUrl={auth.baseUrl} deepLink={environmentLink} onDeepLinkHandled={clearEnvironmentLink} /></div>}
       {section === "tasks" && <ProjectPicker webBaseUrl={auth.baseUrl} deepLink={taskLink} onDeepLinkHandled={clearTaskLink} />}
     </ShellNav>

@@ -60,6 +60,8 @@ For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU 
 
 Human mutations accept `{type, projectId, ...fields}` and return `{state, ...result}`. Creating a project returns `id`; creating an agent returns `agentId` and the one-time plaintext `token`. API errors use `{error}` with appropriate 400, 401, 403, 404, or 409 status codes. Internal errors return a generic 500 response.
 
+`addTask` accepts optional `runBoxId` for a project run-box job whose persisted state is `ready` and has no stop request. The server resolves this ID in SQLite and rejects missing, cross-project, or inactive jobs. The legacy verified catalog `environmentId` remains supported; callers choose one binding. This records task intent only and does not start an agent or guarantee the box will remain ready after creation. The route requires project membership before the store validates the binding.
+
 The resource API accepts `registerResource`, `requestResource`, and `saveInferenceDraft`. It validates bounded fields and same-project task, agent, and resource references. New catalog entries are only `registered`; inference configurations are only `draft`. Requests are only `requested` with a `not_evaluated` decision explaining that resource policy is absent. Callers cannot provide approval, allocation, running, or verified state. Older project snapshots load with empty resource arrays. The Runs screen projects existing events and heartbeats; the Graph screen projects persisted relationships. Neither creates execution evidence.
 
 ## Persistence and concurrency
