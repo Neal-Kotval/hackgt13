@@ -11,7 +11,7 @@ import styles from "./agent-runs.module.css";
 import { groupChatConversations, type ChatRun, type ChatConversation, type ChatRunStatus as Status, type ConversationStatus, type ConversationWorkflow } from "@/lib/chat-conversations";
 
 const workflowLabels: Record<ConversationStatus, string> = { todo: "To do", in_progress: "In progress", needs_attention: "Needs attention", done: "Done" };
-const workflowTones: Record<ConversationStatus, string> = { todo: "", in_progress: "running", needs_attention: "cancelled", done: "succeeded" };
+const workflowTones: Record<ConversationStatus, string> = { todo: "planned", in_progress: "running", needs_attention: "cancelled", done: "succeeded" };
 const labels: Record<Status, string> = { running: "In progress", completed: "Completed", failed: "Needs attention", stopped: "Stopped", unknown: "Outcome unavailable" };
 const tones: Record<Status, string> = { running: "running", completed: "succeeded", failed: "failed", stopped: "cancelled", unknown: "cancelled" };
 function date(value: string) { return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); }
@@ -51,7 +51,7 @@ function Details({ run, closeHref, onStatusChange }: { run: ChatConversation; cl
     <div className={styles.statusControl}>
       <label className={styles.label} htmlFor="conversation-status">Conversation status</label>
       <Select id="conversation-status" value={run.workflowStatus} disabled={saving} onChange={event => void changeStatus(event.target.value as ConversationStatus)}>
-        {Object.entries(workflowLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+        {Object.keys(workflowLabels).map(value => <option value={value} key={value}><WorkflowBadge status={value as ConversationStatus} /></option>)}
       </Select>
       <p className={styles.note}>You choose when this conversation is done. Agent replies won’t change this status.</p>
       <span className={styles.note} role="status">{saving ? "Saving…" : saved ? "Status saved" : run.workflowUpdatedAt ? `Updated by ${run.workflowUpdatedBy || "a project member"} · ${date(run.workflowUpdatedAt)}` : ""}</span>
@@ -131,7 +131,7 @@ export function AgentRuns({ project }: { project: Project }) {
       <button className="button secondary" onClick={refreshNow} disabled={refreshing}><ArrowClockwise aria-hidden="true" />Refresh</button>
     </div>
     {error && <p className={styles.error} role="alert">{error}</p>}
-    <div className={styles.toolbar}><Select aria-label="Filter conversations by status" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All conversations</option>{Object.entries(workflowLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</Select>{runs && <span className={styles.count}>{visible?.length} {visible?.length === 1 ? "conversation" : "conversations"}</span>}</div>
+    <div className={styles.toolbar}><Select aria-label="Filter conversations by status" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All conversations</option>{Object.keys(workflowLabels).map(value => <option key={value} value={value}><WorkflowBadge status={value as ConversationStatus} /></option>)}</Select>{runs && <span className={styles.count}>{visible?.length} {visible?.length === 1 ? "conversation" : "conversations"}</span>}</div>
     {runs === null && !error && <SkeletonRegion label="Loading conversations"><SkeletonRows count={3} /></SkeletonRegion>}
     <div className={`${styles.layout} ${selected ? styles.withDetail : ""}`}>
       <div className={styles.listColumn}>

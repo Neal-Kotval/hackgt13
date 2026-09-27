@@ -440,3 +440,5 @@
 
 .statusControl { display: grid; justify-items: start; gap: var(--space-2); }
 .statusControl .label { margin: 0; }
+
+.planned { color: var(--color-agent-secondary); background: var(--color-agent-secondary-soft); }
