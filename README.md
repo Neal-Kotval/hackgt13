@@ -1,6 +1,6 @@
 # AgentCloud
 
-A token-based React web application laying the coordination foundation for agent-usable remote computers. The planned product gives an agent a persistent project environment that can reach resources such as an SSH-accessible GPU host, and lets the human observe its real work. The GPU host may be the agent's environment or a separate target. Multiple agents, shared services, handoffs, and durable artifact homes build on that core. This build does not connect to remote machines or provision run boxes or artifact homes.
+A token-based React web application laying the coordination foundation for agent-usable remote computers. The planned product gives an agent a persistent project environment that can reach resources such as an SSH-accessible GPU host, and lets the human observe its real work. The GPU host may be the agent's environment or a separate target. Multiple agents, shared services, handoffs, and durable artifact homes build on that core. This build provisions verified local CPU Docker run boxes; remote computer hosting and artifact homes remain separate work.
 
 Built with Next.js 16, React 19, and TypeScript. The supplied HTML design exports are preserved in `reference/` as visual inspiration only; the application implements its own reusable token system and does not load their fictional data.
 
@@ -48,9 +48,22 @@ The Compose volume keeps accounts, sessions, projects, mail, and an automaticall
 
 ### Local Docker sandbox worker (no cloud spend)
 
-The `docker-local` provider with server-owned profile `local-docker-sandbox` runs a CPU-only Linux container with sshd on the machine running the worker. It has no GPU and costs nothing. SSH access is trusted shell access as the non-root `agentcloud` user; it is not a filesystem or command sandbox.
+The `docker-local` provider with server-owned profile `local-docker-sandbox` runs a CPU-only Linux container with sshd on the machine running the worker. The default image includes Node 22, Git, Python, common CLI tools, and pinned Codex CLI 0.157.1. It contains no model credentials and does not start Codex automatically. It has no GPU and costs nothing beyond the host. SSH access is trusted shell access as the non-root `agentcloud` user; it is not a filesystem or command sandbox.
 
 Run `just sandbox-image` once (the worker also builds `agentcloud-sandbox:dev` from `infra/sandbox/` when it is absent), then `just worker-docker` alongside `just dev`. The worker loads `.env.local` with `node --env-file-if-exists`, so it opens the same `AGENTCLOUD_DATA_DIR` (default `.agentcloud/auth.sqlite` in the repository root) as the app; with Doppler use `doppler run -- just worker-docker`. Every 3 seconds it removes containers for stopped, failed, or unknown jobs, requests stop for expired sandboxes, and processes one queued or stopping job.
+
+Run `just sandbox-verify` to rebuild the image and test a real create, pinned SSH login, tool availability, access denial, and stop. Rebuild explicitly after pulling an image change: an existing `agentcloud-sandbox:dev` tag is reused by the worker until rebuilt.
+
+Custom local templates can use a registry image already pulled onto the Docker worker host or a local Docker image archive. Import checks the image through a temporary SSH container before it appears on the Environments page. Import only trusted images: startup code runs with network access and temporary SSH key material. This check verifies behavior, not image safety; a malicious image can read or send those keys.
+
+```sh
+node --env-file-if-exists=.env.local scripts/container-templates.mjs import --id my-agent --label "My agent" --image registry.example/my-agent:1
+node --env-file-if-exists=.env.local scripts/container-templates.mjs import --id offline-agent --label "Offline agent" --image offline-agent:1 --archive /absolute/path/agent.tar
+just template-list
+node --env-file-if-exists=.env.local scripts/container-templates.mjs test --id my-agent
+```
+
+Imported images must obey the sandbox contract: the SSH entrypoint accepts the worker's host and authorized keys, runs a non-root `agentcloud` account with writable `~/workspace`, denies unknown keys and root login, and provides Node, npm, Codex CLI, and Git. Import stores the immutable local image ID and retains it under `agentcloud-template-<id>:pinned`; a later source-tag change cannot silently alter existing templates. The worker host and web server must share the same app data directory and Docker engine. Imported templates are selectable as local Docker environments and use the existing per-environment SSH key and stop flow. Archive import is a local CLI operation, not a browser upload. To deploy the same image on AWS VMs, publish it to a registry by digest and add a remote container host, reachable SSH endpoint, and host verification; this repository does not yet run these templates on AWS VMs.
 
 For each job the worker generates a pinned ed25519 host key and a one-time verification key in a private temporary directory, starts `agentcloud-sandbox-<jobId>` with a random `127.0.0.1` port, 2 GB memory, 2 CPUs, a PID limit, and dropped capabilities, and records the SSH endpoint. The job becomes `ready` only after SSH with strict host-key checking confirms the account and `~/workspace` (and, when the approved job has a repository URL, clones it to `~/workspace/repo` and records the revision), the verification key has been removed, and that key is refused. The worker compares recorded fingerprints with registered keys and current project membership every 3 seconds and atomically replaces the host's `authorized_keys` when they differ. If replacement cannot be verified, it requests a stop. Revocation takes effect for new SSH connections after a successful worker cycle; while the worker is down or before its next cycle, an already installed key can still connect directly. Existing SSH sessions continue after key removal. An out-of-band change to the host key file is not detected when recorded fingerprints still match the database. With no registered device keys at allocation, the job fails with a clear reason. The host private key is passed to Docker through the environment, so anyone with Docker access on the worker machine can read it with `docker inspect`. At most one active local sandbox per project is allowed.
 
