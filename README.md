@@ -114,7 +114,7 @@ Email defaults to local capture: messages are written to private JSON files in `
 
 For real delivery, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_FROM`, and the provider's `SMTP_USER` and `SMTP_PASSWORD` in `.env.local`. Set `SMTP_SECURE=true` for implicit TLS, typically port 465. Restart the server after changing configuration. SMTP submission does not guarantee inbox delivery. Real recipients need a reachable application origin; a localhost link works only on the machine running the app. Public deployment still requires production hardening.
 
-Invitations expire after 48 hours. Reissuing creates a new invitation and cancels the old link; revoked, declined, and expired invitations cannot be accepted. The UI distinguishes locally captured messages from SMTP submissions. Ownership can be assigned separately by an owner; the last owner cannot be removed or demoted.
+Invitations expire after 48 hours. Reissuing creates a new invitation and cancels the old link only after email capture or SMTP submission succeeds. If submission fails, the API returns an error and the previous link stays usable; SMTP submission still does not guarantee inbox delivery. Revoked, declined, and expired invitations cannot be accepted. The UI distinguishes locally captured messages from SMTP submissions. Ownership can be assigned separately by an owner; the last owner cannot be removed or demoted.
 
 Organization names and URL slugs use the same validation on creation and update. Names must be nonempty and at most 100 characters; slugs must be lowercase letters and numbers separated by single hyphens, at most 80 characters. Slugs are stored identifiers, not yet website routes.
 
