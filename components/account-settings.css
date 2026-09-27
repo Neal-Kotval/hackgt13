@@ -1,0 +1,68 @@
+.account-settings-page {
+  width: 100%;
+  max-width: var(--content-narrow);
+  padding: var(--page-gutter);
+  display: grid;
+  gap: var(--space-8);
+}
+.account-settings-heading,
+.account-settings-panel,
+.account-settings-form,
+.account-settings-loading {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.account-settings-heading h1 {
+  font-size: var(--text-hero);
+}
+.account-settings-heading p,
+.account-settings-panel p {
+  color: var(--color-muted);
+}
+.account-settings-panel {
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.account-settings-panel h2 {
+  font-size: var(--text-lg);
+}
+.account-settings-form,
+.account-settings-loading {
+  margin-top: var(--space-2);
+}
+.account-settings-field,
+.account-settings-help {
+  display: grid;
+  gap: var(--space-2);
+}
+.account-settings-field label,
+.account-settings-panel strong {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+.account-settings-help {
+  font-size: var(--text-sm);
+}
+.account-settings-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.account-settings-panel > .button {
+  justify-self: start;
+}
+.account-settings-panel .auth-error {
+  color: var(--color-danger);
+}
+.account-settings-panel .auth-success {
+  color: var(--color-success);
+}
+@media (max-width: 768px) {
+  .account-settings-panel {
+    padding: var(--space-4);
+  }
+}
