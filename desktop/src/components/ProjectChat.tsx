@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { desktopApi } from "../lib/desktop-api";
-import { parseDeviceLogin, type DeviceLogin } from "../lib/chatgpt-sign-in";
+import {
+  parseBrowserLogin,
+  parseDeviceLogin,
+  type BrowserLogin,
+  type DeviceLogin,
+} from "../lib/chatgpt-sign-in";
 import {
   deriveChatTargets,
   parseCodexSession,
@@ -16,6 +21,7 @@ import { CodexConversation, type CodexEvent } from "./CodexConversation";
 import "./ProjectChat.css";
 import { ChatProjectPicker } from "./ChatProjectPicker";
 import { ChatHistory } from "./ChatHistory";
+import { ipcErrorMessage } from "../lib/terminal-theme";
 import {
   canOpenTerminal,
   canTargetCodex,
@@ -90,6 +96,10 @@ export function ProjectChat({
   const [targetNotice, setTargetNotice] = useState<string | null>(null);
   const [logins, setLogins] = useState<Record<string, DeviceLogin>>({});
   const [codeCopied, setCodeCopied] = useState(false);
+  // HAC-161: browser sign-ins in progress (tunnel open on this Mac), by session id.
+  const [browserLogins, setBrowserLogins] = useState<Record<string, BrowserLogin>>({});
+  const browserLoginsRef = useRef(browserLogins);
+  browserLoginsRef.current = browserLogins;
   const [attachments, setAttachments] = useState<
     Record<string, ChatAttachment[]>
   >({});
@@ -329,8 +339,46 @@ export function ProjectChat({
       return next;
     });
   }, [session]);
+  // Close a browser sign-in tunnel once its session no longer needs sign-in
+  // (completed, stopped or failed), whichever session is selected.
+  useEffect(() => {
+    const statuses = new Map(sessions.map((item) => [item.id, item.status]));
+    if (session) statuses.set(session.id, session.status);
+    const finished = Object.keys(browserLoginsRef.current).filter((id) => {
+      const status = statuses.get(id);
+      return status !== undefined && status !== "auth_required";
+    });
+    if (!finished.length) return;
+    for (const id of finished) void desktopApi().stopChatGptBrowserSignIn(id).catch(() => {});
+    setBrowserLogins((current) => {
+      const next = { ...current };
+      for (const id of finished) delete next[id];
+      return next;
+    });
+  }, [session, sessions]);
+  // The tunnel closed on its own (timeout or SSH drop): cancel the pending login and say why.
+  useEffect(() => {
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = desktopApi().onChatGptSignInEvent((event) => {
+        if (event.type !== "closed" || !browserLoginsRef.current[event.sessionId]) return;
+        setBrowserLogins((current) => {
+          const next = { ...current };
+          delete next[event.sessionId];
+          return next;
+        });
+        if (event.error) setActionError(event.error);
+        void cancelPendingLogin(event.sessionId);
+      });
+    } catch {
+      // Desktop bridge unavailable; nothing to subscribe to.
+    }
+    return () => unsubscribe();
+  }, []);
   const login =
     session?.status === "auth_required" ? logins[session.id] : undefined;
+  const browserLogin =
+    session?.status === "auth_required" ? browserLogins[session.id] : undefined;
   useEffect(() => setCodeCopied(false), [login?.userCode]);
 
   function codexAgentId(): string | null {
@@ -455,13 +503,84 @@ export function ProjectChat({
       setBusy(false);
     }
   }
+  function forgetBrowserLogin(id: string) {
+    setBrowserLogins((current) => {
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }
+  // Best effort: tells Codex to stop waiting for the callback.
+  async function cancelPendingLogin(id: string) {
+    try {
+      await request(`/api/codex-sessions/${encodeURIComponent(id)}`, {
+        action: "cancelLogin",
+      });
+    } catch {
+      // The server cancels on the next start or reconnect anyway.
+    }
+  }
+  // HAC-161: ChatGPT browser sign-in for Codex on an environment. The desktop
+  // forwards the callback port on this Mac to the environment over SSH.
+  async function signInWithBrowser(id: string, runBoxId: string) {
+    setBusy(true);
+    setActionError(null);
+    setLogins((current) => {
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    let started: BrowserLogin | null = null;
+    try {
+      const result = await request<{ session: unknown; login?: unknown }>(
+        `/api/codex-sessions/${encodeURIComponent(id)}`,
+        { action: "login", method: "browser" },
+      );
+      started = parseBrowserLogin(result.login);
+      if (!started)
+        throw new Error(
+          "The sign-in service returned an unexpected sign-in address.",
+        );
+      const login = started;
+      setBrowserLogins((current) => ({ ...current, [id]: login }));
+      await desktopApi().startChatGptBrowserSignIn({
+        sessionId: id,
+        runBoxId,
+        authUrl: login.authUrl,
+        callbackPort: login.callbackPort,
+      });
+    } catch (err) {
+      if (started) {
+        forgetBrowserLogin(id);
+        void cancelPendingLogin(id);
+      }
+      // Main-process tunnel errors arrive wrapped by Electron's IPC.
+      setActionError(ipcErrorMessage(err, "Could not start ChatGPT sign-in."));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function cancelBrowserSignIn(id: string) {
+    forgetBrowserLogin(id);
+    setActionError(null);
+    await desktopApi().stopChatGptBrowserSignIn(id).catch(() => {});
+    await cancelPendingLogin(id);
+  }
+  async function useDeviceCode(id: string) {
+    if (browserLoginsRef.current[id]) {
+      forgetBrowserLogin(id);
+      await desktopApi().stopChatGptBrowserSignIn(id).catch(() => {});
+    }
+    // Starting a device code cancels any browser attempt on the server.
+    await signIn(id);
+  }
   async function openSignInPage(url: string) {
     try {
       await desktopApi().openChatGptSignIn(url);
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Could not open the sign-in page.",
-      );
+      setActionError(ipcErrorMessage(err, "Could not open the sign-in page."));
     }
   }
   async function copyCode(code: string) {
@@ -888,6 +1007,66 @@ export function ProjectChat({
                     </button>
                   </div>
                 </>
+              ) : browserLogin && session.target.kind === "runBox" ? (
+                <>
+                  <p className="codex-sign-in-wait" role="status">
+                    Opening ChatGPT in your browser… complete sign-in there.
+                  </p>
+                  <p>
+                    AgentCloud forwards the sign-in back to Codex on{" "}
+                    {environmentName} through port {browserLogin.callbackPort}{" "}
+                    on this Mac over SSH. The composer unlocks when sign-in
+                    completes.
+                  </p>
+                  <div className="codex-sign-in-actions">
+                    <button
+                      type="button"
+                      className="button ghost"
+                      disabled={busy}
+                      onClick={() => void openSignInPage(browserLogin.authUrl)}
+                    >
+                      Open sign-in page again
+                    </button>
+                    <button
+                      type="button"
+                      className="button ghost"
+                      disabled={busy}
+                      onClick={() => void cancelBrowserSignIn(session.id)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="button ghost"
+                      disabled={busy}
+                      onClick={() => void useDeviceCode(session.id)}
+                    >
+                      Use a device code instead
+                    </button>
+                  </div>
+                </>
+              ) : session.target.kind === "runBox" ? (
+                <div className="codex-sign-in-actions">
+                  <button
+                    type="button"
+                    className="button primary"
+                    disabled={busy}
+                    onClick={() => {
+                      if (session.target.kind === "runBox")
+                        void signInWithBrowser(session.id, session.target.runBoxId);
+                    }}
+                  >
+                    {busy ? "Opening ChatGPT…" : "Sign in with ChatGPT"}
+                  </button>
+                  <button
+                    type="button"
+                    className="button ghost"
+                    disabled={busy}
+                    onClick={() => void useDeviceCode(session.id)}
+                  >
+                    Use a device code instead
+                  </button>
+                </div>
               ) : (
                 <div className="codex-sign-in-actions">
                   <button

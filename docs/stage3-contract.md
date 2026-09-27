@@ -4,8 +4,8 @@ Status: in progress. This extends main's server-side Codex sessions (`lib/codex-
 
 Decisions:
 - **Protocol:** `codex app-server` (JSON-RPC over stdio), the same protocol and client for local Docker and SSH.
-- **Sign-in:** ChatGPT device code through the protocol (`account/login/start {type: "chatgptDeviceCode"}`), surfaced in the desktop app. Usage bills to the employee's ChatGPT plan. The owner has ChatGPT Pro, so there is no access-token path (access tokens are Business/Enterprise only).
-- **Who opens SSH:** the backend, never the desktop. The desktop only calls the session API.
+- **Sign-in:** ChatGPT through the protocol, surfaced in the desktop app. For environments the default is browser sign-in (`account/login/start {type: "chatgpt"}`) with the OAuth callback tunneled from the Mac over SSH (HAC-161, see [ChatGPT browser sign-in](#chatgpt-browser-sign-in-hac-161)); device code (`{type: "chatgptDeviceCode"}`) remains the API default and the fallback. Usage bills to the employee's ChatGPT plan. The owner has ChatGPT Pro, so there is no access-token path (access tokens are Business/Enterprise only).
+- **Who opens SSH:** the backend runs Codex. The desktop only calls the session API, except for the short-lived sign-in callback tunnel (HAC-161), which uses the desktop's own terminal trust path.
 
 ## Session target
 
@@ -42,9 +42,29 @@ POST /api/codex-sessions { projectId, agentId, runBoxId? }  -> 202 { session }
 ## Desktop (Project chat)
 
 - **Target picker:** project environments whose `agent.codex.state` is `ready`. Choosing one opens or creates that environment's session. Standalone local sessions are retained only for legacy compatibility and are absent from product navigation. Docker testing uses a normal `docker-local` environment.
-- **Sign-in:** if the target's Codex is signed out, Project chat shows **Sign in with ChatGPT**. It calls the existing login route, shows `userCode` large with a copy button, and opens `verificationUrl` (only `https://auth.openai.com/…`) in the system browser. It then waits for `account/login/completed`.
+- **Sign-in:** if the target's Codex is signed out, Project chat shows **Sign in with ChatGPT**. For an environment it uses browser sign-in (below), with **Use a device code instead** as the fallback. The device flow (and the local Docker target) calls the login route, shows `userCode` large with a copy button, and opens `verificationUrl` (only `https://auth.openai.com/…`) in the system browser. Either way it waits for `account/login/completed`.
 - **Deep links:** `agentcloud://open?projectId&runBoxId&panel=codex` opens Project chat targeting that environment. The Environments "Open Codex" action does the same.
 - **One Codex UI:** the Stage 2 Codex panel (HAC-122) is removed from the Environments view in favor of Project chat. Its main-process code is no longer reachable from the UI; delete it if unused.
+
+## ChatGPT browser sign-in (HAC-161)
+
+Verified against openai/codex `rust-v0.157.1`: `account/login/start {type: "chatgpt"}` returns `{type: "chatgpt", loginId, authUrl}`. Codex's login server (`codex-rs/login/src/server.rs`) binds `127.0.0.1:1455` (`DEFAULT_PORT`), falling back to `127.0.0.1:1457` (`FALLBACK_PORT`) when 1455 stays busy, and puts `redirect_uri=http://localhost:<port>/auth/callback` in the authorize URL. `account/login/cancel {loginId}` stops it; `account/login/completed {loginId, success, error}` reports the result. AgentCloud does not set `useHostedLoginSuccessPage` (it redirects to a Codex-app page) or `codexStreamlinedLogin`; Codex serves its own local success page through the tunnel.
+
+```
+POST /api/codex-sessions/:id { action: "login", method: "browser" }
+  -> { session, login: { method: "browser", authUrl, callbackPort, loginId } }
+POST /api/codex-sessions/:id { action: "login" }          # or method: "deviceCode"; unchanged
+  -> { session, login: { verificationUrl, userCode } }
+POST /api/codex-sessions/:id { action: "cancelLogin" }
+  -> { session, cancelled: true | false }
+```
+
+- Owner-only, like the other setup actions. An unknown `method` is 400.
+- `authUrl` must be `https://auth.openai.com` (no userinfo) with exactly one `redirect_uri` equal to `http://localhost:<port>/auth/callback`, `port` in {1455, 1457}. Anything else is 502 "Codex returned a sign-in address AgentCloud cannot use." (`lib/codex-login.mjs`).
+- The authorize URL carries the OAuth state and PKCE challenge. It is returned to the owner who asked and is never stored in session events, the database or logs. Only the pending `loginId` is kept, in memory.
+- One login per session: a new start (browser or device) cancels the pending one. `cancelLogin` is idempotent; a cancelled attempt's failed `account/login/completed` does not set a session error. A real failure still reports "Codex sign-in did not complete."
+- **Desktop tunnel** (`desktop/electron/codex-login-tunnel.ts`): after the login route answers, the renderer asks main to start the tunnel. Main re-validates the URL and port, listens on `127.0.0.1:<port>` only (fails with "Port 1455 on this Mac is in use (is another Codex sign-in running?)…" when busy), fetches `GET /api/run-boxes/:id/connection`, connects with `ssh2` using the pinned host key and the device key, and forwards each accepted connection with `direct-tcpip` to `127.0.0.1:<port>` on the environment. Only then does it `shell.openExternal(authUrl)`. It closes when the session leaves `auth_required`, on Cancel, window close or reload, sign-out, quit, or after 10 minutes, and tells the renderer when it closes on its own (timeout or SSH drop) so the renderer cancels the login.
+- **Requirements and limits.** The environment's sshd must allow TCP forwarding (OpenSSH's default; AgentCloud's sandbox `sshd_config` and aws-cpu drop-in do not disable it, and forwarding has been verified only on docker-local; aws-cpu and RunPod base images are unverified). A refused forward shows "The environment refused to forward the sign-in callback. Use a device code instead.". The employee's device key must be on the environment (`403 no_authorized_key` otherwise, same as the terminal). Only one browser sign-in per port can run on a Mac at a time; a local `codex login` holding 1455 blocks it. The local Docker target keeps device code. Completing a real sign-in through the tunnel has not been automated; the integration test stops at a request to Codex's callback server.
 
 ## Cleanup
 
@@ -76,3 +96,4 @@ Real AWS CPU box:
 Automated:
 - Unit tests for the shared client, the SSH runtime, target selection and validation.
 - A real-Docker integration test: a docker-local sandbox session over SSH, where `codex app-server` initializes and device-code start returns a URL and code (never approved).
+- HAC-161: unit tests for browser login validation and cancel (`tests/codex-login.test.mjs`) and the desktop tunnel (`desktop/tests/codex-login-tunnel.test.ts`), and a real-Docker test (`desktop/tests/codex-browser-login.integration.test.ts`) where browser login start returns an auth.openai.com URL with a localhost redirect and the desktop tunnel forwards a request from the Mac-side port to Codex's callback server on the environment (then cancels; never signs in).

@@ -144,6 +144,9 @@ export type TerminalEvent =
   | { type: "data"; sessionId: string; data: string }
   | { type: "closed"; sessionId: string; error?: string };
 
+/** HAC-161: the browser sign-in tunnel closed without being asked to (timeout or SSH drop). */
+export type CodexSignInEvent = { type: "closed"; sessionId: string; error?: string };
+
 export type DesktopApi = {
   listThreads: () => Promise<ChatThreadSummary[]>;
   createThread: () => Promise<ChatThread>;
@@ -194,6 +197,19 @@ export type DesktopApi = {
   listRunBoxes: (projectId: string) => Promise<RunBoxSummary[]>;
   /** Opens a ChatGPT device sign-in page in the system browser; main rejects anything off https://auth.openai.com/. */
   openChatGptSignIn: (verificationUrl: string) => Promise<void>;
+  /**
+   * HAC-161: forwards 127.0.0.1:<callbackPort> on this Mac to the environment
+   * over SSH, then opens `authUrl` in the system browser. Main re-validates both.
+   */
+  startChatGptBrowserSignIn: (input: {
+    sessionId: string;
+    runBoxId: string;
+    authUrl: string;
+    callbackPort: number;
+  }) => Promise<{ callbackPort: number }>;
+  /** Closes the sign-in tunnel for a Codex session (finished, cancelled or abandoned). */
+  stopChatGptBrowserSignIn: (sessionId: string) => Promise<void>;
+  onChatGptSignInEvent: (handler: (event: CodexSignInEvent) => void) => () => void;
   deviceKeyStatus: () => Promise<DeviceKeyStatus>;
   /** Opens an SSH shell for a ready run box. `sessionId` is chosen by the caller. */
   terminalOpen: (

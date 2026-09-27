@@ -4,6 +4,7 @@ import type {
   AssistantStreamEvent,
   AuthStatus,
   ChatMessage,
+  CodexSignInEvent,
   ChatThread,
   ChatThreadSummary,
   CredentialStatus,
@@ -101,6 +102,24 @@ const api: DesktopApi = {
     ipcRenderer.invoke("api:listRunBoxes", projectId) as Promise<RunBoxSummary[]>,
   openChatGptSignIn: (verificationUrl) =>
     ipcRenderer.invoke("codexSignIn:open", verificationUrl) as Promise<void>,
+  startChatGptBrowserSignIn: (input) =>
+    ipcRenderer.invoke("codexSignIn:startBrowser", {
+      sessionId: input.sessionId,
+      runBoxId: input.runBoxId,
+      authUrl: input.authUrl,
+      callbackPort: input.callbackPort,
+    }) as Promise<{ callbackPort: number }>,
+  stopChatGptBrowserSignIn: (sessionId) =>
+    ipcRenderer.invoke("codexSignIn:stopBrowser", sessionId) as Promise<void>,
+  onChatGptSignInEvent: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: CodexSignInEvent) => {
+      handler(payload);
+    };
+    ipcRenderer.on("codexSignIn:event", listener);
+    return () => {
+      ipcRenderer.removeListener("codexSignIn:event", listener);
+    };
+  },
   deviceKeyStatus: () =>
     ipcRenderer.invoke("deviceKey:status") as Promise<DeviceKeyStatus>,
   terminalOpen: (sessionId, runBoxId, size) =>

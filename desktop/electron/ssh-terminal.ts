@@ -203,6 +203,37 @@ function clampSize(value: number, fallback: number): number {
   return Number.isInteger(value) && value > 0 && value <= 1000 ? value : fallback;
 }
 
+export type PinnedConnectOptions = {
+  host: string;
+  port: number;
+  username: string;
+  hostPublicKey: string;
+  privateKey: string;
+  readyTimeoutMs?: number;
+};
+
+/**
+ * ssh2 connect config that accepts only the pinned host key and authenticates
+ * with the device key. Shared by the terminal and the Codex sign-in tunnel.
+ */
+export function pinnedConnectConfig(
+  options: PinnedConnectOptions,
+  onHostKeyMismatch?: () => void,
+): ConnectConfig {
+  const pinned = parsePinnedHostKey(options.hostPublicKey);
+  return {
+    host: options.host,
+    port: options.port,
+    username: options.username,
+    privateKey: options.privateKey,
+    readyTimeout: options.readyTimeoutMs ?? 20_000,
+    // Only negotiate the pinned key type so a valid server is not rejected
+    // for offering a different host key first.
+    algorithms: { serverHostKey: [pinned.type as "ssh-ed25519"] },
+    hostVerifier: createHostVerifier(options.hostPublicKey, onHostKeyMismatch),
+  };
+}
+
 /**
  * Connect, verify the pinned host key, authenticate with the device key, and
  * open an interactive PTY shell. Resolves once the shell channel is open.
@@ -211,7 +242,7 @@ export function openShell(
   options: OpenShellOptions,
   handlers: ShellHandlers,
 ): Promise<ShellSession> {
-  const pinned = parsePinnedHostKey(options.hostPublicKey);
+  parsePinnedHostKey(options.hostPublicKey);
   return new Promise((resolve, reject) => {
     const client = new ssh2.Client();
     let hostKeyMismatch = false;
@@ -295,19 +326,9 @@ export function openShell(
       );
     });
 
-    const config: ConnectConfig = {
-      host: options.host,
-      port: options.port,
-      username: options.username,
-      privateKey: options.privateKey,
-      readyTimeout: options.readyTimeoutMs ?? 20_000,
-      // Only negotiate the pinned key type so a valid server is not rejected
-      // for offering a different host key first.
-      algorithms: { serverHostKey: [pinned.type as "ssh-ed25519"] },
-      hostVerifier: createHostVerifier(options.hostPublicKey, () => {
-        hostKeyMismatch = true;
-      }),
-    };
+    const config = pinnedConnectConfig(options, () => {
+      hostKeyMismatch = true;
+    });
     try {
       client.connect(config);
     } catch (error) {
