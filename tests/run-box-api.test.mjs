@@ -37,6 +37,7 @@ approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved
   maxRunMinutes: 120, monthlyMinutes: 1200, actorId: fixture.users[0].id });
 const admin = await route("../app/api/admin/aws-approvals/route.ts", "aws-approvals-route.js", 4);
 const stop = await route("../app/api/run-boxes/[id]/stop/route.ts", "stop-route.js", 5);
+const sshAccess = await route("../app/api/run-boxes/[id]/ssh-access/route.ts", "ssh-access-route.js", 5);
 const owner = fixture.users[0];
 const member = fixture.users[1];
 
@@ -301,6 +302,79 @@ test("HAC-166: aws-cpu creation records the requester's CloudFront viewer IPv4 o
     assert.equal(created.status, 201);
     const job = (await created.json()).job;
     assert.deepEqual(rows(job.id).map((row) => ({ ...row })), [{ cidr: "8.8.8.8/32", source: "create", requested_by: owner.id, status: "pending" }]);
+  } finally {
+    delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
+  }
+});
+
+test("HAC-166: desktop registers its IPv4 for a ready aws-cpu environment", async () => {
+  const accessLib = await import(path.join(directory, "aws-cpu-ssh-access.mjs"));
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
+  process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER = "1";
+  const call = (method, jobId, { cookie = owner.cookie, viewer = "8.8.8.8:5000", headers = {} } = {}) =>
+    sshAccess[method](new Request(`http://localhost:3000/api/run-boxes/${jobId}/ssh-access`, {
+      method,
+      headers: { ...(cookie ? { cookie } : {}), ...(viewer ? { "cloudfront-viewer-address": viewer } : {}), ...headers },
+    }), { params: Promise.resolve({ id: jobId }) });
+  try {
+    const created = await boxes.POST(request("/api/run-boxes", { projectId, profileId: "aws-cpu", durationHours: 1, idempotencyKey: "hac-166-desktop" }, owner.cookie));
+    assert.equal(created.status, 201);
+    const job = (await created.json()).job;
+    const setJob = (fields) => db.prepare(`UPDATE run_box_job SET ${Object.keys(fields).map((key) => `${key} = @${key}`).join(", ")} WHERE id = @id`).run({ ...fields, id: job.id });
+    const rows = () => db.prepare("SELECT cidr, source, status FROM aws_cpu_ssh_access WHERE job_id = ? ORDER BY created_at, rowid").all(job.id).map((row) => ({ ...row }));
+
+    // Authentication, origin, membership, state, and profile.
+    assert.equal((await call("POST", job.id, { cookie: null })).status, 401);
+    assert.equal((await call("POST", job.id, { headers: { origin: "https://evil.example" } })).status, 403);
+    assert.equal((await call("POST", "00000000-0000-4000-8000-000000000000")).status, 404);
+    const notReady = await call("POST", job.id);
+    assert.equal(notReady.status, 409);
+    assert.equal((await notReady.json()).code, "not_ready");
+    setJob({ state: "ready" });
+    setJob({ stop_requested_at: new Date().toISOString() });
+    assert.equal((await (await call("POST", job.id)).json()).code, "not_ready");
+    setJob({ stop_requested_at: null, profile_id: "g6-l4-small" });
+    assert.equal((await (await call("POST", job.id)).json()).code, "not_aws_cpu");
+    setJob({ profile_id: "aws-cpu" });
+    const otherProject = (await store.action({ type: "createProject", name: "Other", repo: "https://example.com/other", compute: "Hosted Linux", template: "blank" })).id;
+    fixture.grantMembership(owner.id, otherProject, "owner");
+    setJob({ project_id: otherProject });
+    assert.equal((await call("POST", job.id, { cookie: member.cookie })).status, 403);
+    setJob({ project_id: projectId });
+
+    // The address comes only from the trusted CloudFront header; never X-Forwarded-For.
+    const ipv6 = await call("POST", job.id, { viewer: "2001:db8::1:443", headers: { "x-forwarded-for": "8.8.4.4" } });
+    assert.equal(ipv6.status, 409);
+    assert.equal((await ipv6.json()).code, "no_ipv4");
+    delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
+    const untrusted = await call("POST", job.id);
+    assert.equal(untrusted.status, 409);
+    assert.equal((await untrusted.json()).code, "address_untrusted");
+    process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER = "1";
+    assert.deepEqual(rows(), []);
+
+    // A member records a pending address; a repeat is idempotent; applied reports 200.
+    const pending = await call("POST", job.id, { cookie: member.cookie });
+    assert.equal(pending.status, 202);
+    assert.deepEqual(await pending.json(), { status: "pending", cidr: "8.8.8.8/32" });
+    assert.equal((await call("POST", job.id, { cookie: member.cookie })).status, 202);
+    assert.deepEqual(rows(), [{ cidr: "8.8.8.8/32", source: "desktop", status: "pending" }]);
+    assert.deepEqual((await (await call("GET", job.id, { cookie: member.cookie })).json()).sshAccess, { cidr: "8.8.8.8/32", status: "pending" });
+    await accessLib.applyReadyAwsCpuSshAccess(db, { async authorizeSsh(_job, cidr) { return { ruleId: "sgr-0abc", cidr }; } });
+    const applied = await call("POST", job.id, { cookie: member.cookie });
+    assert.equal(applied.status, 200);
+    assert.deepEqual(await applied.json(), { status: "applied", cidr: "8.8.8.8/32" });
+    assert.deepEqual((await (await call("GET", job.id)).json()).sshAccess, { cidr: "8.8.8.8/32", status: "applied" });
+    assert.equal((await (await call("GET", job.id, { viewer: "1.1.1.1:5000" })).json()).sshAccess.status, "none");
+
+    // At most five active addresses per job; the least recently requested is replaced.
+    for (const viewer of ["1.1.1.1", "1.0.0.1", "9.9.9.9", "4.4.4.4", "4.2.2.2"])
+      assert.equal((await call("POST", job.id, { viewer: `${viewer}:5000` })).status, 202);
+    const active = rows().filter((row) => ["pending", "applied"].includes(row.status));
+    assert.equal(active.length, accessLib.MAX_REQUESTER_CIDRS);
+    assert.equal(rows().find((row) => row.cidr === "8.8.8.8/32").status, "replaced");
+    assert.equal(rows().find((row) => row.cidr === "1.1.1.1/32").status, "pending");
+    setJob({ state: "stopped" });
   } finally {
     delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
   }
