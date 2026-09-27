@@ -2119,6 +2119,9 @@ dialog::backdrop {
 .auth-panel > .eyebrow {
   color: var(--color-accent);
 }
+.auth-brand {
+  text-transform: none;
+}
 @media (max-width: 1440px) {
   .dashboard-grid,
   .review-grid {

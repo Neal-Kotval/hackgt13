@@ -66,7 +66,7 @@ const profiles = [
     icon: <Cube aria-hidden="true" />,
     summary: "CPU-only Linux container · no GPU · no provider cost",
     detail:
-      "Runs with sshd on the machine that runs the AgentCloud worker. Suitable for local development and demos. It has no GPU.",
+      "Runs with sshd on the machine that runs the alto worker. Suitable for local development and demos. It has no GPU.",
   },
   {
     id: runpodBudgetGpuProfile.id,

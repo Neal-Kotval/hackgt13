@@ -1,8 +1,10 @@
-# AgentCloud
+# alto
 
 A token-based React web application laying the coordination foundation for agent-usable remote computers. The planned product gives an agent a persistent project environment that can reach resources such as an SSH-accessible GPU host, and lets the human observe its real work. The GPU host may be the agent's environment or a separate target. Multiple agents, shared services, handoffs, and durable artifact homes build on that core. This build provisions verified local CPU Docker run boxes; remote computer hosting and artifact homes remain separate work.
 
 Built with Next.js 16, React 19, and TypeScript. The supplied HTML design exports are preserved in `reference/` as visual inspiration only; the application implements its own reusable token system and does not load their fictional data.
+
+The website is branded **alto** (lowercase). Existing `AGENTCLOUD_*` environment variables, `.agentcloud` data paths, CLI filenames, and `agentcloud://` desktop links retain their technical names for compatibility.
 
 ## Run locally
 
@@ -120,7 +122,7 @@ Existing pre-organization projects remain hidden until their recorded owner move
 
 All human state, event, and resource routes require verified cookie sessions and organization/project access. Agent CLI bearer tokens remain separate and work only on `/api/agent`. Sign-out invalidates the session; open event streams recheck sessions and memberships every tick. Sessions last seven days. SQLite stores users, sessions, organizations, invitations, memberships, and AWS organization approvals; JSON retains coordination data. Back up both stores and the secret together. Project creation spans both stores without a transaction, so an interrupted write can require administrative repair. This is not production tenant isolation, enterprise SSO, general resource approval policy, or SSH enforcement.
 
-Set `AGENTCLOUD_PLATFORM_ADMIN_EMAIL` to the exact email of a verified AgentCloud account in the server's private environment, then restart the server. Only that account can open `/admin/aws` and call `/api/admin/aws-approvals`. New organizations start without managed AWS access. The operator can approve or revoke access, choose a one- or two-hour maximum run, and reserve 1 to 20 hours of AWS run time per UTC month. Approved AWS decisions reserve their full requested duration, including runs that end early. Revocation or a limit change invalidates queued jobs before EC2 allocation. Local Docker and Runpod decisions are unaffected. This is a compute-time allowance, not a dollar cap: EBS, network, taxes, and AWS billing delay remain outside it. The account-wide AWS budget action and expiry guard remain separate safeguards.
+Set `AGENTCLOUD_PLATFORM_ADMIN_EMAIL` to the exact email of a verified alto account in the server's private environment, then restart the server. Only that account can open `/admin/aws` and call `/api/admin/aws-approvals`. New organizations start without managed AWS access. The operator can approve or revoke access, choose a one- or two-hour maximum run, and reserve 1 to 20 hours of AWS run time per UTC month. Approved AWS decisions reserve their full requested duration, including runs that end early. Revocation or a limit change invalidates queued jobs before EC2 allocation. Local Docker and Runpod decisions are unaffected. This is a compute-time allowance, not a dollar cap: EBS, network, taxes, and AWS billing delay remain outside it. The account-wide AWS budget action and expiry guard remain separate safeguards.
 
 Run `npm test`, `npm run check`, `npm run tokens:check`, and `npm run build`. Authentication tests use temporary databases and generated passwords; they do not populate the running product. After `npm run build`, run `npm run test:auth:browser` with Google Chrome installed and port 3100 free for headless 375/768/1440px checks. The browser check creates a temporary database, exercises both identities and a server restart, and saves screenshots under ignored `artifacts/`.
 
