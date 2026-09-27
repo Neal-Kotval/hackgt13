@@ -84,3 +84,9 @@ links to this worktree's desktop directory: keep the worktree and rerun installa
 when moving to another checkout. This is a local, ad-hoc-signed development
 launcher, not a notarized distribution. It preserves the existing desktop
 account/session storage. `desktop/.env` supplies settings for Finder launches.
+
+Environment links preserve the exact project and environment on startup and when
+switching an already-open app. Codex readiness does not determine selection: an
+unavailable environment stays selected with its status and a link to manage it.
+The startup handoff is retained across renderer effect initialization; newer live
+links take precedence over an outstanding startup link.

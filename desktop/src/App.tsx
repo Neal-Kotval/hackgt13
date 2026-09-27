@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CodexBrowserLogin } from "./components/CodexBrowserLogin";
 import type { LoginTarget } from "./lib/browser-login-flow";
 import { ShellNav, type AppSection } from "./components/ShellNav";
@@ -11,6 +11,9 @@ import { deepLinkDestination, deepLinkServerError } from "./lib/deep-link";
 import type { AuthStatus, DeepLinkParseResult } from "./lib/types";
 
 export default function App() {
+  // Keep the one-shot IPC result across StrictMode effect cleanup/replay.
+  const initialLink = useRef<Promise<DeepLinkParseResult | null> | null>(null);
+  const receivedLiveLink = useRef(false);
   const [loginTarget, setLoginTarget] = useState<LoginTarget | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
@@ -119,11 +122,14 @@ export default function App() {
                 : "Could not check your session.",
             );
         });
-      unsubscribe = desktopApi().onDeepLink(routeDeepLink);
-      void desktopApi()
-        .takePendingDeepLink()
+      unsubscribe = desktopApi().onDeepLink((link) => {
+        receivedLiveLink.current = true;
+        void routeDeepLink(link);
+      });
+      initialLink.current ??= desktopApi().takePendingDeepLink();
+      void initialLink.current
         .then((link) => {
-          if (!cancelled && link) routeDeepLink(link);
+          if (!cancelled && !receivedLiveLink.current && link) routeDeepLink(link);
         })
         .catch(() => {});
     } catch (cause) {
