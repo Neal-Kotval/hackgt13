@@ -255,12 +255,6 @@ pre {
   gap: var(--space-2);
   color: var(--color-warning);
 }
-.connection.connected {
-  color: var(--color-success);
-}
-.connection.pending {
-  color: var(--color-subtle);
-}
 .status-dot,
 .small-dot {
   display: inline-block;
