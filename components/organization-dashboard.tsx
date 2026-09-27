@@ -21,7 +21,10 @@ export function OrganizationDashboard({ organizationId }: { organizationId?: str
     if (!response.ok) throw Error("Could not load organizations");
     let snapshot = await response.json() as Snapshot;
     if (organizationId && snapshot.activeOrganization?.id !== organizationId) {
-      if (!snapshot.organizations.some((org) => org.id === organizationId)) throw Error("You no longer have access to this organization.");
+      if (!snapshot.organizations.some((org) => org.id === organizationId)) {
+        setData(null);
+        throw Error("You no longer have access to this organization.");
+      }
       checked(await client.organization.setActive({ organizationId }));
       const updated = await fetch("/api/organizations");
       if (!updated.ok) throw Error("Could not open this organization.");
@@ -55,6 +58,7 @@ export function OrganizationDashboard({ organizationId }: { organizationId?: str
     setCreateError("");
     try {
       checked(await client.organization.create({name: String(values.get("name")).trim(), slug: String(values.get("slug")).trim()}));
+      if (organizationId) {window.location.assign("/organizations"); return;}
       form.reset();
       createDialog.current?.close();
       setError("");
