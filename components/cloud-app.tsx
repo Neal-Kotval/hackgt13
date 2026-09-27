@@ -926,8 +926,8 @@ function Projects({ projects }: { projects: Project[] }) {
           </span>
           <h2 id="welcome-title">A place for your next project.</h2>
           <p>
-            Create a project to save your repository and machine setup. Remote
-            connection and verification are not available yet.
+            Create a project to save repository details, then open Environments
+            to request and verify a machine.
           </p>
           <Link className="button primary" href="/projects/new">
             Create your first project <ArrowRight />
@@ -1072,8 +1072,8 @@ function Setup({
                   <strong>{c}</strong>
                   <small>
                     {c === "Hosted Linux"
-                      ? "Managed workspace · provisioning coming next"
-                      : "Your own machine · trusted shell access"}
+                      ? "Choose a ready environment after project setup"
+                      : "Save an SSH address as project metadata"}
                   </small>
                 </span>
               </label>
@@ -1126,8 +1126,8 @@ function Setup({
         </ol>
         <div className="info-note">
           <ShieldCheck />
-          This build persists collaboration state locally. It does not provision
-          or sandbox remote machines.
+          This form saves project setup intent. Environment allocation and SSH
+          verification happen separately in Environments.
         </div>
       </aside>
     </div>
