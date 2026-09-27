@@ -6,6 +6,7 @@ import { Conversation } from "./components/Conversation";
 import { ShellNav, type AppSection } from "./components/ShellNav";
 import { SignInScreen } from "./components/SignInScreen";
 import { ProjectPicker } from "./components/ProjectPicker";
+import { ProjectChatTerminal } from "./components/ProjectChatTerminal";
 import { EnvironmentsPanel } from "./components/EnvironmentsPanel";
 import { ThreadList } from "./components/ThreadList";
 import { desktopApi } from "./lib/desktop-api";
@@ -47,6 +48,10 @@ export default function App() {
   const [deepLink, setDeepLink] = useState<DeepLinkParseResult | null>(null);
   const [environmentsLink, setEnvironmentsLink] =
     useState<DeepLinkParseResult | null>(null);
+  const [chatRunBox, setChatRunBox] = useState<{
+    projectId: string;
+    runBoxId: string;
+  } | null>(null);
   // Keep Environments mounted after first visit so open terminals survive tab switches.
   const [environmentsMounted, setEnvironmentsMounted] = useState(false);
   const selectedIdRef = useRef<string | null>(null);
@@ -69,15 +74,19 @@ export default function App() {
     setEnvironmentsLink(null);
   }, []);
 
-  // runBoxId links open Environments (HAC-90); other links keep the Tasks flow.
+  // A website "Open in desktop" link carries runBoxId. Land on Project chat
+  // and SSH into that environment. Other links keep the Tasks flow.
   const routeDeepLink = useCallback((result: DeepLinkParseResult) => {
     if (result.ok && result.target.codexSessionId) {
       setSection("codex"); setCodexMounted(true); setCodexLink(result); return;
     }
     if (result.ok && result.target.runBoxId) {
-      setSection("environments");
-      setEnvironmentsMounted(true);
-      setEnvironmentsLink(result);
+      setSection("local-chat");
+      setChatProjectId(result.target.projectId);
+      setChatRunBox({
+        projectId: result.target.projectId,
+        runBoxId: result.target.runBoxId,
+      });
       return;
     }
     setSection("tasks");
@@ -520,20 +529,38 @@ export default function App() {
         <div className="app-shell">
           <main className="main" data-empty={!activeThread?.messages.length}>
             <header className="main-header">
-              <h1 title={activeThread?.title}>
-                {activeThread?.title ?? "Project chat"}
+              <h1 title={chatRunBox ? "Environment terminal" : activeThread?.title}>
+                {chatRunBox
+                  ? "Environment terminal"
+                  : (activeThread?.title ?? "Project chat")}
               </h1>
-              <ChatProjectPicker
-                selectedId={chatProjectId}
-                onSelect={updateChatProjectId}
-              />
-              <span
-                className="chat-storage-note"
-                title="Chat history is saved on this device and does not sync to the web dashboard."
-              >
-                Saved on this device
-              </span>
+              {chatRunBox ? (
+                <span className="chat-storage-note">
+                  SSH session for the environment opened from the website.
+                </span>
+              ) : (
+                <>
+                  <ChatProjectPicker
+                    selectedId={chatProjectId}
+                    onSelect={updateChatProjectId}
+                  />
+                  <span
+                    className="chat-storage-note"
+                    title="Chat history is saved on this device and does not sync to the web dashboard."
+                  >
+                    Saved on this device
+                  </span>
+                </>
+              )}
             </header>
+            {chatRunBox ? (
+              <ProjectChatTerminal
+                projectId={chatRunBox.projectId}
+                runBoxId={chatRunBox.runBoxId}
+                onClose={() => setChatRunBox(null)}
+              />
+            ) : (
+              <>
             <Conversation
               key={selectedId ?? LANDING_DRAFT_KEY}
               messages={activeThread?.messages ?? []}
@@ -564,6 +591,8 @@ export default function App() {
                 }}
               />
             </div>
+              </>
+            )}
           </main>
         </div>
       )}
