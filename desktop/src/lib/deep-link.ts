@@ -2,7 +2,7 @@ export type DeepLinkTarget = {
   projectId: string;
   environmentId?: string;
   codexSessionId?: string;
-  /** Run-box job id (HAC-90). Opens Environments; never carries host/port. */
+  /** Run-box job id. Opens the Project chat SSH terminal; never carries host/port. */
   runBoxId?: string;
   /** Run-box job to preselect in Tasks; distinct from a catalog resource. */
   taskRunBoxId?: string;
