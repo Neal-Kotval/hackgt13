@@ -52,6 +52,19 @@ POST /api/codex-sessions { projectId, agentId, runBoxId? }  -> 202 { session }
 - Closing a remote session ends the SSH process and deletes its temporary known_hosts file.
 - Stopping an environment closes any sessions targeting it and marks them `error` with "Environment stopped".
 
+## Backend implementation notes (HAC-153)
+
+Implemented and covered by `tests/codex-rpc.test.mjs`, `codex-ssh.test.mjs`, `codex-session-targets.test.mjs`, `codex-runner-key.test.mjs` and the real-Docker `codex-remote.integration.test.mjs`. The AWS CPU acceptance run below has not been performed.
+
+- **Server fingerprint representation.** `run_box_ssh_endpoint.authorized_fingerprints` stays a JSON array. Member device fingerprints are stored as before; the runner key is appended as `"server:SHA256:…"`. `getRunBoxSshEndpoint` returns `authorizedFingerprints` (members only, so the connection API and access reconcilers behave as before) and `serverFingerprint` (or `null`). Runpod and aws-cpu keep the same tag (`server: true`) in their allocation-time key lists.
+- **Worker wiring.** Workers take the runner key as `runnerKey` (`{ publicKey, fingerprint }`); `scripts/run-box-worker.mjs` supplies it from `getCodexRunnerKey()`. Access reconcilers keep the runner key while it is still this install's key; otherwise they remove it and clear `serverFingerprint`.
+- **Session API.** `POST /api/codex-sessions` accepts `runBoxId` (string, `[A-Za-z0-9-]{1,64}`; 400 otherwise). Validation failures return 409 with one of: `Environment not found in this project.`, `The environment must be ready to run Codex.`, `Codex is not ready on this environment.`, `The environment has no recorded workspace.`, `Create a new environment to use Codex on it.` Sessions also keep `provider` (`docker-local` for local, the job's provider for remote). `GET` lists all sessions; `enabled` still reports whether local Docker boxes are enabled. A local `POST` while `AGENTCLOUD_CODEX_ENABLED` is unset returns 503.
+- **Remote session behavior.** `stop` closes the SSH transport and marks the session `stopped`; it never stops or changes the environment. `resume` refuses once the environment is no longer ready. The operator `AGENTCLOUD_CODEX_API_KEY` is never sent to an environment. Threads start with `cwd = workspacePath`. At most 16 live remote sessions per server (local boxes keep their limit of 4).
+- **Session errors.** Only fixed AgentCloud messages are shown: host-key mismatch, refused server key (`… Create a new environment to use Codex on it.`), missing server key, missing Codex or workspace, unreachable host, `Environment stopped`. ssh stderr and protocol error text are never stored, returned or logged.
+- **Environment stop.** `requestRunBoxStop` notifies in-process listeners, so a stop from the web API closes that environment's sessions at once. Stops made by a worker process are found by the session service's 5-second state sweep (and on every list/get). The SSH process exits through the shared EOF-then-kill sequence and its temporary known_hosts directory is removed.
+- **aws-cpu gaps closed.** The aws-cpu worker now records `agent.codex` (from the Codex version it already proves) and `workspacePath`, so its environments can be session targets. It also gains member key revocation (`reconcileAwsCpuSshAccess`, HAC-132 parity; an unverifiable replacement requests a stop) and teardown cleanup of `~/.codex/auth.json` and scratch before termination (`createAwsCpuAgentCleanup`, passed to `reconcileAwsRunBoxes` as `cleanupAgent`).
+- **Limits.** One backend process owns SSH transports; a restart marks sessions `error` and `resume` reconnects. Environments created before this change (no server fingerprint) cannot host sessions. The server key is trusted shell access as `agentcloud` on every environment this install creates.
+
 ## Acceptance
 
 Real AWS CPU box:

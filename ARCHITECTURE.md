@@ -57,7 +57,7 @@ For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU 
 | `POST /api/agent` | Bearer-scoped `connect`, `heartbeat`, `context`, `task`, `service`, and `handoff` operations |
 | `GET/POST /api/run-boxes` | List a project's environments (state, `ssh`, `desktopUrl`, `workspacePath`, `agent.codex`) and imported local container `templates`, or create one in one step for a server-owned profile or an imported `local-template:<id>` profile (owner approved, member denied). `ssh` and `desktopUrl` are null once a stop is requested |
 | `POST /api/run-boxes/:id/stop` | Owner stop request; the worker tears the environment down |
-| `GET/POST /api/ssh-keys`, `DELETE /api/ssh-keys/:id` | The caller's device public keys (ed25519 only); private keys never reach the server. The docker-local and Runpod workers reconcile running environments' authorized keys after a revocation |
+| `GET/POST /api/ssh-keys`, `DELETE /api/ssh-keys/:id` | The caller's device public keys (ed25519 only); private keys never reach the server. The docker-local, Runpod and aws-cpu workers reconcile running environments' authorized keys after a revocation |
 | `GET /api/run-boxes/:id/connection` | For a ready environment: host, port, user and pinned host key. 403 `no_authorized_key` when none of the caller's keys was injected |
 | `POST /api/agent-runs`, `GET /api/agent-runs?projectId=`, `GET /api/agent-runs/:id`, `POST /api/agent-runs/:id/events`, `POST /api/agent-runs/:id/finish` | Agent run records and bounded, sequence-idempotent events, for the Runs page |
 | `POST /api/chat` | Employee session project chat; provisions/binds `desktop-chat` agent identity; streams model tokens server-side (`OPENAI_API_KEY`); never returns model or agent plaintext secrets |
@@ -149,6 +149,17 @@ lifecycle. SQLite stores bounded attributed session items, while the Docker
 volume retains Codex history and workspace files. This local implementation does
 not satisfy the AWS/GPU execution or public multi-tenant milestones above. See
 [LOCAL_CODEX.md](LOCAL_CODEX.md) for setup, authentication, recovery and limits.
+
+## Remote Codex sessions (HAC-153)
+
+A Codex session can instead target a ready environment (`runBoxId` on
+`POST /api/codex-sessions`). The backend, never the desktop, runs
+`codex app-server` there over system `ssh` as `agentcloud`, using one per-install
+ed25519 runner key (`<AGENTCLOUD_DATA_DIR>/codex-runner/`) that workers add to
+each new environment and a temporary known_hosts pinned to the recorded host key.
+Sign-in is ChatGPT device code inside the environment. Stopping the environment
+closes its sessions. Environments created before this change cannot host a
+session. See [docs/stage3-contract.md](docs/stage3-contract.md).
 
 ## Desktop chat redesign (HAC-154)
 
