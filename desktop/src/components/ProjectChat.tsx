@@ -18,7 +18,7 @@ async function request<T>(path: string, body?: object): Promise<T> {
   return result as T;
 }
 
-export function ProjectChat({ webBaseUrl, deepLink, onDeepLinkHandled, children }: { webBaseUrl: string; deepLink: DeepLinkParseResult | null; onDeepLinkHandled: () => void; children: (chat: {content: ReactNode; sidebar: (close: () => void) => ReactNode; busy: boolean}) => ReactNode }) {
+export function ProjectChat({ webBaseUrl, deepLink, onDeepLinkHandled, onSelectConversation, children }: { webBaseUrl: string; deepLink: DeepLinkParseResult | null; onDeepLinkHandled: () => void; onSelectConversation?: () => void; children: (chat: {content: ReactNode; sidebar: (close: () => void) => ReactNode; busy: boolean}) => ReactNode }) {
   const [projects, setProjects] = useState<ProjectSnapshot[]>([]);
   const [projectId, setProjectId] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -128,7 +128,7 @@ export function ProjectChat({ webBaseUrl, deepLink, onDeepLinkHandled, children 
     <div className="sidebar-header"><h2 className="brand">Project</h2></div>
     <Select aria-label="Project" value={projectId} disabled={!projects.length || busy} onChange={e => { blockAutoProject.current = true; desiredSession.current = null; setActionError(null); setProjectId(e.target.value); }}><option value="">Choose project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>
     <h3 className="field-label">Conversations</h3>
-    <div className="thread-list" role="list">{sessions.map(item => <div className="thread-row" role="listitem" key={item.id}><button className="thread-item agent-conversation" data-selected={item.id === sessionId} aria-current={item.id === sessionId ? "true" : undefined} disabled={busy} onClick={() => {desiredSession.current=null;setSessionId(item.id);setActionError(null);close();}}><span className="thread-title">{agentName(item)}</span><span className="agent-conversation-state">{statusLabel[item.status]}</span></button></div>)}</div>
+    <div className="thread-list" role="list">{sessions.map(item => <div className="thread-row" role="listitem" key={item.id}><button className="thread-item agent-conversation" data-selected={item.id === sessionId} aria-current={item.id === sessionId ? "true" : undefined} disabled={busy} onClick={() => {desiredSession.current=null;setSessionId(item.id);setActionError(null);onSelectConversation?.();close();}}><span className="thread-title">{agentName(item)}</span><span className="agent-conversation-state">{statusLabel[item.status]}</span></button></div>)}</div>
     {!sessions.length && <p className="sidebar-empty">{loading ? "Loading conversations…" : "No agent connected yet"}</p>}
     <a className="button ghost" href={settingsUrl} target="_blank" rel="noreferrer">Set up agent</a>
   </aside>;

@@ -49,7 +49,7 @@ export default function App() {
   if(bootError)return <div className="app-error" role="alert"><h1>Desktop unavailable</h1><p>{bootError}</p></div>;
   if(!auth)return <div className="auth-page" role="status"><p className="auth-loading">Checking employee session…</p></div>;
   if(!auth.signedIn)return <SignInScreen baseUrl={auth.baseUrl} secureStorage={auth.secureStorage} initialMessage={auth.message} onSignedIn={status=>{setAuth(status);setError(null);}} />;
-  return <ProjectChat key={auth.user?.id} webBaseUrl={auth.baseUrl} deepLink={codexLink} onDeepLinkHandled={clearCodexLink}>{chat =>
+  return <ProjectChat key={auth.user?.id} webBaseUrl={auth.baseUrl} deepLink={codexLink} onDeepLinkHandled={clearCodexLink} onSelectConversation={()=>setChatRunBox(null)}>{chat =>
     <ShellNav section={section} employeeName={auth.user?.name || "Signed in"} employeeEmail={auth.user?.email || ""} busy={chat.busy || signingOut}
       renderHistory={section === "local-chat" ? chat.sidebar : undefined}
       onSectionChange={next=>{setSection(next);if(next === "environments")setEnvironmentsMounted(true);}} onSignOut={()=>void signOut()}>
