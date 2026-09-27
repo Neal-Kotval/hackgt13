@@ -346,7 +346,9 @@ test("a pre-allocation stop waits for another worker's lease and for a recent la
     const service = provider([]);
     let result = await reconcileAwsRunBoxes(attempted.db, service, { workerId: "worker", requestStop });
     assert.equal(attempted.db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(attempted.job.id).state, "failed");
-    assert.ok(result.some((item) => item.status === "retry"));
+    // A failure before RunInstances waits quietly; it must not report `retry`, which would
+    // block every new allocation (live staging incident, HAC-166).
+    assert.ok(!result.some((item) => item.status === "retry"));
     const old = new Date(Date.now() - 20 * 60_000).toISOString();
     attempted.db.prepare("UPDATE run_box_transition SET created_at = ? WHERE job_id = ?").run(old, attempted.job.id);
     result = await reconcileAwsRunBoxes(attempted.db, provider([], { managedVolumes: [{ VolumeId: "vol-legacy", Tags: tagged("x", "Other") }] }),
@@ -397,5 +399,21 @@ test("a job that failed before any launch closes once quiet and EC2 shows nothin
     const result = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
     assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
     assert.equal(nextAwsDecision(db).decision.outcome, "approved");
+  } finally { db.close(); }
+});
+
+// HAC-166 (live on staging): stopping a job that failed before any launch sent it down the
+// deterministic-RunInstances-rejection path, which reported `retry` and so blocked every
+// new allocation ("EC2 cleanup remains unconfirmed; refusing another allocation").
+test("a stopped job that failed before any launch never blocks allocation while it waits to close", async () => {
+  const { db, job } = failedBeforeLaunch();
+  try {
+    requestRunBoxStop(db, job.id, "owner");
+    const waiting = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+    assert.ok(!waiting.some((item) => item.status === "retry"), JSON.stringify(waiting));
+    db.prepare("UPDATE run_box_transition SET created_at = ? WHERE job_id = ?").run(new Date(Date.now() - 16 * 60_000).toISOString(), job.id);
+    db.prepare("UPDATE run_box_job SET lease_expires_at = ? WHERE id = ?").run(new Date(Date.now() - 60_000).toISOString(), job.id);
+    const closed = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+    assert.deepEqual(closed.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
   } finally { db.close(); }
 });
