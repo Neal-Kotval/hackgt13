@@ -6,7 +6,7 @@ import { createServer } from 'vite';
 
 const desktop = fileURLToPath(new URL('..', import.meta.url));
 const root = path.dirname(desktop.replace(/\/$/, ''));
-const artifacts = path.join(root, 'artifacts/hac-154');
+const artifacts = path.join(root, 'artifacts/hac-159-remote');
 await mkdir(artifacts, { recursive: true });
 const server = await createServer({ configFile: false, root: desktop, publicDir: path.join(root, 'public'), resolve: { dedupe: ['react', 'react-dom', '@radix-ui/react-select', '@phosphor-icons/react'], alias: { '@agentcloud-tokens': path.join(root, 'app/tokens.css') } }, server: { host: '127.0.0.1', port: 0, fs: { allow: [root, await realpath(path.join(root, 'node_modules'))] } }, esbuild: { jsx: 'automatic' } });
 let browser;
@@ -23,6 +23,7 @@ try {
   await expect(page.getByText("Replies come from this project's agent via alto.", { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toHaveCount(0);
   await expect(page.getByText('What can I help with?', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Local Codex box', { exact: true })).toHaveCount(0);
   async function layout(state) {
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
@@ -31,6 +32,11 @@ try {
       const composer = await page.locator('.composer-row').boundingBox();
       expect(composer.x + composer.width).toBeLessThanOrEqual(width);
       expect(composer.x).toBeGreaterThanOrEqual(0);
+      const main = await page.locator('.project-chat-main').boundingBox();
+      expect(Math.abs(composer.x + composer.width / 2 - main.x - main.width / 2)).toBeLessThan(1);
+      const alignment = await page.locator('.conversation').evaluate(el => { const r = el.getBoundingClientRect(); const css = getComputedStyle(el); return { left: r.left + parseFloat(css.paddingLeft), right: r.right - parseFloat(css.paddingRight) }; });
+      expect(Math.abs(composer.x - alignment.left)).toBeLessThan(1);
+      expect(Math.abs(composer.x + composer.width - alignment.right)).toBeLessThan(1);
       expect(composer.y + composer.height).toBeLessThanOrEqual(900);
       await page.screenshot({ path: path.join(artifacts, `${state}-${width}.png`) });
     }
@@ -76,7 +82,7 @@ try {
   expect(await page.evaluate(() => window.__test.sends.at(-1).text)).toBe(originalText);
   await expect(input).toHaveValue('Unrelated unsent draft');
   // State alone never invents command results, a GPU, or an SSH connection.
-  await page.evaluate(() => { window.__test.sessions[0].status = 'running'; window.__test.events.s1.push({ id: 'command', kind: 'command', text: 'Command running. Output is not saved.', updatedAt: new Date().toISOString() }); });
+  await page.evaluate(() => { window.__test.sessions.find(session => session.id === 's1').status = 'running'; window.__test.events.s1.push({ id: 'command', kind: 'command', text: 'Command running. Output is not saved.', updatedAt: new Date().toISOString() }); });
   await expect(page.getByText('Responding…', { exact: true })).toBeVisible();
   await expect(page.locator('.codex-streaming-cursor')).toHaveCount(1);
   await expect(input).toHaveValue('Unrelated unsent draft');
@@ -112,7 +118,7 @@ try {
   await expect(input).toHaveValue('Unrelated unsent draft');
   await expect(page.getByRole('button', { name: 'Remove draft.md' })).toBeVisible();
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
-  await expect(page.getByText('Choose an agent to open its conversation.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Choose a ready environment to chat with Codex.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
   // Removed Tasks links route truthfully; never connect to an origin from a link.
   await page.evaluate(() => window.__test.deepLink({ ok: true, target: { projectId: 'p1', taskRunBoxId: 'box-1' } }));
@@ -125,7 +131,21 @@ try {
   await page.goto(`${base}/?no-projects`);
   await expect(page.getByText('Choose a project to get started.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
-  await expect(page.getByRole('link', { name: 'Set up agent on website' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Manage environments' }).last()).toBeVisible();
+  await page.goto(`${base}/?new-environment`);
+  await expect(page.getByText('Choose a ready environment to chat with Codex.', { exact: true })).toBeVisible();
+  await page.locator('.chat-context-empty').getByRole('combobox', { name: 'Environment', exact: true }).click();
+  await expect(page.getByRole('option').filter({ hasText: 'Local Codex box' })).toHaveCount(0);
+  await page.getByRole('option').filter({ hasText: 'cpu-workspace' }).filter({ hasNotText: 'SSH terminal' }).click();
+  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.__test.created.runBoxId)).toBe('box-1');
+  await page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true }).click();
+  await expect(page.getByLabel('One-time sign-in code', { exact: true })).toHaveText('TEST-CODE');
+  expect(await page.evaluate(() => window.__test.openedUrl)).toBe('https://auth.openai.com/codex/device');
+  await page.evaluate(() => { window.__test.sessions[0].status = 'ready'; });
+  await expect(page.getByLabel('One-time sign-in code', { exact: true })).toHaveCount(0);
+  await input.fill('Remote authenticated message');
+  await expect(page.getByRole('button', { name: 'Send message' })).toBeEnabled();
   expect(errors).toEqual([]);
   console.log('PASS: responsive empty/active/streaming, safe context sending, Markdown copy, retry dedup/recovery, drafts, search/focus, session selection, legacy links and empty projects.');
 } finally { await browser?.close(); await server.close(); }

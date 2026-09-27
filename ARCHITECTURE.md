@@ -139,16 +139,12 @@ JSON still stores coordination data. There is no cross-store transaction: failed
 
 The separate `docker-local` run-box worker creates a CPU-only SSH container per approved project environment on its Docker host. The default image includes a pinned Codex CLI but does not start a model process. Imported templates are recorded in the local SQLite database after a temporary-container SSH and tool probe; each record pins a Docker image ID, and the worker runs that identity rather than a mutable tag. The web and worker must share the same data directory and Docker host. AWS VM container hosting, image publication to a registry, and remote SSH routing are not implemented by this path.
 
-## Local Docker Codex integration (HAC-116)
+## Legacy local Codex prototype (HAC-116)
 
-The opt-in local Codex path initializes a real Codex app-server in a Docker CPU
-box from project Settings and lets desktop **Project chat** send turns to the same
-persistent thread. Project and agent conversation selection live in the shared
-sidebar; there is no separate Codex agents tab. Employee membership gates reads and chat; owners control setup and
-lifecycle. SQLite stores bounded attributed session items, while the Docker
-volume retains Codex history and workspace files. This local implementation does
-not satisfy the AWS/GPU execution or public multi-tenant milestones above. See
-[LOCAL_CODEX.md](LOCAL_CODEX.md) for setup, authentication, recovery and limits.
+Standalone local Docker sessions and their persisted volumes are retained for
+legacy compatibility and are absent from Settings and Project chat. Environment
+sessions use the shared app-server API through backend-owned SSH. The supported test path uses a standard Docker SSH environment;
+see [LOCAL_CODEX.md](LOCAL_CODEX.md).
 
 ## Remote Codex sessions (HAC-153)
 
@@ -164,11 +160,17 @@ session. See [docs/stage3-contract.md](docs/stage3-contract.md).
 ## Desktop chat redesign (HAC-154)
 
 The current desktop navigation is Project chat and Environments; Tasks and desktop
-task authoring are removed. Backend task records and APIs remain available. Chat
-uses real project/agent Codex sessions with searchable history, Markdown/code,
-text-context attachments, and per-session in-memory drafts. New chat selects an
-existing agent conversation; separate conversation creation/deletion is not an
-implemented API. Local Docker execution and ready run-box SSH terminals are
-separate contexts. Server redaction remains unchanged, and optional file/handoff
+task authoring are removed. Backend task records and APIs remain available. Chat selects a ready project environment and runs Codex there over SSH.
+Conversation history is saved by the backend session service; drafts are retained
+during navigation. Reconnect resumes the saved environment thread. The environment terminal is an explicit action on the same box. Server redaction remains unchanged, and optional file/handoff
 cards require actual backend data. The visible brand is lowercase `alto`; existing
 technical identifiers and the `agentcloud://` protocol remain compatible.
+
+## Environment-based Codex interaction
+
+Users give Codex work in desktop Project chat after selecting a ready execution
+environment. Website Environments owns allocation and lifecycle; Settings does
+not create standalone local Codex boxes. Docker is a development provider using
+the same environment, SSH, sign-in and run-recording path as remote hosts. Existing
+legacy app-server data remains retained but is not a product navigation flow.
+See [LOCAL_CODEX.md](LOCAL_CODEX.md) for local environment testing.
