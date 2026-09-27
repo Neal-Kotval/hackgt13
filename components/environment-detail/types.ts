@@ -85,7 +85,7 @@ export const stateLabels: Record<RunBoxJobState, { label: string; detail: string
   connecting: { label: "Connecting", detail: "The machine was allocated. The worker is establishing SSH access." },
   verifying: { label: "Verifying", detail: "The worker is checking the pinned host key, workspace, and hardware." },
   ready: { label: "Ready", detail: "The worker verified SSH access against the host key it generated." },
-  stopping: { label: "Stopping", detail: "Stop requested. Waiting for the worker to confirm teardown." },
+  stopping: { label: "Stopping", detail: "Shutdown can take several minutes. This environment counts toward your limit until the provider confirms it is released." },
   stopped: { label: "Stopped", detail: "The worker recorded this environment as stopped." },
   failed: { label: "Failed", detail: "The worker recorded a failure. Request a stop so it confirms cleanup." },
 };

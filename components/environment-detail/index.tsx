@@ -413,7 +413,7 @@ function Overview({
           <h2 id="environment-overview-stop">Stop</h2>
           <p className="environment-detail-note">
             {job.stop_requested_at
-              ? "A stop was already requested."
+              ? "Shutdown is in progress and can take several minutes. You do not need to request it again."
               : permissions.stop
                 ? "Stopping terminates the machine. Work that is not pushed is lost."
                 : "You cannot stop this environment."}

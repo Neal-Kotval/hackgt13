@@ -66,7 +66,7 @@ const stateCopy: Record<JobState, { label: string; phase: string; detail: string
   stopping: {
     label: "Stopping",
     phase: "Stopping",
-    detail: "Stop requested. Waiting for the worker to confirm teardown.",
+    detail: "Shutdown can take several minutes. This environment counts toward your limit until the provider confirms it is released.",
   },
   stopped: {
     label: "Stopped",
@@ -305,7 +305,7 @@ export function Environments({ project }: { project: Project }) {
       setNotice(
         data.outcome === "stopped"
           ? "Stopped. No machine was ever launched for this environment, so it was closed immediately."
-          : "Termination requested. This environment keeps blocking new ones until the worker confirms the provider released it.",
+          : "Termination requested. This environment counts toward your limit until the provider confirms it is released.",
       );
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "Could not force stop.");
@@ -597,7 +597,7 @@ function EnvironmentCard({
   const command = job.ssh ? sshCommand(job.ssh) : "";
   const canStop = role === "owner" && job.state !== "stopped" && !job.stop_requested_at;
   const ready = job.state === "ready" && !job.stop_requested_at;
-  // A failed or stuck-stopping job still holds the provider's single active slot.
+  // Failed and stopping jobs still count toward the owner’s cloud environment limit.
   const canForceStop = role === "owner" && job.state !== "stopped" && !job.force_stop_requested_at &&
     (Boolean(job.stop_requested_at) || job.state === "failed" || job.state === "stopping");
   const terminationRequested = Boolean(job.force_stop_requested_at) && job.state !== "stopped";
@@ -609,7 +609,7 @@ function EnvironmentCard({
     stopped && !job.provider_resource_id
       ? "Stopped before a machine was allocated."
       : terminationRequested
-        ? "Termination requested. The worker must confirm the provider released this environment before it stops blocking new ones."
+        ? "Termination requested. This environment counts toward your limit until the provider confirms it is released."
         : copy.detail;
   const phase = terminationRequested ? "Termination requested" : copy.phase;
 
@@ -821,7 +821,7 @@ function EnvironmentCard({
           <p>
             Force stop this environment? If no machine was ever launched, it closes now.
             Otherwise AgentCloud requests termination from the provider, and this
-            environment keeps blocking new ones until the release is confirmed.
+            environment counts toward your limit until the release is confirmed.
             Anything not pushed from it is lost.
           </p>
           <div className="environment-actions">
