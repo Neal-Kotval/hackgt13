@@ -69,6 +69,12 @@ function existingDecision(db: Database, idempotencyKey: string) {
 type Metadata = ReturnType<typeof createMetadataInput>;
 // The catalog machine a job runs on (null for local-docker-sandbox, Runpod, and the
 // profile-less g6 GPU job) and its approved root volume.
+function awsWaitReason(db: ReturnType<typeof getDatabase>, jobId: string): string | null {
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'aws_cpu_environment'").get()) return null;
+  const row = db.prepare("SELECT last_wait FROM aws_cpu_environment WHERE job_id = ?").get(jobId) as { last_wait: string | null } | undefined;
+  return row?.last_wait ?? null;
+}
+
 function machineFields(job: { profile_id: string | null; disk_gb?: number | null }) {
   const machine = findMachine(job.profile_id);
   if (!machine) return { machine: null, diskGb: null };
@@ -275,6 +281,8 @@ export async function GET(request: Request) {
           access: "trusted-shell",
           // HAC-121: repo checkout path (null until ready) and agent readiness, separate from `state`.
           workspacePath: ready ? getWorkspacePath(db, job.id) : null,
+          // Fast stop: why a queued AWS job is waiting (e.g. the previous machine is still terminating).
+          waitReason: ["queued", "allocating"].includes(job.state) ? awsWaitReason(db, job.id) : null,
           agent: { codex: { state: codex.state, version: codex.version, reason: codex.reason } },
           memory: { enabled: memoryEnabled, available: memoryAvailable },
         };
