@@ -71,16 +71,16 @@ export class DesktopAuthClient {
     } = {},
   ) {
     this.store = store;
-    this.baseUrl = normalizeBaseUrl(
-      options.baseUrl ||
-        process.env.AGENTCLOUD_URL ||
-        process.env.BETTER_AUTH_URL ||
-        "http://127.0.0.1:3000",
-    );
+    const configuredUrl =
+      options.baseUrl || process.env.AGENTCLOUD_URL || process.env.BETTER_AUTH_URL;
+    this.baseUrl = normalizeBaseUrl(configuredUrl || "http://127.0.0.1:3000");
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.encryptionAvailable = options.encryptionAvailable ?? false;
     const loaded = this.store.load();
-    if (loaded) {
+    if (loaded && configuredUrl && normalizeBaseUrl(loaded.baseUrl) !== this.baseUrl) {
+      // A cookie saved for another AgentCloud server must not pin the app to it; sign in again.
+      this.store.clear();
+    } else if (loaded) {
       this.cookieHeader = loaded.cookieHeader;
       this.baseUrl = normalizeBaseUrl(loaded.baseUrl || this.baseUrl);
     }
