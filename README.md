@@ -79,7 +79,7 @@ The launcher explicitly enables `AGENTCLOUD_REMOTE_BACKEND_URL`; ordinary `just 
 
 Shared project memory through Backboard is optional and chosen per environment. A project owner turns Shared memory on or off on that environment's card. When it is on and `BACKBOARD_API_KEY` is set, a Codex turn on that environment recalls the project's saved facts and, after Codex accepts the turn, stores a short note of what was asked. Other environments on the same server stay off. The key stays on the server. If the key is unset, the switch is off, or Backboard fails, the turn is sent unchanged. Computer tools are not connected to run boxes yet. The hosted app reads the key from the staging Secrets Manager value when that value is JSON with `BETTER_AUTH_SECRET` and `BACKBOARD_API_KEY`. A plain string remains the auth secret alone, so sign-in keeps working until that JSON is installed with the matching service start script.
 
-Email defaults to local capture with no Doppler mail keys. For SMTP, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_FROM`, and, if required by the provider, `SMTP_USER` and `SMTP_PASSWORD`. `SMTP_PORT` defaults to 587; set `SMTP_SECURE=true` for implicit TLS, usually on port 465. Keep all secret values and Doppler tokens out of Git. The existing `.env.local` setup remains available.
+Email defaults to local capture with no Doppler mail keys. For SMTP, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_FROM`, and, if required by the provider, `SMTP_USER` and `SMTP_PASSWORD`. `SMTP_PORT` defaults to 587; set `SMTP_SECURE=true` for implicit TLS, usually on port 465. Keep all secret values and Doppler tokens out of Git. The existing `.env.local` setup remains available. On AWS staging, run `AWS_PROFILE=agentcloud-operator bash scripts/aws-auth/set-smtp.sh you@gmail.com`: it prompts for a Google app password without echoing it, stores the SMTP settings in the staging runtime secret, and restarts the web service, which then switches from local capture to SMTP.
 
 ### Doppler MCP for coding assistants
 
@@ -307,3 +307,18 @@ On **People & organizations**, choose **New organization** to open the creation 
 Website navigation uses one shared vertical sidebar for projects, organization management, project views, and the design reference. On narrow screens, **Open navigation** opens a keyboard-accessible drawer. Project view links have durable URLs; organization changes refresh the available project links.
 
 After `npm run build`, run `npm run test:motion:browser` to verify Motion entrances, inline-style cleanup, notification positioning, drawer/dropdown behavior, and reduced-motion preferences in headless Chrome at 375, 768, and 1440 pixels. It uses isolated temporary accounts and port 3183.
+
+## Runs from Project chat
+
+Runs shows recent saved work from environment-backed Codex chats. Each recorded
+user message starts a run; completion, failure and interruption come from saved
+turn events. Environment shutdown does not change an already completed outcome.
+An unfinished request without a final result is shown as outcome unavailable,
+not inferred to have succeeded. Empty setup chats do not create runs.
+
+The page refreshes every four seconds and on window focus, offers manual refresh
+and status filtering, and opens the original chat in desktop. Work details stay
+collapsed by default. History is limited to the events retained by the chat
+service (currently 300 per chat); this is not an unlimited execution archive.
+Legacy `/api/agent-runs` records remain stored and accessible through their API,
+but the page no longer relies on that older reporting path or heartbeat panels.

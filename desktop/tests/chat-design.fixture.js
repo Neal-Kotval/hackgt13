@@ -23,6 +23,9 @@
     getState:async()=>structuredClone(state),
     listRunBoxes:async projectId=>[{id:'box-1',projectId,provider:'docker-local',profileId:'cpu-workspace',state:'ready',rawState:'ready',ssh:{host:'127.0.0.1',port:2222,username:'test'},stopRequested:false,codex:{state:'ready',reason:null}},{id:'box-2',projectId,provider:'docker-local',profileId:'second-workspace',state:'ready',rawState:'ready',ssh:{host:'127.0.0.1',port:2223,username:'test'},stopRequested:false,codex:{state:'ready',reason:null}},{id:'box-failed',projectId,profileId:'failed-box',state:'failed',ssh:null}],
     openChatGptSignIn:async url=>{test.openedUrl=url;},
+    onChatGptSignInEvent:()=>()=>{},
+    startChatGptBrowserSignIn:async()=>{test.loginCalls=(test.loginCalls||[]);test.loginCalls.push('tunnel:start');return {callbackPort:1455};},
+    stopChatGptBrowserSignIn:async()=>{test.loginCalls=(test.loginCalls||[]);test.loginCalls.push('tunnel:stop');},
     fetchHuman:async(path,options)=>{
       const url=new URL(path,'http://localhost');
       if(url.pathname.endsWith('/peer-messages') && options){
@@ -31,14 +34,14 @@
         test.broadcasts.push({path:url.pathname,...body});
         return response({messages:[{id:'peer-1'}]});
       }
-      if(url.pathname==='/api/codex-sessions' && options){const body=JSON.parse(options.body);test.created=body;if(test.setupRequired)return {ok:false,status:409,body:JSON.stringify({error:'Complete web setup first',code:'environment_setup_required'})};if(!body.runBoxId)throw Error('Creation requires an environment');if(!body.newChat || !body.requestId)throw Error("Native creation must be an independent idempotent chat");const prior=sessions.find(s=>s.requestId===body.requestId);if(prior)return response({session:prior});const session={requestId:body.requestId,title:"New chat",isSetupSession:false,id:`remote-created-${sessions.length}`,projectId:body.projectId,agentId:body.agentId,status:'ready',error:null,target:{kind:'runBox',runBoxId:body.runBoxId,provider:'docker-local',profileId:'cpu-workspace',state:'ready'}};sessions.push(session);events[session.id]=[];return response({session});}
+      if(url.pathname==='/api/codex-sessions' && options){const body=JSON.parse(options.body);test.created=body;if(test.setupRequired)return {ok:false,status:409,body:JSON.stringify({error:'Complete web setup first',code:'environment_setup_required'})};if(!body.runBoxId)throw Error('Creation requires an environment');if(!body.newChat){const existing=sessions.find(s=>s.isSetupSession&&s.target?.runBoxId===body.runBoxId);if(existing)return response({session:existing});const session={id:`setup-${body.runBoxId}`,projectId:body.projectId,agentId:'a1',status:'auth_required',error:null,isSetupSession:true,title:'Codex setup',target:{kind:'runBox',runBoxId:body.runBoxId,provider:'docker-local',profileId:'cpu-workspace',state:'ready'}};sessions.push(session);events[session.id]=[];return response({session});}if(!body.requestId)throw Error("Native creation must be an independent idempotent chat");const prior=sessions.find(s=>s.requestId===body.requestId);if(prior)return response({session:prior});const session={requestId:body.requestId,title:"New chat",isSetupSession:false,id:`remote-created-${sessions.length}`,projectId:body.projectId,agentId:body.agentId,status:'ready',error:null,target:{kind:'runBox',runBoxId:body.runBoxId,provider:'docker-local',profileId:'cpu-workspace',state:'ready'}};sessions.push(session);events[session.id]=[];return response({session});}
       if(url.pathname==='/api/codex-sessions')return response({enabled:true,sessions:sessions.filter(s=>s.projectId===url.searchParams.get('projectId'))});
       const id=url.pathname.split('/').at(-1);const session=sessions.find(s=>s.id===id);
       if(!session)return {ok:false,status:404,body:'{"error":"Missing test session"}'};
       if(options){const body=JSON.parse(options.body);test.sends.push({id,...body});
         if(test.loseResponse){test.loseResponse=false;throw new Error('Test response lost');}
         if(test.fail)return {ok:false,status:502,body:'{"error":"Could not confirm the turn.","code":"ambiguous_turn"}'};
-        if(body.action==='login')throw Error('Desktop must not initiate Codex sign-in');
+        if(body.action==='login'){if(body.method!=='browser')throw Error('Desktop sign-in uses the browser');test.loginCalls=(test.loginCalls||[]);test.loginCalls.push(body.method);return response({login:{method:'browser',loginId:'login1',callbackPort:1455,authUrl:'https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback'}});}
         if(body.action==='message'){session.title=body.text.split('\n')[0];events[id].push(event('u'+test.sends.length,'user',body.text),event('a'+test.sends.length,'assistant','Implemented **the requested change** with `limit`.\n\n```ts\n// bounded results\nconst message = "ready";\n```\n\n- Preserves existing behavior\n- Checks input limits'));session.status='ready';}
         if(body.action==='interrupt'){session.status='ready';events[id].push(event('stop','status','Turn interrupted'));}
         if(body.action==='resume'){session.status='ready';}

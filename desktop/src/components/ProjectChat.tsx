@@ -10,6 +10,7 @@ import {
   targetKey,
   type CodexSession,
 } from "../lib/codex-targets";
+import type { LoginTarget } from "../lib/browser-login-flow";
 import type { DeepLinkParseResult, ProjectSnapshot } from "../lib/types";
 import { Composer, type ChatAttachment } from "./Composer";
 import { CodexConversation, type CodexEvent } from "./CodexConversation";
@@ -59,12 +60,14 @@ export function ProjectChat({
   deepLink,
   onDeepLinkHandled,
   onSelectConversation,
+  onSignIn,
   children,
 }: {
   webBaseUrl: string;
   deepLink: DeepLinkParseResult | null;
   onDeepLinkHandled: () => void;
   onSelectConversation?: () => void;
+  onSignIn?: (target: LoginTarget) => void;
   onOpenTerminal?: (projectId: string, runBoxId: string) => void;
   children: (chat: {
     content: ReactNode;
@@ -335,6 +338,34 @@ export function ProjectChat({
     );
   }
 
+  async function signInWithChatGpt() {
+    if (!projectId || !selectedBox) return;
+    const runBoxId = selectedBox.id;
+    const existing = sessions.find((item) => item.isSetupSession !== false && item.target.kind === "runBox" && item.target.runBoxId === runBoxId && item.status === "auth_required")
+      ?? (session?.status === "auth_required" && session.target.kind === "runBox" && session.target.runBoxId === runBoxId ? session : null);
+    if (existing) {
+      onSignIn?.({ projectId, runBoxId, codexSessionId: existing.id });
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      const result = await request<{ session: unknown }>("/api/codex-sessions", { projectId, runBoxId });
+      const created = parseCodexSession(result.session);
+      if (!created || created.target.kind !== "runBox" || created.target.runBoxId !== runBoxId)
+        throw new Error("Could not prepare Codex on this environment.");
+      setSessions((current) => [...current.filter((item) => item.id !== created.id), created]);
+      setSessionId(created.id);
+      setSetupRequired((current) => ({ ...current, [`runBox:${runBoxId}`]: false }));
+      if (created.status === "auth_required") onSignIn?.({ projectId, runBoxId, codexSessionId: created.id });
+      else setActionError("Codex is still connecting. Sign in with ChatGPT when this environment asks for it.");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Could not start ChatGPT sign-in.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function openEnvironmentSession(runBoxId: string) {
     const agentId = codexAgentId();
     if (!projectId || !agentId) {
@@ -409,7 +440,7 @@ export function ProjectChat({
     setTargetChoice(`runBox:${job.id}`);
     if (canTargetCodex(job)) {
       requestEnvironment(null);
-      setTargetNotice("Finish setting up Codex on the website, then return here to start chatting.");
+      setTargetNotice("Sign in with ChatGPT to use Codex on this environment.");
       return;
     }
     if (
@@ -619,7 +650,7 @@ export function ProjectChat({
     setSessionId("");
     setSnapshot(null);
     onSelectConversation?.();
-    setTargetNotice("Finish setting up Codex on the website, then return here to start chatting.");
+    setTargetNotice("Sign in with ChatGPT to use Codex on this environment.");
   }
   function chooseAgent(id: string) {
     requestEnvironment(null);
@@ -818,11 +849,15 @@ export function ProjectChat({
             <p>{codexBlockedReason(selectedBox) ?? "This environment is not ready for Codex yet."}</p>
             <a className="button primary" href={`${webBaseUrl.replace(/\/$/, "")}/projects/${projectId}/environments?environment=${selectedBox.id}`} target="_blank" rel="noreferrer">View environment</a>
           </section>}
-          {!selectedBoxUnavailable && (session?.status === "auth_required" || setupRequired[currentTarget] || (currentTarget && !selectedSession)) && (
+          {!selectedBoxUnavailable && selectedBox && (session?.status === "auth_required" || setupRequired[currentTarget] || (currentTarget && !selectedSession)) && (
             <section className="codex-sign-in" aria-labelledby="environment-setup-title">
-              <h2 id="environment-setup-title">Finish setup on the website</h2>
-              <p>Add Codex from project Settings, then sign in with ChatGPT in your browser. Return here to create chats when it is ready.</p>
-              <a className="button primary" href={settingsUrl} target="_blank" rel="noreferrer">Add Codex in Settings</a>
+              <h2 id="environment-setup-title">Sign in with ChatGPT</h2>
+              <p>Codex in this environment uses your ChatGPT account. Sign-in opens in your browser, and this app connects it to the environment.</p>
+              <div className="codex-sign-in-actions">
+                <button className="button primary" type="button" disabled={busy || session?.status === "initializing"} onClick={() => void signInWithChatGpt()}>
+                  {busy ? "Connecting…" : "Sign in with ChatGPT"}
+                </button>
+              </div>
             </section>
           )}
           {!sessions.length && !loading && !pendingEnvironment && (
@@ -865,7 +900,7 @@ export function ProjectChat({
                 ? hasConversation
                   ? `Message ${agentName(session)}`
                   : `Ask ${agentName(session)} to work on ${project?.name || "this project"}`
-                : currentTarget ? "Finish environment setup to start chatting" : "Choose an environment to start chatting"
+                : currentTarget ? "Sign in with ChatGPT to start chatting" : "Choose an environment to start chatting"
             }
             context={hasConversation ? context("toolbar") : undefined}
             attachments={draftAttachments}
