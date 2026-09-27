@@ -44,6 +44,23 @@ test("the hosted start script keeps a plain auth secret and reads Backboard from
   assert.throws(() => load("short"), /Staging auth secret is not initialized/);
 });
 
+test("SMTP settings in the runtime secret reach the app and switch mail to SMTP", () => {
+  const run = (secret) => {
+    const assignments = execFileSync(process.execPath, ["scripts/aws-auth/runtime-secret.mjs"], { input: secret, encoding: "utf8" });
+    // Mirror service-start.sh: eval the assignments, choose the mail mode, then read from a child process.
+    const mode = readFileSync("scripts/aws-auth/service-start.sh", "utf8").match(/^if \[\[ -n "\$\{SMTP_HOST.*$/m)[0];
+    return JSON.parse(execFileSync("bash", ["-c", `eval "$1"; ${mode}; exec "$2" -e 'const e = process.env; process.stdout.write(JSON.stringify({ mode: e.AGENTCLOUD_MAIL_MODE, host: e.SMTP_HOST || null, user: e.SMTP_USER || null, passwordLength: (e.SMTP_PASSWORD || "").length, from: e.SMTP_FROM || null }))'`,
+      "runtime", assignments, process.execPath], { encoding: "utf8", env: { PATH: process.env.PATH } }));
+  };
+  const auth = "a".repeat(40);
+  assert.deepEqual(run(auth), { mode: "local", host: null, user: null, passwordLength: 0, from: null });
+  assert.deepEqual(run(JSON.stringify({ BETTER_AUTH_SECRET: auth, SMTP_HOST: "smtp.gmail.com", SMTP_PORT: "587",
+    SMTP_USER: "me@example.com", SMTP_PASSWORD: "abcdefghijklmnop", SMTP_FROM: "alto <me@example.com>" })),
+  { mode: "smtp", host: "smtp.gmail.com", user: "me@example.com", passwordLength: 16, from: "alto <me@example.com>" });
+  assert.throws(() => run(JSON.stringify({ BETTER_AUTH_SECRET: auth, SMTP_HOST: "smtp.gmail.com", SMTP_USER: "me@example.com" })), /SMTP settings are incomplete/);
+  assert.throws(() => run(JSON.stringify({ BETTER_AUTH_SECRET: auth, SMTP_HOST: "smtp.gmail.com\nX=1", SMTP_FROM: "a@b.c" })), /SMTP settings are invalid/);
+});
+
 test("the operator key is generated once, kept private, and only its public half is printed", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "agentcloud-operator-key-"));
   try {
