@@ -373,7 +373,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: "#090b0f",
+    backgroundColor: process.env.ALTO_WINDOW_BACKGROUND,
     title: "alto",
     show: false,
     webPreferences: {

@@ -7,7 +7,7 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -18,7 +18,7 @@ body,
 }
 
 body {
-  font-family: var(--font-body);
+  font-family: var(--font-heading);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
   color: var(--color-text);
@@ -32,6 +32,11 @@ select,
 textarea {
   font: inherit;
   color: inherit;
+}
+
+.app-loading {
+  padding: var(--space-6);
+  color: var(--color-muted);
 }
 
 button,
@@ -348,7 +353,7 @@ pre {
 .brand {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 0;
   font-family: var(--font-heading);
   font-size: var(--text-xl);
   font-weight: var(--font-weight-semibold);
@@ -356,6 +361,8 @@ pre {
 }
 .shell-brand { padding: 0 var(--space-3); min-height: var(--control-height); display: flex; align-items: center; }
 .brand-cursor { width: var(--brand-cursor-width); height: var(--brand-cursor-height); background: var(--color-accent); }
+.brand-dot { color: var(--color-accent); }
+.auth-panel > .auth-brand { gap: 0; }
 .control-nav { display: flex; flex-direction: column; gap: var(--space-1); }
 .control-nav .section-tab {
   display: flex;
