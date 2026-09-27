@@ -209,3 +209,23 @@ test("termination revokes the job's SSH rule before terminating the instance", a
   const order = calls.map((call) => call.key);
   assert.ok(order.indexOf("ec2:revoke-security-group-ingress") < order.indexOf("ec2:terminate-instances"));
 });
+
+test("an undeliverable SSM host-key readback is retried as pending; a script failure still fails", async () => {
+  const instance = "i-041c189f035f5374b";
+  const withInvocation = (invocation) => fakeAws({ overrides: {
+    "ssm:describe-instance-information": { InstanceInformationList: [{ InstanceId: instance, PingStatus: "Online" }] },
+    "ssm:send-command": { Command: { CommandId: "369e57cb-788c-412b-9169-aad541a97d31" } },
+    "ssm:get-command-invocation": invocation,
+  } });
+  // Live failure on 2026-09-27: the agent reported Online, then the command came back
+  // Failed/Undeliverable about 30 s after launch while bootstrap was still running.
+  const undeliverable = createAwsCpuProvider({ aws: withInvocation({ Status: "Failed", StatusDetails: "Undeliverable", ResponseCode: -1 }),
+    subnetId, sleep: async () => {} });
+  assert.deepEqual(await undeliverable.readHostKey(instance), { state: "pending", step: "ssm-delivery" });
+  const timedOut = createAwsCpuProvider({ aws: withInvocation({ Status: "TimedOut", StatusDetails: "DeliveryTimedOut", ResponseCode: -1 }),
+    subnetId, sleep: async () => {} });
+  assert.deepEqual(await timedOut.readHostKey(instance), { state: "pending", step: "ssm-delivery" });
+  const scriptFailed = createAwsCpuProvider({ aws: withInvocation({ Status: "Failed", StatusDetails: "Failed", ResponseCode: 1 }),
+    subnetId, sleep: async () => {} });
+  await assert.rejects(scriptFailed.readHostKey(instance), /Host key readback failed/);
+});
