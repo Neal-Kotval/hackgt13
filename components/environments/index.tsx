@@ -22,7 +22,7 @@ import {
 } from "@/lib/resource-profiles";
 import "../resources/resources.css";
 import "./environments.css";
-import { CodexEnvironmentSetup } from "./codex-setup";
+import Link from "next/link";
 
 type JobState =
   | "queued"
@@ -159,7 +159,7 @@ function providerLabel(provider: EnvironmentJob["provider"]) {
   }
 }
 
-function profileLabel(job: EnvironmentJob, templates: ContainerTemplate[] = []) {
+export function profileLabel(job: EnvironmentJob, templates: ContainerTemplate[] = []) {
   const id = job.profileId ?? job.profile_id;
   const known = profiles.find((profile) => profile.id === id);
   if (known) return known.label;
@@ -479,7 +479,6 @@ export function Environments({ project }: { project: Project }) {
                 job={job}
                 templates={templates}
                 projectId={project.id}
-                agentId={project.agents.find(agent => agent.client === "Codex")?.id}
                 serverUrl={serverUrl}
                 role={role}
                 confirming={confirmingStop === job.id}
@@ -501,7 +500,6 @@ function EnvironmentCard({
   job,
   templates,
   projectId,
-  agentId,
   serverUrl,
   role,
   confirming,
@@ -514,7 +512,6 @@ function EnvironmentCard({
   job: EnvironmentJob;
   templates: ContainerTemplate[];
   projectId: string;
-  agentId?: string;
   serverUrl: string;
   role: Role;
   confirming: boolean;
@@ -624,8 +621,10 @@ function EnvironmentCard({
         )}
       </div>
 
-      {ready && job.ssh && <CodexEnvironmentSetup projectId={projectId} runBoxId={job.id} agentId={agentId} owner={role === "owner"} desktopUrl={chatUrl} />}
+      {ready && job.ssh && <p className="resource-note">Your environment is ready. Add Codex or manage its sign-in in Settings.</p>}
       <div className="environment-actions">
+        {ready && job.ssh && <Link className="button primary" href={`/projects/${projectId}/settings?environment=${job.id}#agent-setup`}>Agent settings</Link>}
+        {chatUrl && <a className="button" href={chatUrl}>Open in desktop</a>}
         {job.ssh && (
           <button className="button" type="button" onClick={() => onCopy(command)}>
             <Copy aria-hidden="true" /> Copy SSH command
