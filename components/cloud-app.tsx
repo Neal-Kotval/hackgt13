@@ -345,7 +345,7 @@ export function CloudApp() {
                       <OverviewEnvironments projectId={project.id} base={base} />
                     </section>
                     <section className="workspace-card">
-                      <SectionTitle label="Agent activity" number={project.agents.length} />
+                      <SectionTitle label="Agent activity" />
                       <p>See connection status, recorded activity, and command results reported by your agents.</p>
                       <Link className="button secondary" href={base + "/runs"}>View runs <ArrowUpRight /></Link>
                     </section>
