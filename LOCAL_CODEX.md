@@ -3,7 +3,7 @@
 This opt-in development path runs the web backend on the host and actual Codex
 app-server processes inside local Docker CPU containers. It does not provision
 AWS, attach GPUs, or prove the remote GPU MVP. The website initializes a registered
-Codex identity; the desktop's Codex agents view directs the same session.
+Codex identity; the desktop's Project chat directs the same session.
 
 ## Start
 
@@ -36,9 +36,9 @@ installation. The two copies do not synchronize after migration.
    clone the project's saved repository URL.
 3. Choose Sign in to Codex, open the official device verification URL, and enter
    the displayed code. Codex authentication remains in its private Docker volume.
-4. Open the desktop Codex agents view, choose the project/session, and send work.
-   Replies and command output come from Codex. The original Project chat remains
-   an independent local scratchpad.
+4. Open desktop **Project chat**, choose the project and agent conversation, and send work.
+   Replies and command status come from Codex in the same chat interface. Existing
+   legacy on-device threads remain on disk but are not shown or sent to Codex.
 5. Interrupt cancels a turn; Stop box stops Docker while retaining workspace and
    history. Reconnect restarts the same box and resumes the saved Codex thread.
 
@@ -64,8 +64,13 @@ The Codex credential home is private to that container, but tools run as its use
 One host backend process owns session transports. A backend restart records a
 lost connection honestly; reconnect explicitly resumes the saved thread. Message
 request IDs prevent retrying the same turn twice. An ambiguous send failure must
-be reconciled before submitting new work. API snapshots retain the latest300
-items and cap each text item at32KiB; full Codex history remains in the volume.
+be reconciled before submitting new work. API snapshots retain the latest 300
+items and cap each text item at 32 KiB. Command arguments, stdout, stderr, and
+file paths are not saved in these snapshots; command status and exit code remain.
+On upgrade, previously saved command details are replaced with a removal notice.
+This does not erase prior database backups, copies, or Codex's full history in its
+private Docker volume. User messages and Codex replies may still contain secrets;
+only share a session with members trusted to read them.
 Containers and volumes are identified by install and session labels. Stop does
 not delete them. There is no automatic expiry or cloud cost enforcement here.
 

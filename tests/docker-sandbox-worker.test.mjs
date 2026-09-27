@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { claimRunBoxJob, migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
-import { migrateSshKeys, registerSshKey } from "../lib/ssh-keys.mjs";
+import { migrateSshKeys, registerSshKey, revokeSshKey } from "../lib/ssh-keys.mjs";
 import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
 import { NO_DEVICE_KEYS, reconcileDockerSandboxes, verifyDockerSandboxSsh,
   workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
@@ -64,8 +64,36 @@ function fakeProvider(overrides = {}) {
       for (const [jobId, item] of containers) if (item.id === id) containers.delete(jobId);
     },
     async listManaged() { return [...containers.values()].map(({ id, jobId, state }) => ({ id, jobId, state })); },
+    async replaceAuthorizedKeys(jobId, keys) {
+      calls.push(["replaceAuthorizedKeys", jobId, keys]);
+      containers.get(jobId).authorizedKeys = keys;
+      return keys;
+    },
     ...overrides };
 }
+
+test("revoked device key is removed from a ready sandbox, not just the connection API", async () => {
+  const { db, job } = setup();
+  const sandbox = fakeProvider();
+  await workOneDockerSandboxJob(db, sandbox, { workerId: "worker", verify: passingVerify() });
+  const key = db.prepare("SELECT id, public_key FROM employee_ssh_key WHERE user_id = 'owner-1'").get();
+  assert.ok(sandbox.containers.get(job.id).authorizedKeys.includes(key.public_key));
+  revokeSshKey(db, "owner-1", key.id);
+  await reconcileDockerSandboxes(db, sandbox);
+  assert.ok(!sandbox.containers.get(job.id).authorizedKeys.includes(key.public_key));
+  db.close();
+});
+
+test("membership loss removes existing SSH access from a ready sandbox", async () => {
+  const { db, job } = setup();
+  const sandbox = fakeProvider();
+  await workOneDockerSandboxJob(db, sandbox, { workerId: "worker", verify: passingVerify() });
+  db.prepare("UPDATE member SET role = 'member' WHERE userId = 'owner-1'").run();
+  const outcomes = await reconcileDockerSandboxes(db, sandbox);
+  assert.equal(outcomes.find((item) => item.jobId === job.id)?.status, "access-updated");
+  assert.deepEqual(sandbox.containers.get(job.id).authorizedKeys, []);
+  db.close();
+});
 
 function passingVerify(calls = []) {
   return async (job, connection) => {

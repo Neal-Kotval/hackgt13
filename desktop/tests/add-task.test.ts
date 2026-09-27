@@ -32,6 +32,13 @@ describe("buildAddTaskPayload", () => {
     assert.equal("environmentId" in payload, false);
   });
 
+  it("binds a ready run box by its job id", () => {
+    assert.deepEqual(buildAddTaskPayload({ projectId: "p1", title: "GPU", instructions: "Run it", agentId: "a1", runBoxId: "j1" }), {
+      type: "addTask", projectId: "p1", title: "GPU", owner: "a1", instructions: "Run it", runBoxId: "j1",
+    });
+    assert.throws(() => buildAddTaskPayload({ projectId: "p1", title: "GPU", instructions: "Run it", agentId: "a1", runBoxId: "j1", environmentId: "e1" }));
+  });
+
   it("rejects empty fields", () => {
     assert.throws(() =>
       buildAddTaskPayload({

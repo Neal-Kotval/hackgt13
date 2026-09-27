@@ -52,7 +52,7 @@ The `docker-local` provider with server-owned profile `local-docker-sandbox` run
 
 Run `just sandbox-image` once (the worker also builds `agentcloud-sandbox:dev` from `infra/sandbox/` when it is absent), then `just worker-docker` alongside `just dev`. The worker loads `.env.local` with `node --env-file-if-exists`, so it opens the same `AGENTCLOUD_DATA_DIR` (default `.agentcloud/auth.sqlite` in the repository root) as the app; with Doppler use `doppler run -- just worker-docker`. Every 3 seconds it removes containers for stopped, failed, or unknown jobs, requests stop for expired sandboxes, and processes one queued or stopping job.
 
-For each job the worker generates a pinned ed25519 host key and a one-time verification key in a private temporary directory, starts `agentcloud-sandbox-<jobId>` with a random `127.0.0.1` port, 2 GB memory, 2 CPUs, a PID limit, and dropped capabilities, and records the SSH endpoint. The job becomes `ready` only after SSH with strict host-key checking confirms the account and `~/workspace` (and, when the approved job has a repository URL, clones it to `~/workspace/repo` and records the revision), the verification key has been removed, and that key is refused. Only registered device keys of project members at allocation time remain authorized; with none registered, the job fails with a clear reason. Keys registered later need a new sandbox. The host private key is passed to Docker through the environment, so anyone with Docker access on the worker machine can read it with `docker inspect`. At most one active local sandbox per project is allowed.
+For each job the worker generates a pinned ed25519 host key and a one-time verification key in a private temporary directory, starts `agentcloud-sandbox-<jobId>` with a random `127.0.0.1` port, 2 GB memory, 2 CPUs, a PID limit, and dropped capabilities, and records the SSH endpoint. The job becomes `ready` only after SSH with strict host-key checking confirms the account and `~/workspace` (and, when the approved job has a repository URL, clones it to `~/workspace/repo` and records the revision), the verification key has been removed, and that key is refused. The worker compares recorded fingerprints with registered keys and current project membership every 3 seconds and atomically replaces the host's `authorized_keys` when they differ. If replacement cannot be verified, it requests a stop. Revocation takes effect for new SSH connections after a successful worker cycle; while the worker is down or before its next cycle, an already installed key can still connect directly. Existing SSH sessions continue after key removal. An out-of-band change to the host key file is not detected when recorded fingerprints still match the database. With no registered device keys at allocation, the job fails with a clear reason. The host private key is passed to Docker through the environment, so anyone with Docker access on the worker machine can read it with `docker inspect`. At most one active local sandbox per project is allowed.
 
 ### Local frontend with shared AWS data
 
@@ -84,7 +84,7 @@ npm run build
 npm start
 ```
 
-The development and production scripts bind to loopback. This is a local organization-aware demo with employee login, but no production tenant isolation; do not expose it publicly as a multi-user service.
+The development and production scripts bind to loopback. This is a local organization-aware demo with employee login, but no production tenant isolation; do not expose it publicly as a multi-user service. [PUBLIC_DEPLOYMENT_BOUNDARY.md](PUBLIC_DEPLOYMENT_BOUNDARY.md) defines the blockers and required evidence before accepting unrelated organizations on a public service.
 
 ## Employee authentication (HAC-1)
 
@@ -100,6 +100,8 @@ Email defaults to local capture: messages are written to private JSON files in `
 For real delivery, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_FROM`, and the provider's `SMTP_USER` and `SMTP_PASSWORD` in `.env.local`. Set `SMTP_SECURE=true` for implicit TLS, typically port 465. Restart the server after changing configuration. SMTP submission does not guarantee inbox delivery. Real recipients need a reachable application origin; a localhost link works only on the machine running the app. Public deployment still requires production hardening.
 
 Invitations expire after 48 hours. Reissuing creates a new invitation and cancels the old link; revoked, declined, and expired invitations cannot be accepted. The UI distinguishes locally captured messages from SMTP submissions. Ownership can be assigned separately by an owner; the last owner cannot be removed or demoted.
+
+Organization names and URL slugs use the same validation on creation and update. Names must be nonempty and at most 100 characters; slugs must be lowercase letters and numbers separated by single hyphens, at most 80 characters. Slugs are stored identifiers, not yet website routes.
 
 Existing pre-organization projects remain hidden until their recorded owner moves them into an organization using the organization page. Adoption clears previous project assignments except the adopting owner's; organization members need an explicit new project grant. Organization owners and admins can access every project in their organization. `auth:bootstrap` remains an optional administrative helper for two accounts and legacy project memberships; it does not replace verification or organization membership. Supply its `AGENTCLOUD_EMPLOYEE1_EMAIL`, `AGENTCLOUD_EMPLOYEE2_EMAIL`, and corresponding `_PASSWORD` variables privately; never commit credentials. Existing passwords are preserved.
 
@@ -167,6 +169,8 @@ Replace the uppercase IDs with actual values. Service registration stores a repo
 
 The CLI defaults to `http://127.0.0.1:3000`. Override with `AGENTCLOUD_URL`; nonlocal URLs require HTTPS. The CLI reads its environment directly, so values in Next.js `.env.local` are not automatically loaded into the CLI shell. Set `AGENTCLOUD_TOKEN` separately for each agent identity and run `unset AGENTCLOUD_TOKEN` when finished.
 
+Project owners can invalidate an agent's coordination credential with authenticated `POST /api/state` requests. Send `{ "type": "revokeAgentToken", "projectId": "...", "agentId": "..." }` to remove all active credentials for that identity, or `{ "type": "rotateAgentToken", "projectId": "...", "agentId": "..." }` to replace them. Rotation returns the new plaintext `token` once in the response; the server stores only its hash. Both actions disconnect the displayed agent status, and the prior token immediately receives HTTP 401 from `/api/agent`. A revoked identity remains in the project and can be reissued a token by rotating it. Stop a CLI client using the old token and supply the new `AGENTCLOUD_TOKEN` privately before reconnecting. Project members cannot perform these actions. The Settings page does not yet have revoke or rotate controls, so these actions currently require the API.
+
 ## Persistence
 
 By default, state is stored in `.agentcloud/state.json`, beneath the application working directory. `AGENTCLOUD_DATA_DIR` can point to a different writable directory. Keep this directory on persistent storage if running the app in a container. It contains private project metadata and credential hashes and should not be committed. Fresh storage starts empty; existing saved projects are preserved, not automatically deleted or migrated into demo content.
@@ -200,6 +204,7 @@ The token check enforces the visual-system rules; it does not replace visual ins
 | [AWS_SETUP.md](AWS_SETUP.md) | Live AWS GPU demo preflight, Terraform workflow, spending policy, quota request, and launch gates |
 | [AWS_AUTH_STAGING.md](AWS_AUTH_STAGING.md) | Private EC2 staging deployment, SSM tunnel, and Better Auth verification workflow |
 | [ROADMAP.md](ROADMAP.md) | Dependency-ordered delivery phases and acceptance gates |
+| [PUBLIC_DEPLOYMENT_BOUNDARY.md](PUBLIC_DEPLOYMENT_BOUNDARY.md) | Public multi-organization threat model and launch gates; not an implemented deployment claim |
 | [VERIFICATION.md](VERIFICATION.md) | Recorded check results, remaining verification, and browser-tool limitations |
 | [AGENTS.md](AGENTS.md) | Contributor rules for design, testing, collaboration, and truthful capabilities |
 | `app/` | Next.js routes, UI, API handlers, and application styling |

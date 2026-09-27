@@ -1,0 +1,56 @@
+/* Polling updates should not animate or pull a reader away from earlier messages. */
+.conversation.codex-conversation {
+  scroll-behavior: auto;
+  overflow-anchor: none;
+}
+
+.codex-conversation:focus-visible {
+  outline: var(--focus-width) solid var(--color-accent);
+  outline-offset: calc(var(--focus-offset) * -1);
+}
+
+.codex-command {
+  flex-shrink: 0;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+.codex-command summary {
+  cursor: pointer;
+  padding: var(--space-2) 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-command summary:focus-visible {
+  outline: var(--focus-width) solid var(--color-accent);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-sm);
+}
+
+.codex-command-label {
+  color: var(--color-subtle);
+  margin-right: var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.codex-command-title {
+  color: var(--color-muted);
+}
+
+.codex-command-output {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: var(--border-width) solid var(--color-border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--color-muted);
+}
+
+.codex-event-status {
+  margin: 0;
+  flex-shrink: 0;
+}
