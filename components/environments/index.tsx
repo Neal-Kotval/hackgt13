@@ -529,7 +529,7 @@ function EnvironmentCard({
   const canStop = role === "owner" && job.state !== "stopped" && !job.stop_requested_at;
   const ready = job.state === "ready" && !job.stop_requested_at;
   const chatUrl = ready && serverUrl
-    ? `agentcloud://open?${new URLSearchParams({ projectId, runBoxId: job.id, serverUrl })}`
+    ? `agentcloud://open?${new URLSearchParams({ projectId, runBoxId: job.id, panel: "codex", serverUrl })}`
     : "";
   const stopped = job.state === "stopped";
   const stopDetail =

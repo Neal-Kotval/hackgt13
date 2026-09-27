@@ -9,7 +9,8 @@ export async function GET(request: Request) {
     const employee = await requireEmployee(request);
     const projectId = new URL(request.url).searchParams.get('projectId') || '';
     requireMembership(employee, projectId);
-    return Response.json({enabled:codexEnabled(),sessions:codexEnabled()?codexService().list(projectId):[]});
+    // `enabled` reports local Docker boxes; environment (runBox) sessions are always listed.
+    return Response.json({enabled:codexEnabled(),sessions:codexService().list(projectId)});
   } catch(error) { return codexFailure(error); }
 }
 export async function POST(request: Request) {
@@ -21,6 +22,9 @@ export async function POST(request: Request) {
     const project = (await getState()).projects.find(p=>p.id===input.projectId);
     const agent = project?.agents.find(a=>a.id===input.agentId);
     if(!project || !agent || agent.client !== 'Codex') throw new InputError('Choose a registered Codex agent in this project.',400);
-    return Response.json({session:codexService().initialize({projectId:project.id,agentId:agent.id,createdBy:employee.id,projectName:project.name,repoUrl:project.repo})},{status:202});
+    const runBoxId = input.runBoxId ?? null;
+    if(runBoxId !== null && (typeof runBoxId !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(runBoxId))) throw new InputError('Invalid environment.',400);
+    if(runBoxId === null && !codexEnabled()) throw new InputError('Local Codex boxes are disabled on this server.',503);
+    return Response.json({session:codexService().initialize({projectId:project.id,agentId:agent.id,createdBy:employee.id,projectName:project.name,repoUrl:project.repo,runBoxId})},{status:202});
   } catch(error) { return codexFailure(error); }
 }

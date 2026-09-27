@@ -5,6 +5,7 @@ import { desktopApi } from "../lib/desktop-api";
 import type { DeepLinkParseResult } from "../lib/deep-link";
 import {
   canOpenTerminal,
+  codexBlockedReason,
   isTransitional,
   runBoxStateLabel,
   runBoxStateTone,
@@ -35,7 +36,8 @@ type EnvironmentsPanelProps = {
   webBaseUrl: string;
   deepLink?: DeepLinkParseResult | null;
   onDeepLinkHandled?: () => void;
-  onOpenChat: (projectId: string, runBoxId: string) => void;
+  /** Opens Project chat targeting this environment's Codex (HAC-153). */
+  onOpenCodex?: (projectId: string, runBoxId: string) => void;
 };
 
 function providerLabel(job: RunBoxSummary): string {
@@ -92,7 +94,7 @@ export function EnvironmentsPanel({
   webBaseUrl,
   deepLink = null,
   onDeepLinkHandled,
-  onOpenChat,
+  onOpenCodex,
 }: EnvironmentsPanelProps) {
   const [projects, setProjects] = useState<ProjectsLoad>({ kind: "loading" });
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -362,6 +364,7 @@ export function EnvironmentsPanel({
             <ul className="environment-list" aria-label="Environments">
               {jobList.map((job) => {
                 const blocked = terminalBlockedReason(job);
+                const codexBlocked = codexBlockedReason(job);
                 const created = formatTime(job.createdAt);
                 const active = terminalFor?.id === job.id;
                 return (
@@ -401,15 +404,20 @@ export function EnvironmentsPanel({
                       <button
                         type="button"
                         className="button"
-                        disabled={blocked !== null}
-                        aria-describedby={blocked ? `blocked-${job.id}` : undefined}
-                        onClick={() => onOpenChat(job.projectId || projectId || "", job.id)}
+                        disabled={codexBlocked !== null || !onOpenCodex}
+                        aria-describedby={!codexBlocked ? undefined : codexBlocked === blocked ? `blocked-${job.id}` : `codex-blocked-${job.id}`}
+                        onClick={() => onOpenCodex?.(job.projectId || projectId || "", job.id)}
                       >
-                        Open chat
+                        Open Codex
                       </button>
                       {blocked ? (
                         <span className="detail-secondary" id={`blocked-${job.id}`}>
                           {blocked}
+                        </span>
+                      ) : null}
+                      {codexBlocked && codexBlocked !== blocked ? (
+                        <span className="detail-secondary" id={`codex-blocked-${job.id}`}>
+                          {codexBlocked}
                         </span>
                       ) : null}
                     </div>

@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   ipcMain,
   safeStorage,
+  shell,
   type IpcMainInvokeEvent,
 } from "electron";
 import { randomUUID } from "node:crypto";
@@ -22,7 +23,7 @@ import { ChatStore, ChatStoreError } from "./chat-store.ts";
 import { SessionStore } from "./session-store.ts";
 import { DeviceKeyRegistrar, DeviceKeyStore } from "./device-key.ts";
 import { TerminalSessions } from "./terminal-sessions.ts";
-import { registerCodexIpc } from "./codex-ipc.ts";
+import { isChatGptVerificationUrl } from "../src/lib/chatgpt-sign-in.ts";
 import type { AssistantStreamEvent, TerminalEvent } from "../src/lib/types.ts";
 import {
   findDeepLinkUrl,
@@ -461,15 +462,6 @@ app.whenReady().then(async () => {
     },
   });
   terminals = terminalSessions;
-  // HAC-122: Codex panel IPC (codex:*), same connection API and device key.
-  registerCodexIpc({
-    request: (requestPath, init) => authClient.fetchHuman(requestPath, init),
-    privateKey: () => registrar.privateKey(),
-    beforeConnect: async () => {
-      await registrar.ensureRegistered();
-    },
-    getBaseUrl: () => authClient.getBaseUrl(),
-  });
 
   wrapIpc("auth:status", async () => {
     const status = await authClient.status();
@@ -497,6 +489,14 @@ app.whenReady().then(async () => {
       return registrar.ensureRegistered();
     }
     return status;
+  });
+  // HAC-153: ChatGPT device sign-in for a Codex session. Only OpenAI's auth
+  // origin is ever opened; the URL is re-checked here, not trusted from the renderer.
+  wrapIpc("codexSignIn:open", async (_event, verificationUrl: unknown) => {
+    if (!isChatGptVerificationUrl(verificationUrl)) {
+      throw new Error("Refusing to open a sign-in address outside https://auth.openai.com/.");
+    }
+    await shell.openExternal(verificationUrl);
   });
   wrapIpc("api:listRunBoxes", async (_event, projectId: string) =>
     apiClient.listRunBoxes(projectId),

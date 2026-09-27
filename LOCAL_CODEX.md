@@ -1,7 +1,7 @@
 # Test Codex through a standard environment
 
 The product runs Codex inside a selected execution environment. Project chat uses
-the same SSH connection, readiness checks, sign-in, and run recording for each
+the same backend SSH transport, readiness checks, sign-in, and session history for each
 supported environment. There is no separate website workflow for creating a local
 Codex agent.
 
@@ -27,8 +27,9 @@ With Node 22 and Docker available:
    normal lifecycle controls when finished.
 
 The worker clones the configured eligible repository, pins the SSH host key, and
-injects registered project-member device keys. Desktop keeps private keys in its
-main process and runs Codex as the environment user. ChatGPT authentication stays
+injects registered project-member device keys and the backend's per-install runner
+key. The backend runs `codex app-server` as the environment user over pinned SSH;
+desktop calls the authenticated session API. ChatGPT authentication stays
 inside that environment. Only use an account intended for the project's members.
 SSH is trusted shell access, not a filesystem or command sandbox.
 
@@ -40,10 +41,16 @@ of successful SSH verification or model execution.
 
 ## Legacy test-box data
 
-The old `/api/codex-sessions` app-server implementation and its private Docker
-volumes may still exist for compatibility. It is not used by the product UI.
+Legacy standalone Docker sessions and their private volumes may still exist for
+compatibility. They are not exposed by the product UI. `/api/codex-sessions`
+remains the shared protocol for environment sessions, always with a `runBoxId`.
 Leave `AGENTCLOUD_CODEX_ENABLED` unset or disabled for the environment-based flow.
 Existing legacy workspace and history are not deleted or silently imported.
 An operator can retain the old box stopped while moving specifically needed files
 and credentials privately into an authorized test environment. The old box cannot
 be adopted unchanged: it lacks the standard SSH account, host key and lifecycle.
+
+New environments must be allocated by the current worker so they include the
+backend runner key. See [docs/stage3-contract.md](docs/stage3-contract.md) for
+session ownership, reconnect, redaction, and execution boundaries. Stopping a
+session ends its SSH transport; stopping an environment tears down the machine.

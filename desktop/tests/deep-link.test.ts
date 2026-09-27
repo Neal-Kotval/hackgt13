@@ -4,6 +4,7 @@ import {
   findDeepLinkUrl,
   parseAgentCloudDeepLink,
   deepLinkServerError,
+  deepLinkDestination,
 } from "../src/lib/deep-link.ts";
 
 describe("parseAgentCloudDeepLink", () => {
@@ -103,5 +104,40 @@ describe("findDeepLinkUrl", () => {
     for (const query of ["codexSessionId=s1", "projectId=p1&codexSessionId=..%2Fsecret", "projectId=p1&codexSessionId=s1&runBoxId=r1", "projectId=p1&codexSessionId=s1&environmentId=e1"]) {
       assert.equal(parseAgentCloudDeepLink(`agentcloud://open?${query}`).ok, false);
     }
+  });
+});
+
+describe("deep-link panel routing (HAC-153)", () => {
+  function target(raw: string) {
+    const result = parseAgentCloudDeepLink(raw);
+    assert.equal(result.ok, true, raw);
+    return (result as { ok: true; target: import("../src/lib/deep-link.ts").DeepLinkTarget }).target;
+  }
+
+  it("routes panel=codex to Project chat targeting the environment", () => {
+    const parsed = target("agentcloud://open?projectId=p1&runBoxId=job-42&panel=codex");
+    assert.deepEqual(parsed, { projectId: "p1", runBoxId: "job-42", panel: "codex" });
+    assert.equal(deepLinkDestination(parsed), "project-chat-environment-codex");
+  });
+
+  it("keeps terminal links (explicit or implied) on the Project chat terminal", () => {
+    assert.equal(deepLinkDestination(target("agentcloud://open?projectId=p1&runBoxId=job-42")), "project-chat-environment-terminal");
+    assert.equal(deepLinkDestination(target("agentcloud://open?projectId=p1&runBoxId=job-42&panel=terminal")), "project-chat-environment-terminal");
+  });
+
+  it("routes sessions and task links as before", () => {
+    assert.equal(deepLinkDestination(target("agentcloud://open?projectId=p1&codexSessionId=s1")), "project-chat-session");
+    assert.equal(deepLinkDestination(target("agentcloud://open?projectId=p1&environmentId=e1")), "tasks");
+    assert.equal(deepLinkDestination(target("agentcloud://open?projectId=p1&taskRunBoxId=j1")), "tasks");
+  });
+
+  it("rejects unknown panels and a panel without an environment", () => {
+    assert.equal(parseAgentCloudDeepLink("agentcloud://open?projectId=p1&runBoxId=j1&panel=shell").ok, false);
+    assert.equal(parseAgentCloudDeepLink("agentcloud://open?projectId=p1&panel=codex").ok, false);
+  });
+
+  it("never takes host or port from a codex link", () => {
+    const parsed = target("agentcloud://open?projectId=p1&runBoxId=j1&panel=codex&host=evil.test&port=2222");
+    assert.deepEqual(parsed, { projectId: "p1", runBoxId: "j1", panel: "codex" });
   });
 });
