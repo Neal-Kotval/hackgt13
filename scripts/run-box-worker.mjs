@@ -4,7 +4,7 @@ import { getDatabase } from "../lib/auth.mjs";
 import { migrateRunBoxJobs, requestRunBoxStop } from "../lib/run-box-jobs.mjs";
 import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
 import { migrateAwsGpuEvidence } from "../lib/aws-gpu-evidence.mjs";
-import { assumeGpuWorkerRole, createAwsGpuProvider } from "../lib/aws-gpu-provider.mjs";
+import { createAwsGpuProvider, scopedWorkerAws } from "../lib/aws-gpu-provider.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
 import { createAwsCpuProvider, discoverPublicIpv4, scanPublicHostKey } from "../lib/aws-cpu-provider.mjs";
 import { createAwsCpuAgentCleanup, migrateAwsCpuEnvironment, reconcileAwsCpuSshAccess, workOneAwsCpuJob } from "../lib/aws-cpu-worker.mjs";
@@ -41,7 +41,7 @@ if (process.argv.length > 4 || !["--once", "--loop"].includes(mode) || !["aws-ec
 // AGENTCLOUD_AWS_CPU_SSH_CIDR (a public /32, or "auto" to use this host's address),
 // AGENTCLOUD_AWS_CPU_SSH_KEY_FILE and AGENTCLOUD_AWS_CPU_SSH_PUBLIC_KEY (operator ed25519 key).
 async function awsCycle() {
-  const aws = await assumeGpuWorkerRole();
+  const aws = await scopedWorkerAws();
   const subnetId = process.env.AGENTCLOUD_GPU_SUBNET_ID;
   const gpuProvider = createAwsGpuProvider({ aws, subnetId });
   // The CPU adapter reuses the GPU adapter's tagged-instance operations and also

@@ -152,3 +152,17 @@ test("termination does not succeed until the root volume is gone", async () => {
   assert.deepEqual(evidence.volumeIds, ["vol-0123456789abcdef0"]);
   assert.equal(evidence.state, "terminated");
 });
+
+test("scopedWorkerAws uses an existing worker-role session, assumes from staging, and refuses root", async () => {
+  const { scopedWorkerAws } = await import("../lib/aws-gpu-provider.mjs");
+  const cli = (arn) => async () => ({ Account: "662660921850", Arn: arn });
+  let assumed = 0;
+  const assume = async () => { assumed++; return "assumed-cli"; };
+  const worker = cli("arn:aws:sts::662660921850:assumed-role/agentcloud-demo-worker/botocore-session-1");
+  assert.equal(await scopedWorkerAws({ aws: worker, assume }), worker);
+  assert.equal(assumed, 0);
+  assert.equal(await scopedWorkerAws({ aws: cli("arn:aws:sts::662660921850:assumed-role/agentcloud-auth-staging/i-0a2e"), assume }), "assumed-cli");
+  const rootAssume = async () => { throw new Error("root credentials are rejected"); };
+  await assert.rejects(scopedWorkerAws({ aws: cli("arn:aws:iam::662660921850:root"), assume: rootAssume }), /root credentials are rejected/);
+  await assert.rejects(scopedWorkerAws({ aws: async () => ({ Account: "111111111111", Arn: "x" }), assume }), /another account/);
+});
