@@ -486,14 +486,14 @@ export function CloudApp() {
             )}
           </>
         )}
-        <footer>
+        <footer className="workspace-footer">
           <span>
             <TerminalWindow />
             alto <span className="muted">/ workspace</span>
           </span>
           <span className="muted">
-            Single-user development environment
-            <span className="footer-dot">●</span> v0.1
+            <span>Single-user development environment</span>
+            <span className="workspace-footer-version"><span className="footer-dot">●</span> v0.1</span>
           </span>
         </footer>
       </main>

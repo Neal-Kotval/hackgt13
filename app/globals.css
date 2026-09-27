@@ -958,6 +958,18 @@ footer > span {
   align-items: center;
   gap: var(--space-2);
 }
+.workspace-footer {
+  margin-top: var(--space-8);
+  padding-block: var(--space-4);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.workspace-footer-version {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
 .footer-dot {
   color: var(--color-success);
 }
@@ -1747,6 +1759,11 @@ dialog::backdrop {
   }
   footer > span {
     flex-wrap: wrap;
+  }
+  .workspace-footer {
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-top: var(--space-6);
   }
   .client-options {
     gap: var(--space-2);
