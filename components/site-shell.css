@@ -129,6 +129,7 @@
   background: var(--color-glass-hover);
   border: var(--border-width) solid var(--color-glass-edge);
   border-radius: var(--radius-md);
+  text-decoration: none;
 }
 
 .account-avatar {
