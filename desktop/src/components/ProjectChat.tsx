@@ -111,7 +111,7 @@ export function ProjectChat({
   const [deletingId, setDeletingId] = useState("");
   const [renamingId, setRenamingId] = useState("");
   const [ownerProject, setOwnerProject] = useState("");
-  function useDraft(value: boolean) {
+  function setDraftActive(value: boolean) {
     draftModeRef.current = value;
     setDraftMode(value);
   }
@@ -167,7 +167,7 @@ export function ProjectChat({
         setProjects(state.projects);
         if (deepLink?.ok) {
           navigationEpoch.current++;
-          useDraft(false);
+          setDraftActive(false);
           if (!state.projects.some((p) => p.id === deepLink.target.projectId)) {
             blockAutoProject.current = true;
             desiredSession.current = deepLink.target.codexSessionId || null;
@@ -248,7 +248,7 @@ export function ProjectChat({
         const requested = desiredSession.current;
         if (requested) {
           if (list.some((s) => s.id === requested)) {
-            useDraft(false);
+            setDraftActive(false);
             desiredSession.current = null;
             setSessionId(requested);
             setActionError(null);
@@ -399,7 +399,7 @@ export function ProjectChat({
     if (busy || attaching) return;
     navigationEpoch.current++;
     setDraftAgentId(selectedSession?.agentId || draftAgentId || sessionForTarget(sessions, currentTarget)?.agentId || "");
-    useDraft(true);
+    setDraftActive(true);
     setTargetChoice(currentTarget);
     requestEnvironment(null);
     desiredSession.current = null;
@@ -465,7 +465,7 @@ export function ProjectChat({
       if (messageText === turn.text) setAttachments(current => ({ ...current, [key]: [] }));
       delete draftStarts.current[key];
       if (epoch === navigationEpoch.current) {
-        useDraft(false);
+        setDraftActive(false);
         setSessionId(id);
       }
     } catch (cause) {
@@ -477,7 +477,7 @@ export function ProjectChat({
         setDrafts(current => ({ ...current, [id]: current[key] || "", [key]: "" }));
         setAttachments(current => ({ ...current, [id]: current[key] || [], [key]: [] }));
         delete draftStarts.current[key];
-        if (epoch === navigationEpoch.current) { useDraft(false); setSessionId(id); }
+        if (epoch === navigationEpoch.current) { setDraftActive(false); setSessionId(id); }
       }
       if (cause instanceof CodexRequestError && cause.code === "environment_setup_required")
         setSetupRequired(current => ({ ...current, [currentTarget]: true }));
@@ -497,7 +497,7 @@ export function ProjectChat({
       delete pending.current[id];
       if (id === sessionId) {
         setDraftAgentId(sessionForTarget(sessions.filter(item => item.id !== id), currentTarget)?.agentId || "");
-        useDraft(true); setTargetChoice(currentTarget); setSessionId(""); setSnapshot(null);
+        setDraftActive(true); setTargetChoice(currentTarget); setSessionId(""); setSnapshot(null);
       }
     } catch (cause) {
       setHistoryError(cause instanceof Error ? cause.message : "Could not delete the chat.");
@@ -531,7 +531,7 @@ export function ProjectChat({
       return;
     const existing = sessionForTarget(sessions, `runBox:${pendingEnvironment}`);
     if (existing) {
-      useDraft(false);
+      setDraftActive(false);
       requestEnvironment(null);
       setTargetChoice(`runBox:${pendingEnvironment}`);
       setSessionId(existing.id);
@@ -756,7 +756,7 @@ export function ProjectChat({
   function chooseProject(id: string) {
     if (busy) return;
     navigationEpoch.current++;
-    useDraft(false);
+    setDraftActive(false);
     setCreateError(null);
     requestEnvironment(null);
     setTargetChoice("");
@@ -789,7 +789,7 @@ export function ProjectChat({
   function chooseAgent(id: string) {
     if (busy) return;
     navigationEpoch.current++;
-    useDraft(false);
+    setDraftActive(false);
     requestEnvironment(null);
     desiredSession.current = null;
     setSessionId(id);
