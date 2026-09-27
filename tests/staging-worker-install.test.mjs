@@ -25,6 +25,9 @@ test("the staging worker unit configures aws-cpu and the app trusts CloudFront's
   assert.match(readFileSync("scripts/aws-auth/service-start.sh", "utf8"), /AGENTCLOUD_DATA_DIR=\/var\/lib\/agentcloud/);
   assert.match(deploy, /install -m 0644 "\$RELEASE\/scripts\/aws-auth\/runtime-secret.mjs"/);
   assert.match(readFileSync("scripts/aws-auth/service-start.sh", "utf8"), /runtime-secret\.mjs/);
+  // Version skew protection: build and server share the release revision as the deployment ID.
+  assert.match(deploy, /NEXT_DEPLOYMENT_ID="\$REVISION" \/usr\/bin\/npm-22 run build/);
+  assert.match(readFileSync("scripts/aws-auth/service-start.sh", "utf8"), /export NEXT_DEPLOYMENT_ID=/);
 });
 
 test("the hosted start script keeps a plain auth secret and reads Backboard from JSON", () => {

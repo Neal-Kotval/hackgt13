@@ -1,21 +1,54 @@
-.environment-visibility {
+.environment-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-4);
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
 }
-
+.environment-toolbar > .picker-select {
+  flex: 1;
+  min-width: min(100%, var(--card-min-width));
+  max-width: var(--content-narrow);
+}
 .environment-visibility-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
   min-height: var(--control-height-touch);
+  padding: var(--space-2) 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-transparent);
   color: var(--color-muted);
   font-size: var(--text-sm);
+  white-space: nowrap;
   cursor: pointer;
 }
-
-.environment-visibility-toggle input {
-  accent-color: var(--color-accent);
-  margin: 0;
+.environment-visibility-toggle:hover { color: var(--color-accent); }
+.environment-visibility-toggle[aria-checked="true"] { color: var(--color-accent); }
+.environment-switch-track {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: var(--space-10);
+  height: var(--space-6);
+  padding: var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--color-border-strong);
+  transition: background-color var(--duration-normal) var(--ease-standard);
+}
+.environment-switch-track > span {
+  width: var(--space-4);
+  height: var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  transition: transform var(--duration-normal) var(--ease-standard);
+}
+.environment-visibility-toggle[aria-checked="true"] .environment-switch-track { background: var(--color-accent); }
+.environment-visibility-toggle[aria-checked="true"] .environment-switch-track > span { transform: translateX(var(--space-4)); }
+.environment-results-count { margin: 0; color: var(--color-subtle); font-size: var(--text-xs); line-height: var(--leading-normal); }
+.environment-results { min-width: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+@media (max-width: 768px) {
+  .environment-toolbar > .picker-select { max-width: none; }
 }

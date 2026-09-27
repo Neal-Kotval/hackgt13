@@ -118,7 +118,7 @@ The sidebar hides native scrollbar chrome while preserving wheel, touch, and key
 
 Entrances use a noticeable 24px rise over 420ms, with 65ms staggering capped at 260ms for sibling surfaces. The drawer travels 48px. Buttons and project links lift slightly on hover. Native smooth scrolling applies to page anchors and sidebar programmatic scrolling without intercepting wheel or touch input; reduced motion restores instant scrolling and disables travel and staggering.
 
-The normal project navigation is Overview, Environments, Runs, and Settings. Overview shows read-only task progress and setup guidance; Environments groups resource requests/approvals with an expandable catalog; Runs contains activity and reported output; Settings is about the project: General (name, repository), Environment defaults (machine size, visibility), Members (access, invitations), Codex sign-in for each environment with links to its detail page, and Shared memory. Organization management is labeled Organizations. Design system, collaboration/stretch pages, and the legacy task board remain directly addressable but are absent from normal navigation. This presentation change preserves records and API contracts; it does not claim desktop integration or remote execution is complete.
+The normal project navigation is Overview, Environments, Runs, and Settings. Overview shows environment readiness, setup guidance, and agent activity; Environments groups resource requests/approvals with an expandable catalog; Runs contains activity and reported output; Settings is about the project: General (name, repository), Environment defaults (machine size, visibility), Members (access, invitations), Codex sign-in for each environment with links to its detail page, and Shared memory. Organization management is labeled Organizations. Design system, collaboration/stretch pages, and the legacy task board remain directly addressable but are absent from normal navigation. This presentation change preserves records and API contracts; it does not claim desktop integration or remote execution is complete.
 
 Semantic action variants use green (`.button.success`) for approvals, access grants, and acceptance; red (`.button.danger`) for removal, revocation, decline, and stopping resources; and amber (`.button.warning`) for operations that require caution, such as moving ownership context. General creation, navigation, and sending actions remain blue or neutral. Variants use the paired soft surface at rest and the semantic fill on hover, with `--color-status-action-text` as white foreground on the web. Labels, disabled states, and immediate focus outlines remain visible. Task and request badges use the corresponding status roles; an approved request still does not mean a resource is ready.
 
@@ -165,3 +165,8 @@ action, and secondary project settings in the same wrapping action row. External
 actions use directional icons. Button links inherit the web's decoration reset
 and visible keyboard focus. Without a selected project, the fallback says Open
 website rather than implying project-specific settings.
+
+Sign-in keeps the confirmation action to the left of Create an account. Resend
+appears only for an address with a successful confirmation request in the current
+tab, including signup. Unverified-account and expired-link recovery first offers
+Send confirmation email. Changing the address hides another address's resend state.

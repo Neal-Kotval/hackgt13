@@ -1,7 +1,7 @@
 import "./EnvironmentsPanel.css";
 import { readHideStopped, saveHideStopped, visibleEnvironments } from "../lib/environment-visibility";
 import { Select } from "./ui/Select";
-import { useSurfaceMotion } from "./SurfaceMotion";
+import { MotionSurface, useSurfaceMotion } from "./SurfaceMotion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TerminalPanel } from "./TerminalPanel";
 import { desktopApi } from "../lib/desktop-api";
@@ -333,6 +333,7 @@ export function EnvironmentsPanel({
 
       {projectList.length > 0 ? (
         <div className="environments-layout" ref={contentRef}>
+          <div className="environment-toolbar">
           <label className="picker-select">
             <span className="visually-hidden">Project</span>
             <Select
@@ -352,22 +353,19 @@ export function EnvironmentsPanel({
             </Select>
           </label>
 
-          <div className="environment-visibility">
-            <label className="environment-visibility-toggle">
-              <input
-                type="checkbox"
-                checked={hideStopped}
-                onChange={(event) => updateHideStopped(event.target.checked)}
-              />
-              Hide stopped environments
-            </label>
-            {hiddenCount > 0 ? (
-              <span className="detail-secondary" role="status">
-                {hiddenCount} stopped {hiddenCount === 1 ? "environment" : "environments"} hidden
-              </span>
-            ) : null}
+          <button
+            type="button" role="switch" className="environment-visibility-toggle"
+            aria-label="Hide stopped environments" aria-checked={hideStopped}
+            onClick={() => updateHideStopped(!hideStopped)}
+          >
+            <span className="environment-switch-track" aria-hidden="true"><span /></span>
+            Hide stopped
+          </button>
           </div>
-
+          {jobs.kind === "ok" && jobList.length > 0 && <p className="environment-results-count" role="status">
+            Showing {visibleJobs.length} of {jobList.length} environments{hiddenCount > 0 ? ` · ${hiddenCount} stopped hidden` : ""}
+          </p>}
+          <MotionSurface className="environment-results" transitionKey={`${projectId}:${hideStopped}`}>
           {jobs.kind === "error" ? (
             <p className="error-banner" role="alert">
               {jobs.message}
@@ -466,6 +464,7 @@ export function EnvironmentsPanel({
               })}
             </ul>
           ) : null}
+          </MotionSurface>
         </div>
       ) : null}
 
