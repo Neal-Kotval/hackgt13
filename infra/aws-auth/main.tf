@@ -233,7 +233,9 @@ resource "aws_eip" "app" {
 
 resource "aws_cloudfront_distribution" "app" {
   enabled         = true
-  is_ipv6_enabled = true
+  # IPv4 only: CloudFront-Viewer-Address must be the IPv4 the employee also uses for SSH to
+  # aws-cpu boxes (HAC-166). Boxes have no IPv6, so an IPv6 viewer address cannot be admitted.
+  is_ipv6_enabled = false
   price_class     = "PriceClass_100"
   comment         = "AgentCloud shared hackathon app"
 
