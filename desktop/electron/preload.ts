@@ -100,6 +100,8 @@ const api: DesktopApi = {
   },
   listRunBoxes: (projectId) =>
     ipcRenderer.invoke("api:listRunBoxes", projectId) as Promise<RunBoxSummary[]>,
+  openChatGptSignIn: (verificationUrl) =>
+    ipcRenderer.invoke("codexSignIn:open", verificationUrl) as Promise<void>,
   deviceKeyStatus: () =>
     ipcRenderer.invoke("deviceKey:status") as Promise<DeviceKeyStatus>,
   terminalOpen: (sessionId, runBoxId, size) =>

@@ -17,6 +17,8 @@ export type ProjectAgentSnapshot = {
   role: string;
   status: string;
   lastSeen?: string;
+  /** Agent client (e.g. "Codex") when the server reports it. */
+  client?: string;
 };
 
 export type ProjectTaskSnapshot = {
@@ -150,12 +152,14 @@ function mapProject(value: unknown): ProjectSnapshot | null {
           const agentName = stringField(row, "name");
           if (!agentId || !agentName) return null;
           const lastSeen = stringField(row, "lastSeen");
+          const client = stringField(row, "client");
           return {
             id: agentId,
             name: agentName,
             role: stringField(row, "role", "unknown"),
             status: stringField(row, "status", "unknown"),
             ...(lastSeen ? { lastSeen } : {}),
+            ...(client ? { client } : {}),
           } satisfies ProjectAgentSnapshot;
         })
         .filter((agent): agent is ProjectAgentSnapshot => Boolean(agent))
