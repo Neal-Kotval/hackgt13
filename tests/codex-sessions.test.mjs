@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {createCodexSessionService} from '../lib/codex-sessions.mjs';
 const tick=()=>new Promise(r=>setImmediate(r));
 function fixture({signedIn=true,turns=[]}={}) {
- const db=new Database(':memory:');let callbacks;const calls=[];
+ const db=new Database(':memory:');let callbacks;const calls=[];const connections=new Map();
  const runtime={async request(method,params){calls.push({method,params});
   if(method==='account/read')return {account:signedIn?{type:'chatgpt'}:null};
   if(method==='thread/start'||method==='thread/resume')return {thread:{id:'thread-1',turns}};
@@ -13,8 +13,8 @@ function fixture({signedIn=true,turns=[]}={}) {
   if(method==='turn/start'){callbacks.onNotification('turn/started',{turn:{id:'turn-1'}});return {turn:{id:'turn-1'}};}
   return {};
  },close(){},async stop(){}};
- const service=createCodexSessionService({db,dataDir:'/tmp/codex-test',runtimeFactory:async options=>{callbacks=options;return runtime;}});
- return {db,service,calls,notify:(m,p)=>callbacks.onNotification(m,p)};
+ const service=createCodexSessionService({db,dataDir:'/tmp/codex-test',runtimeFactory:async options=>{callbacks=options;connections.set(options.sessionId,options);return runtime;}});
+ return {db,service,calls,notifySession:(id,m,p)=>connections.get(id).onNotification(m,p),exit:()=>callbacks.onExit(),notify:(m,p)=>callbacks.onNotification(m,p)};
 }
 test('initialization is idempotent and waits for actual account/thread',async()=>{
  const f=fixture({signedIn:false});const a=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});
@@ -147,5 +147,40 @@ test('large streamed output and patches have explicit retention bounds',async()=
  const patch=f.service.snapshot(s.id).events.find(e=>e.id==='file').details;
  assert.equal(patch.changes.length,100);assert.equal(patch.truncated,true);
  assert(patch.changes.reduce((sum,c)=>sum+c.path.length+c.diff.length,0)<=32768);
+ f.service.close();f.db.close();
+});
+
+test('stream lifecycle releases capacity after interruption, disconnect, stop and resume',async()=>{
+ const f=fixture();const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ const fill=()=>{for(let i=0;i<300;i++)f.notify('item/commandExecution/outputDelta',{itemId:`pending-${i}`,delta:'unpublished secret fragment'});};
+ const check=label=>{
+  f.notify('item/commandExecution/outputDelta',{itemId:label,delta:'fresh output\n'});
+  assert.equal(f.service.snapshot(s.id).events.find(e=>e.id===label)?.details.output,'fresh output\n');
+ };
+ fill();f.notify('turn/completed',{turn:{id:'interrupted',status:'interrupted'}});check('after-interrupt');
+ fill();f.exit();await f.service.action(s.id,{action:'resume'});check('after-disconnect');
+ fill();await f.service.action(s.id,{action:'stop'});await f.service.action(s.id,{action:'resume'});check('after-stop');
+ fill();await f.service.action(s.id,{action:'resume'});check('after-resume');
+ f.service.close();f.db.close();
+});
+test('command flags and raw AgentCloud credentials are redacted in saved details',async()=>{
+ const f=fixture();const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ const token='AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcde';
+ assert.equal(token.length,43);
+ f.notify('item/completed',{item:{id:'cmd',type:'commandExecution',status:'completed',command:`tool --token flag-token --password "two words" --api-key=key-secret`,aggregatedOutput:`issued ${token}\n-----BEGIN RSA PRIVATE KEY-----\nkey-material\n-----END RSA PRIVATE KEY-----`}});
+ const saved=JSON.stringify(f.db.prepare('SELECT * FROM codex_session_event').all());
+ for(const secret of ['flag-token','two words','key-secret',token,'key-material'])assert(!saved.includes(secret),secret);
+ assert(f.service.snapshot(s.id).events.find(e=>e.id==='cmd').details.command.includes('--token [redacted]'));
+ f.service.close();f.db.close();
+});
+
+test('closing one session preserves the other session output stream',async()=>{
+ const f=fixture();const first=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ const second=f.service.initialize({projectId:'p',agentId:'b',createdBy:'u'});await tick();
+ f.notifySession(first.id,'item/commandExecution/outputDelta',{itemId:'shared-item-id',delta:'first part '});
+ f.notifySession(second.id,'item/commandExecution/outputDelta',{itemId:'shared-item-id',delta:'discarded '});
+ f.notifySession(second.id,'turn/completed',{turn:{id:'t',status:'interrupted'}});
+ f.notifySession(first.id,'item/commandExecution/outputDelta',{itemId:'shared-item-id',delta:'second part\n'});
+ assert.equal(f.service.snapshot(first.id).events.find(e=>e.id==='shared-item-id').details.output,'first part second part\n');
  f.service.close();f.db.close();
 });
