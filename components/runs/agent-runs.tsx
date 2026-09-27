@@ -49,10 +49,14 @@ function Details({ run, closeHref, onStatusChange }: { run: ChatConversation; cl
       <Link className={styles.close} href={closeHref} scroll={false} aria-label="Close conversation details"><X aria-hidden="true" /></Link>
     </div>
     <div className={styles.statusControl}>
-      <label className={styles.label} htmlFor="conversation-status">Conversation status</label>
-      <Select id="conversation-status" value={run.workflowStatus} disabled={saving} onChange={event => void changeStatus(event.target.value as ConversationStatus)}>
-        {Object.keys(workflowLabels).map(value => <option value={value} key={value}><WorkflowBadge status={value as ConversationStatus} /></option>)}
-      </Select>
+      <h4 className={styles.label} id="conversation-status-label">Conversation status</h4>
+      <div className={styles.statusChoices} role="group" aria-labelledby="conversation-status-label" aria-busy={saving}>
+        {(Object.keys(workflowLabels) as ConversationStatus[]).map(status => <button
+          type="button" key={status} disabled={saving} aria-pressed={run.workflowStatus === status}
+          className={`${styles.statusChoice} ${styles[workflowTones[status]]}`}
+          onClick={() => { if (status !== run.workflowStatus) void changeStatus(status); }}
+        ><WorkflowBadge status={status} /></button>)}
+      </div>
       <p className={styles.note}>You choose when this conversation is done. Agent replies won’t change this status.</p>
       <span className={styles.note} role="status">{saving ? "Saving…" : saved ? "Status saved" : run.workflowUpdatedAt ? `Updated by ${run.workflowUpdatedBy || "a project member"} · ${date(run.workflowUpdatedAt)}` : ""}</span>
       {saveError && <p className={styles.error} role="alert">{saveError}</p>}
