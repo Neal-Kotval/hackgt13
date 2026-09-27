@@ -6,6 +6,7 @@ import path from "node:path";
 import { createConnection } from "node:net";
 import { once } from "node:events";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { CliBridge } from "../electron/cli-bridge.ts";
 import { TerminalSessions } from "../electron/terminal-sessions.ts";
 
@@ -62,7 +63,7 @@ test("bridge refuses an existing regular file", async () => {
 });
 
 test("CLI provides help and actionable usage/TTY/install errors", () => {
-  const run = (args: string[]) => spawnSync(process.execPath, [path.resolve("cli/alto.mjs"), ...args], { encoding: "utf8", env: { ...process.env, ALTO_LAUNCHER_PATH: "" } });
+  const run = (args: string[]) => spawnSync(process.execPath, [fileURLToPath(new URL("../cli/alto.mjs", import.meta.url)), ...args], { encoding: "utf8", env: { ...process.env, ALTO_LAUNCHER_PATH: "" } });
   assert.match(run(["--help"]).stdout, /alto ssh/);
   assert.equal(run(["ssh"]).status, 2);
   const nonTty = run(["ssh", "box-1"]);
