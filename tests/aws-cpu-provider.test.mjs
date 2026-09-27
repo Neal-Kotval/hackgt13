@@ -15,7 +15,7 @@ const identity = { Account: ACCOUNT, Arn: `arn:aws:sts::${ACCOUNT}:assumed-role/
 
 function job(extra = {}) {
   return { id: jobId, provider: "aws-ec2", profile_id: "aws-cpu", project_id: "project-1", max_duration_minutes: 60,
-    created_at: "2026-09-26T12:00:00.000Z", repo_url: "https://github.com/example/repo.git", repo_revision: null, ...extra };
+    provider_resource_id: instanceId, created_at: "2026-09-26T12:00:00.000Z", repo_url: "https://github.com/example/repo.git", repo_revision: null, ...extra };
 }
 
 function templateData(overrides = {}) {
@@ -34,7 +34,39 @@ function templateData(overrides = {}) {
 // A fake AWS CLI for a healthy, applied account. `overrides[operation]` replaces a response.
 function fakeAws({ overrides = {}, rules = [], calls = [] } = {}) {
   const price = JSON.stringify({ terms: { OnDemand: { t: { priceDimensions: { d: { unit: "Hrs", pricePerUnit: { USD: "0.0416000000" } } } } } } });
+  let lock = null;
+  const registry = new Map();
+  let nextRuleId = 0;
   const responses = {
+    "dynamodb:put-item": (args) => {
+      const input = JSON.parse(args.at(-1));
+      if (input.Item.references) { registry.set(input.Item.group_id.S, structuredClone(input.Item)); return {}; }
+      if (lock && Number(lock.expires_at.N) >= Number(input.ExpressionAttributeValues[":now"].N))
+        throw new Error("ConditionalCheckFailedException");
+      lock = input.Item;
+      return {};
+    },
+    "dynamodb:get-item": (args) => { const input = JSON.parse(args.at(-1)); return { Item: registry.get(input.Key.group_id.S) }; },
+    "dynamodb:delete-item": (args) => {
+      const input = JSON.parse(args.at(-1));
+      if (lock?.owner.S !== input.ExpressionAttributeValues[":owner"].S) throw new Error("ConditionalCheckFailedException");
+      lock = null;
+      return {};
+    },
+    "ec2:create-tags": (args) => {
+      const rule = rules.find((rule) => rule.SecurityGroupRuleId === args[args.indexOf("--resources") + 1]);
+      for (const tag of JSON.parse(args.at(-1))) {
+        rule.Tags = (rule.Tags || []).filter((entry) => entry.Key !== tag.Key);
+        rule.Tags.push(tag);
+      }
+      return {};
+    },
+    "ec2:delete-tags": (args) => {
+      const rule = rules.find((rule) => rule.SecurityGroupRuleId === args[args.indexOf("--resources") + 1]);
+      const removed = JSON.parse(args.at(-1));
+      rule.Tags = rule.Tags.filter((tag) => !removed.some((entry) => entry.Key === tag.Key && entry.Value === tag.Value));
+      return {};
+    },
     "sts:get-caller-identity": identity,
     "ec2:describe-launch-templates": { LaunchTemplates: [{ LaunchTemplateId: "lt-0cpu" }] },
     "ec2:describe-launch-template-versions": { LaunchTemplateVersions: [{ LaunchTemplateData: templateData() }] },
@@ -61,8 +93,10 @@ function fakeAws({ overrides = {}, rules = [], calls = [] } = {}) {
     },
     "ec2:authorize-security-group-ingress": (args) => {
       const input = JSON.parse(args.at(-1));
-      const rule = { SecurityGroupRuleId: "sgr-0e1f", IsEgress: false, IpProtocol: "tcp", FromPort: 22, ToPort: 22,
+      const rule = { SecurityGroupRuleId: `sgr-0e${nextRuleId++}`, IsEgress: false, IpProtocol: "tcp", FromPort: 22, ToPort: 22,
         CidrIpv4: input.IpPermissions[0].IpRanges[0].CidrIp, Tags: input.TagSpecifications[0].Tags };
+      if (rules.some((item) => item.CidrIpv4 === rule.CidrIpv4 && item.IpProtocol === rule.IpProtocol && item.FromPort === rule.FromPort && item.ToPort === rule.ToPort))
+        throw new Error("InvalidPermission.Duplicate");
       rules.push(rule);
       return { Return: true, SecurityGroupRules: [rule] };
     },
@@ -140,7 +174,7 @@ test("root identity is rejected before any CPU operation", async () => {
 
 test("allocation revokes stale SSH rules and launches with tagged deadline and public-only user data", async () => {
   const calls = [];
-  const rules = [{ SecurityGroupRuleId: "sgr-0a1d", IsEgress: false, CidrIpv4: "198.51.100.1/32", Tags: [{ Key: "AgentCloudJobId", Value: "old" }] }];
+  const rules = [{ SecurityGroupRuleId: "sgr-0a1d", IsEgress: false, IpProtocol: "tcp", FromPort: 22, ToPort: 22, CidrIpv4: "198.51.100.1/32", Tags: [{ Key: "Project", Value: "AgentCloudDemo" }, { Key: "AgentCloudJobId", Value: "33333333-3333-4333-8333-333333333333" }] }];
   const key = ed25519PublicKey();
   const provider = createAwsCpuProvider({ aws: fakeAws({ rules, calls }), subnetId, now: () => new Date("2026-09-26T12:10:00Z") });
   const instance = await provider.allocate(job(), { authorizedKeys: [key], capMinutes: 20 });
@@ -158,13 +192,11 @@ test("allocation revokes stale SSH rules and launches with tagged deadline and p
   assert.doesNotMatch(userData, /PRIVATE KEY/);
 });
 
-test("preflight refuses unsafe templates, a Free plan, and another active instance", async () => {
+test("preflight refuses unsafe templates and a Free plan", async () => {
   const cases = [
     [{ "ec2:describe-launch-template-versions": { LaunchTemplateVersions: [{ LaunchTemplateData: templateData({ InstanceInitiatedShutdownBehavior: "stop" }) }] } }, /terminate on instance shutdown/],
     [{ "ec2:describe-launch-template-versions": { LaunchTemplateVersions: [{ LaunchTemplateData: templateData({ UserData: "abc" }) }] } }, /must not carry user data/],
     [{ "freetier:get-account-plan-state": { accountId: ACCOUNT, accountPlanType: "FREE", accountPlanStatus: "ACTIVE" } }, /requires an active AWS Paid plan/],
-    [{ "ec2:describe-instances": (args) => args.some((arg) => arg.startsWith("Name=tag:AgentCloudJobId")) ? { Reservations: [] }
-      : { Reservations: [{ Instances: [{ InstanceId: "i-0other", Tags: [] }] }] } }, /Another demo instance is active/],
     [{ "ec2:describe-security-groups": (args) => ({ SecurityGroups: args.includes("--filters") ? [] : [
       { GroupName: "agentcloud-demo-ssm", IpPermissions: [{ FromPort: 22 }] }, { GroupName: "agentcloud-demo-cpu-ssh", IpPermissions: [] }] }) },
     /SSM group \(no inbound\)/],
@@ -187,13 +219,13 @@ test("SSH ingress is one tagged /32 rule per job, reused on retry", async () => 
   assert.equal(calls.filter((call) => call.key === "ec2:authorize-security-group-ingress").length, 1);
   const request = JSON.parse(calls.find((call) => call.key === "ec2:authorize-security-group-ingress").args.at(-1));
   assert.deepEqual(request.IpPermissions[0], { IpProtocol: "tcp", FromPort: 22, ToPort: 22,
-    IpRanges: [{ CidrIp: "203.0.113.7/32", Description: `AgentCloud job ${jobId}` }] });
+    IpRanges: [{ CidrIp: "203.0.113.7/32", Description: "AgentCloud shared SSH source" }] });
   await assert.rejects(provider.authorizeSsh(job(), "0.0.0.0/0"), /public IPv4 \/32/);
 });
 
 test("termination revokes the job's SSH rule before terminating the instance", async () => {
   const calls = [];
-  const rules = [{ SecurityGroupRuleId: "sgr-0b0b", IsEgress: false, CidrIpv4: "203.0.113.7/32", Tags: [{ Key: "AgentCloudJobId", Value: jobId }] }];
+  const rules = [{ SecurityGroupRuleId: "sgr-0b0b", IsEgress: false, IpProtocol: "tcp", FromPort: 22, ToPort: 22, CidrIpv4: "203.0.113.7/32", Tags: [{ Key: "Project", Value: "AgentCloudDemo" }, { Key: "AgentCloudJobId", Value: jobId }] }];
   const managedTags = [{ Key: "Project", Value: "AgentCloudDemo" }, { Key: "AgentCloudAutoExpire", Value: "true" }, { Key: "AgentCloudJobId", Value: jobId }];
   let terminated = false;
   const aws = fakeAws({ rules, calls, overrides: {
@@ -232,8 +264,8 @@ test("an undeliverable SSM host-key readback is retried as pending; a script fai
 
 test("HAC-166: worker and requester /32 rules share the job tag; revokeSshForJob removes both and nothing else", async () => {
   const calls = [];
-  const other = { SecurityGroupRuleId: "sgr-0999", IsEgress: false, CidrIpv4: "198.51.100.9/32",
-    Tags: [{ Key: "AgentCloudJobId", Value: "33333333-3333-4333-8333-333333333333" }] };
+  const other = { SecurityGroupRuleId: "sgr-0999", IsEgress: false, IpProtocol: "tcp", FromPort: 22, ToPort: 22, CidrIpv4: "198.51.100.9/32",
+    Tags: [{ Key: "Project", Value: "AgentCloudDemo" }, { Key: "AgentCloudJobId", Value: "33333333-3333-4333-8333-333333333333" }] };
   const rules = [other];
   let next = 0;
   const aws = fakeAws({ rules, calls, overrides: {
@@ -259,7 +291,7 @@ test("HAC-166: worker and requester /32 rules share the job tag; revokeSshForJob
 
 test("HAC-166: revokeSshCidr removes one requester rule; termination still revokes every job-tagged rule", async () => {
   const tagged = (id, cidr, job = jobId) => ({ SecurityGroupRuleId: id, IsEgress: false, IpProtocol: "tcp", FromPort: 22, ToPort: 22,
-    CidrIpv4: cidr, Tags: [{ Key: "AgentCloudJobId", Value: job }] });
+    CidrIpv4: cidr, Tags: [{ Key: "Project", Value: "AgentCloudDemo" }, { Key: "AgentCloudJobId", Value: job }] });
   const other = tagged("sgr-0999", "198.51.100.9/32", "33333333-3333-4333-8333-333333333333");
   const rules = [tagged("sgr-0a01", "184.192.120.7/32"), tagged("sgr-0a02", "203.0.113.50/32"),
     tagged("sgr-0a03", "203.0.113.51/32"), tagged("sgr-0a04", "203.0.113.52/32"), other];
@@ -392,4 +424,182 @@ test("GPU agent check script emits nvidia-smi rows as evidence", () => {
   const out = execFileSync("bash", ["-c", stub + evidence], { encoding: "utf8" });
   const proof = JSON.parse(out.split("\n").find((entry) => entry.startsWith("AGENTCLOUD_EVIDENCE=")).slice("AGENTCLOUD_EVIDENCE=".length));
   assert.deepEqual(proof.gpus, [{ name: "Tesla T4", memoryMiB: 15360 }]);
+});
+
+const otherJobId = "33333333-3333-4333-8333-333333333333";
+const otherInstanceId = "i-0bcd";
+const ownerKey = (id) => `AgentCloudOwner:${id}`;
+const ruleOwners = (rule) => Object.fromEntries((rule.Tags || []).filter((tag) => tag.Key.startsWith("AgentCloudOwner:"))
+  .map((tag) => [tag.Key.slice("AgentCloudOwner:".length), tag.Value]));
+
+test("concurrent environments reuse their worker /32; stopping one preserves the other and the final stop removes it", async () => {
+  const rules = [], calls = [];
+  const aws = fakeAws({ rules, calls });
+  const firstInstall = createAwsCpuProvider({ aws, subnetId });
+  const secondInstall = createAwsCpuProvider({ aws, subnetId });
+  const a = job(), b = job({ id: otherJobId, provider_resource_id: otherInstanceId });
+  const first = await firstInstall.authorizeSsh(a, "184.192.120.7/32");
+  const second = await secondInstall.authorizeSsh(b, "184.192.120.7/32");
+  assert.equal(first.ruleId, second.ruleId);
+  assert.equal(rules.length, 1);
+  assert.deepEqual(ruleOwners(rules[0]), { [jobId]: instanceId, [otherJobId]: otherInstanceId });
+  assert.deepEqual(await firstInstall.revokeSshForJob(jobId), []);
+  assert.deepEqual(ruleOwners(rules[0]), { [otherJobId]: otherInstanceId });
+  assert.deepEqual(await secondInstall.revokeSshForJob(otherJobId), [second.ruleId]);
+  assert.equal(rules.length, 0);
+  assert.equal(calls.filter((call) => call.key === "ec2:authorize-security-group-ingress").length, 1);
+});
+
+test("distinct requester sources remain scoped to their owners while a shared source survives requester replacement", async () => {
+  const rules = [];
+  const provider = createAwsCpuProvider({ aws: fakeAws({ rules }), subnetId });
+  const a = job(), b = job({ id: otherJobId, provider_resource_id: otherInstanceId });
+  await provider.authorizeSsh(a, "203.0.113.1/32");
+  await provider.authorizeSsh(b, "203.0.113.2/32");
+  await provider.authorizeSsh(a, "203.0.113.3/32");
+  const shared = await provider.authorizeSsh(b, "203.0.113.3/32");
+  await provider.revokeSshCidr(a, "203.0.113.3/32");
+  assert.equal(rules.length, 3);
+  assert.deepEqual(ruleOwners(rules.find((r) => r.SecurityGroupRuleId === shared.ruleId)), { [otherJobId]: otherInstanceId });
+  await provider.revokeSshForJob(jobId);
+  assert.deepEqual(rules.map((r) => r.CidrIpv4).sort(), ["203.0.113.2/32", "203.0.113.3/32"]);
+  await provider.revokeSshForJob(otherJobId);
+  assert.equal(rules.length, 0);
+});
+
+test("legacy owner migrates without losing access; unknown matching ingress is rejected and untouched", async () => {
+  const legacy = { SecurityGroupRuleId: "sgr-0a01", IsEgress: false, IpProtocol: "tcp", FromPort: 22, ToPort: 22,
+    CidrIpv4: "203.0.113.1/32", Tags: [{ Key: "Project", Value: "AgentCloudDemo" }, { Key: "AgentCloudJobId", Value: jobId }] };
+  const unknown = { ...legacy, SecurityGroupRuleId: "sgr-0a02", CidrIpv4: "203.0.113.2/32", Tags: [] };
+  const rules = [legacy, unknown];
+  const provider = createAwsCpuProvider({ aws: fakeAws({ rules }), subnetId });
+  await provider.authorizeSsh(job({ id: otherJobId, provider_resource_id: otherInstanceId }), legacy.CidrIpv4);
+  await provider.revokeSshForJob(otherJobId);
+  assert.equal(rules.length, 2);
+  await assert.rejects(provider.authorizeSsh(job(), unknown.CidrIpv4), /unmanaged/);
+  await provider.revokeSshForJob(jobId);
+  assert.deepEqual(rules, [unknown]);
+});
+
+test("stale cleanup preserves live owners across installs, verifies absent IDs, and deletes orphan references only", async () => {
+  const rules = [];
+  const calls = [];
+  const aws = fakeAws({ rules, calls, overrides: {
+    "ec2:describe-instances": (args) => ({ Reservations: [{ Instances: args.includes("--instance-ids")
+      ? [{ InstanceId: instanceId, State: { Name: "terminated" } }]
+      : [{ InstanceId: otherInstanceId, State: { Name: "running" }, Tags: [{ Key: "AgentCloudJobId", Value: otherJobId }, { Key: "AgentCloudInstall", Value: "another-install" }] }] }] }),
+  } });
+  const provider = createAwsCpuProvider({ aws, subnetId });
+  await provider.authorizeSsh(job(), "203.0.113.1/32");
+  await provider.authorizeSsh(job({ id: otherJobId, provider_resource_id: otherInstanceId }), "203.0.113.1/32");
+  await provider.authorizeSsh(job(), "203.0.113.2/32");
+  await provider.revokeStaleSshRules();
+  assert.equal(rules.length, 1);
+  assert.deepEqual(ruleOwners(rules[0]), { [otherJobId]: otherInstanceId });
+  assert.ok(calls.some((call) => call.key === "ec2:describe-instances" && call.args.includes("--instance-ids")));
+});
+
+test("strong registry preserves a newly added owner even when EC2 returns stale tags", async () => {
+  const rules = [];
+  let stale = false;
+  const aws = fakeAws({ rules, overrides: {
+    "ec2:describe-security-group-rules": () => ({ SecurityGroupRules: rules.map((rule) => stale
+      ? { ...rule, Tags: rule.Tags.filter((tag) => tag.Key !== ownerKey(otherJobId)) } : rule) }),
+  } });
+  const provider = createAwsCpuProvider({ aws, subnetId });
+  await provider.authorizeSsh(job(), "203.0.113.1/32");
+  await provider.authorizeSsh(job({ id: otherJobId, provider_resource_id: otherInstanceId }), "203.0.113.1/32");
+  stale = true;
+  await provider.revokeSshForJob(jobId);
+  assert.equal(rules.length, 1);
+  stale = false;
+  assert.deepEqual(ruleOwners(rules[0]), { [otherJobId]: otherInstanceId });
+});
+
+test("ownership tagging failure does not report access as granted; retry completes the durable intent", async () => {
+  const rules = [];
+  let fail = true;
+  const raw = fakeAws({ rules });
+  const aws = async (service, operation, ...args) => {
+    if (operation === "create-tags" && fail) throw new Error("AWS ec2:create-tags UnauthorizedOperation");
+    return raw(service, operation, ...args);
+  };
+  const provider = createAwsCpuProvider({ aws, subnetId });
+  await provider.authorizeSsh(job(), "203.0.113.1/32");
+  const b = job({ id: otherJobId, provider_resource_id: otherInstanceId });
+  await assert.rejects(provider.authorizeSsh(b, "203.0.113.1/32"), /UnauthorizedOperation/);
+  await provider.revokeSshForJob(jobId);
+  assert.equal(rules.length, 1); // failed grant's intent is retained, never silently stolen
+  fail = false;
+  await provider.authorizeSsh(b, "203.0.113.1/32");
+  assert.deepEqual(ruleOwners(rules[0]), { [otherJobId]: otherInstanceId });
+  await provider.revokeSshForJob(otherJobId);
+  assert.equal(rules.length, 0);
+});
+
+test("another worker cannot join a source while its last owner is removing it", async () => {
+  const rules = [];
+  let enter, resume;
+  const entered = new Promise((resolve) => { enter = resolve; });
+  const paused = new Promise((resolve) => { resume = resolve; });
+  const raw = fakeAws({ rules });
+  const aws = async (service, operation, ...args) => {
+    if (operation === "revoke-security-group-ingress") { enter(); await paused; }
+    return raw(service, operation, ...args);
+  };
+  const a = createAwsCpuProvider({ aws, subnetId }), b = createAwsCpuProvider({ aws, subnetId });
+  await a.authorizeSsh(job(), "203.0.113.1/32");
+  const removal = a.revokeSshForJob(jobId);
+  await entered;
+  const other = job({ id: otherJobId, provider_resource_id: otherInstanceId });
+  await assert.rejects(b.authorizeSsh(other, "203.0.113.1/32"), /another worker/);
+  resume();
+  await removal;
+  await b.authorizeSsh(other, "203.0.113.1/32");
+  assert.deepEqual(ruleOwners(rules[0]), { [otherJobId]: otherInstanceId });
+});
+
+test("an elapsed lock deadline refuses subsequent mutations and retains the lease", async () => {
+  let clock = 1_000;
+  const rules = [], calls = [];
+  const aws = fakeAws({ rules, calls, overrides: {
+    "ec2:describe-security-group-rules": () => { clock += 15 * 60_000; return { SecurityGroupRules: [] }; },
+  } });
+  const provider = createAwsCpuProvider({ aws, subnetId, lockClock: () => clock });
+  await assert.rejects(provider.authorizeSsh(job(), "203.0.113.1/32"), /deadline reached/);
+  assert.equal(rules.length, 0);
+  assert.ok(!calls.some((call) => call.key === "dynamodb:delete-item"));
+  assert.ok(!calls.some((call) => call.key === "ec2:authorize-security-group-ingress"));
+});
+
+test("preflight permits another active environment and preserves its source", async () => {
+  const rules = [];
+  const aws = fakeAws({ rules, overrides: {
+    "ec2:describe-instances": () => ({ Reservations: [{ Instances: [{ InstanceId: otherInstanceId,
+      State: { Name: "running" }, Tags: [{ Key: "AgentCloudJobId", Value: otherJobId }] }] }] }),
+  } });
+  const provider = createAwsCpuProvider({ aws, subnetId });
+  await provider.authorizeSsh(job({ id: otherJobId, provider_resource_id: otherInstanceId }), "203.0.113.2/32");
+  await provider.preflight(job());
+  assert.equal(rules.length, 1);
+});
+
+test("uncertain AWS mutation keeps its lease until expiry instead of allowing a conflicting writer", async () => {
+  const rules = [], calls = [];
+  const aws = fakeAws({ rules, calls, overrides: {
+    "ec2:authorize-security-group-ingress": () => { throw new Error("AWS ec2:authorize-security-group-ingress CommandFailed"); },
+  } });
+  const provider = createAwsCpuProvider({ aws, subnetId });
+  await assert.rejects(provider.authorizeSsh(job(), "203.0.113.1/32"), /CommandFailed/);
+  assert.ok(!calls.some((call) => call.key === "dynamodb:delete-item"));
+  await assert.rejects(provider.authorizeSsh(job(), "203.0.113.1/32"), /another worker/);
+});
+
+test("unknown ingress is never changed and prevents launching into an unreviewed source union", async () => {
+  const unknown = { SecurityGroupRuleId: "sgr-0bad", IsEgress: false, IpProtocol: "tcp", FromPort: 22,
+    ToPort: 22, CidrIpv4: "0.0.0.0/0", Tags: [] };
+  const rules = [unknown];
+  const provider = createAwsCpuProvider({ aws: fakeAws({ rules }), subnetId });
+  await assert.rejects(provider.preflight(job()), /Unmanaged SSH ingress/);
+  assert.deepEqual(rules, [unknown]);
 });

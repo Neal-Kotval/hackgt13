@@ -167,6 +167,12 @@ test("scopedWorkerAws uses an existing worker-role session, assumes from staging
   await assert.rejects(scopedWorkerAws({ aws: async () => ({ Account: "111111111111", Arn: "x" }), assume }), /another account/);
 });
 
+test("AWS CLI accepts successful tag and DynamoDB mutations with an empty response", async () => {
+  const aws = createAwsCli({ run: async () => ({ stdout: "" }) });
+  assert.deepEqual(await aws("ec2", "create-tags"), {});
+  assert.deepEqual(await aws("dynamodb", "put-item"), {});
+});
+
 test("terminateInstance with wait:false requests termination and returns the current state at once", async () => {
   const operations = [];
   const aws = mockAws((service, operation) => {
