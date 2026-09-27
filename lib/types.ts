@@ -125,6 +125,8 @@ export interface Project {
   template: string;
   compute: string;
   host?: string;
+  /** Defaults the environment request form starts from; absent on older projects. */
+  environmentDefaults?: EnvironmentDefaults;
   agents: Agent[];
   tasks: Task[];
   services: Service[];
@@ -133,6 +135,13 @@ export interface Project {
   resources: ResourceDefinition[];
   resourceRequests: ResourceRequest[];
   createdAt: string;
+}
+export interface EnvironmentDefaults {
+  /** An id from lib/machine-catalog.mjs. */
+  machineId: string | null;
+  visibility: "private" | "public";
+  /** Turn on Backboard shared memory for new environments. */
+  sharedMemory: boolean;
 }
 export interface State {
   projects: Project[];
