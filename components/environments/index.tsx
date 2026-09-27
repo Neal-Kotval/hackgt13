@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import type { Project } from "@/lib/types";
 import {
+  awsCpuProfile,
   demoGpuDurations,
   demoGpuProfile,
   localDockerSandboxProfile,
@@ -66,6 +67,14 @@ const profiles = [
     summary: "CPU-only Linux container · no GPU · no provider cost",
     detail:
       "Runs with sshd on the machine that runs the AgentCloud worker. Suitable for local development and demos. It has no GPU.",
+  },
+  {
+    id: awsCpuProfile.id,
+    label: "AWS EC2 CPU",
+    icon: <Cube aria-hidden="true" />,
+    summary: `${awsCpuProfile.instanceType} · 2 vCPU · no GPU · about $0.05/hour`,
+    detail:
+      "Billable on AWS. A Linux VM with Codex installed. SSH opens only to your current public address, and the disk is deleted when the environment stops.",
   },
   {
     id: runpodBudgetGpuProfile.id,
