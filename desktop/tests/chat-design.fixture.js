@@ -6,7 +6,7 @@
   sessions.unshift({ id: 'legacy', projectId: 'p1', agentId: 'old', status: 'ready', error: null });
   const state={projects:[{id:'p1',name:'UI verification',agents:[{id:'a1',name:'desktop-chat',client:'codex'},{id:'a2',name:'review-agent'}],tasks:[],resources:[],resourceRequests:[]},{id:'p2',name:'Second project',agents:[{id:'a3',name:'build-agent'}],tasks:[],resources:[],resourceRequests:[]}]};
   const event=(id,kind,text)=>({id,kind,text,updatedAt:now});
-  const events={s1:[event('setup','status','Codex is ready in the environment.')],s2:[],s3:[]};
+  const events={s1:[event('old-error-1','error','Codex connection to the environment failed. Reconnect to continue.'),event('old-error-2','error','Codex connection to the environment failed. Reconnect to continue.'),event('setup','status','Codex is ready in the environment workspace /home/agentcloud/workspace/repo.')],s2:[],s3:[]};
   if (location.search.includes("no-projects")) state.projects = [];
   if (location.search.includes("new-environment")) sessions.splice(0, sessions.length);
   const test=window.__test={sessions,events,state,sends:[],fail:false,loseResponse:false,deepLink:null};

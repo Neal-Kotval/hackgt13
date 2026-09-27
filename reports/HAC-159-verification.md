@@ -47,3 +47,15 @@ No AWS provisioning or deployment was performed.
 Backend session `4af537a8-514c-4663-9547-358445cc88d6` initialized over SSH and reached
 ChatGPT device sign-in. The copied old credentials had expired, so fresh sign-in
 was requested rather than reporting a successful live turn on the new protocol.
+
+## Sign-in and recovered connection history follow-up
+
+The user completed ChatGPT sign-in. The backend session became ready and a real
+`hi` turn received `Hi! What would you like to work on?`, followed by a completed
+turn. The old pre-sign-in failures remained historical error events, not current
+connection failures. The renderer now groups those errors under a collapsed
+resolved-history disclosure only after a later explicit workspace-ready event.
+Current connection failures and execution errors remain alerts. Browser tests
+verify collapsed/expanded history and both unresolved error cases; responsive,
+build, and token checks passed. Native verification confirms the successful reply
+remains visible, history is collapsed, and no current alerts are present.

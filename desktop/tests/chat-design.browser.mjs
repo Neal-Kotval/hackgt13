@@ -24,6 +24,18 @@ try {
   await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toHaveCount(0);
   await expect(page.getByText('What can I help with?', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Local Codex box', { exact: true })).toHaveCount(0);
+  const recovered = page.locator('details').filter({ hasText: 'Previous connection issues (2) · Resolved' });
+  await expect(recovered).toBeVisible();
+  await expect(recovered).not.toHaveAttribute('open');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await recovered.locator('summary').click();
+  await expect(recovered.locator('p')).toHaveCount(2);
+  await expect(recovered.locator('p').first()).toBeVisible();
+  await recovered.locator('summary').click();
+  await page.evaluate(() => window.__test.events.s1.push({ id: 'current-connection-error', kind: 'error', text: 'Codex connection to the environment failed. Reconnect to continue.', updatedAt: new Date().toISOString() }, { id: 'execution-error', kind: 'error', text: 'Codex reported an execution error.', updatedAt: new Date().toISOString() }));
+  await expect(page.getByRole('alert')).toHaveCount(2);
+  await page.evaluate(() => window.__test.events.s1.splice(-2));
+  await expect(page.getByRole('alert')).toHaveCount(0);
   async function layout(state) {
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
@@ -87,8 +99,8 @@ try {
   await expect(page.locator('.codex-streaming-cursor')).toHaveCount(1);
   await expect(input).toHaveValue('Unrelated unsent draft');
   await layout('streaming');
-  await page.locator('.codex-command summary').click();
-  await expect(page.locator('.codex-command')).toHaveAttribute('open', '');
+  await page.locator('.codex-command:not(.codex-connection-history) summary').click();
+  await expect(page.locator('.codex-command:not(.codex-connection-history)')).toHaveAttribute('open', '');
   await page.getByRole('button', { name: 'Stop response' }).click();
   await expect(page.getByText('Turn interrupted', { exact: true })).toBeVisible();
   await expect(input).toHaveValue('Unrelated unsent draft');
