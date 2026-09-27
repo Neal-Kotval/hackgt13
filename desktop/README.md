@@ -135,3 +135,12 @@ sign-in flow. This is an ad-hoc-signed development DMG, **not Developer ID signe
 or notarized**; macOS distribution trust and notarization remain release work.
 The packaging command verifies the bundle signature, loads ssh2 using bundled
 Electron, and runs the bundled CLI's help command before creating the image.
+
+## Create projects in desktop
+
+The project-selection screen includes an inline creation form matching the web's
+name, HTTPS repository, template, and compute metadata fields. New project returns
+to this screen from chat. Creation uses the existing authenticated `createProject`
+action and server organization-admin authorization; errors keep entered values.
+Success selects the returned project. Saving metadata does not clone a repository,
+connect to SSH, provision compute, or start an agent.

@@ -165,3 +165,12 @@ environment's chats. No device codes or connection-token generator are exposed
 in the supported setup path. Legacy coordination credentials remain validated
 for compatibility; they are not used to authenticate Codex. A running, signed-in
 desktop client on the same website is required for the browser callback bridge.
+
+## Create projects in desktop
+
+The project-selection screen includes an inline creation form matching the web's
+name, HTTPS repository, template, and compute metadata fields. New project returns
+to this screen from chat. Creation uses the existing authenticated `createProject`
+action and server organization-admin authorization; errors keep entered values.
+Success selects the returned project. Saving metadata does not clone a repository,
+connect to SSH, provision compute, or start an agent.

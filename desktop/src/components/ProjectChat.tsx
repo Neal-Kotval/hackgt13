@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUpRight, GearSix, Robot } from "@phosphor-icons/react";
+import { ArrowUpRight, GearSix, Robot, Plus } from "@phosphor-icons/react";
 import { desktopApi } from "../lib/desktop-api";
 import {
   deriveChatTargets,
@@ -17,6 +17,8 @@ import { Composer, type ChatAttachment } from "./Composer";
 import { CodexConversation, type CodexEvent } from "./CodexConversation";
 import "./ProjectChat.css";
 import { ChatProjectPicker } from "./ChatProjectPicker";
+import { CreateProjectForm, type CreateProjectValues } from "./CreateProjectForm";
+import { Select } from "./ui/Select";
 import { ChatHistory } from "./ChatHistory";
 import {
   canTargetCodex,
@@ -110,6 +112,8 @@ export function ProjectChat({
   const [ambiguous, setAmbiguous] = useState<Record<string, boolean>>({});
   const blockAutoProject = useRef(false);
   const [busy, setBusy] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [retry, setRetry] = useState(0);
   const [linkRevision, setLinkRevision] = useState(0);
@@ -626,7 +630,26 @@ export function ProjectChat({
       : session.status === "error"
         ? "danger"
         : "warning";
+  async function createProject(values: CreateProjectValues) {
+    if (creatingProject) return;
+    setCreatingProject(true);
+    setCreateError(null);
+    try {
+      const result = await desktopApi().postAction({ type: "createProject", ...values });
+      const raw = result.raw as { id?: unknown } | null;
+      if (!raw || typeof raw.id !== "string" || !result.state.projects.some(p => p.id === raw.id)) {
+        throw new Error("The project may have been saved, but its details could not be loaded. Refresh your projects before trying again.");
+      }
+      setProjects(result.state.projects);
+      chooseProject(raw.id);
+    } catch (cause) {
+      setCreateError(cause instanceof Error ? cause.message : "Could not create the project.");
+    } finally {
+      setCreatingProject(false);
+    }
+  }
   function chooseProject(id: string) {
+    setCreateError(null);
     requestEnvironment(null);
     setTargetChoice("");
     blockAutoProject.current = true;
@@ -744,7 +767,7 @@ export function ProjectChat({
       selectedId={sessionId}
       busy={busy || attaching || !currentTarget || !targetAgents.some((item) => item.status === "ready" || item.status === "running")}
       loading={loading}
-      setupUrl={settingsUrl}
+      setupUrl={projectId ? settingsUrl : undefined}
       onSelect={(id) => {
         chooseAgent(id);
         close();
@@ -755,12 +778,30 @@ export function ProjectChat({
       }}
     />
   );
-  const content = (
+  const choosingProject = !projectId && !loading;
+  const content = choosingProject ? (
+    <div className="app-shell">
+      <main className="project-create-page" aria-label="Create project">
+        <header className="main-header"><h1>Projects</h1></header>
+        <div className="project-create-content">
+          {projects.length > 0 && <label className="project-existing-choice">Open an existing project
+            <Select aria-label="Existing project" value="" disabled={creatingProject} onChange={e => chooseProject(e.target.value)}>
+              <option value="">Choose project</option>
+              {projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </Select>
+          </label>}
+          {error && <p className="error-banner" role="alert">{error}</p>}
+          <CreateProjectForm busy={creatingProject} error={createError} onCreate={values => void createProject(values)} />
+        </div>
+      </main>
+    </div>
+  ) : (
     <div className="app-shell">
       <main className="main project-chat-main" data-empty={!hasConversation}>
         <header className="main-header">
           <h1 title={title}>{title}</h1>
           <div className="project-chat-status">
+            <button className="button ghost" type="button" disabled={busy || attaching} onClick={() => chooseProject("")}><Plus aria-hidden="true" />New project</button>
             {hasConversation && context("header")}
             {session && ["error", "stopped"].includes(session.status) && (
               <button
@@ -938,5 +979,5 @@ export function ProjectChat({
       </main>
     </div>
   );
-  return children({ content, sidebar, busy: busy || attaching || working });
+  return children({ content, sidebar, busy: busy || creatingProject || attaching || working });
 }
