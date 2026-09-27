@@ -52,4 +52,23 @@ export const localDockerSandboxProfile = {
   hourlyComputeUsd: 0,
 } as const;
 
+// AWS CPU environment (HAC-125). Shares provider aws-ec2 with the GPU profile, so the
+// single-active AWS box guard, EC2 reconciliation, expiry guard, and budget guard apply.
+// Desktop SSH is direct to the instance's public IPv4 on port 22 from the requester's /32.
+// Dated planning quote (AWS Price List, us-east-1); the worker re-prices before launch.
+export const awsCpuProfile = {
+  id: "aws-cpu",
+  provider: "aws-ec2",
+  region: "us-east-1",
+  instanceType: "t3.medium",
+  label: "AWS EC2 · t3.medium CPU",
+  description:
+    "2 vCPU, 4 GiB, no GPU. Direct SSH from your current public address only. SSH access is trusted shell access, not a filesystem or command sandbox.",
+  gpu: null,
+  hourlyComputeUsd: 0.0416,
+  // Public IPv4 ($0.005/h) and a 20 GiB gp3 root volume (about $0.0022/h).
+  hourlyOtherUsd: 0.0072,
+  quotedAt: "2026-09-26",
+} as const;
+
 export const demoGpuDurations = [1, 2] as const;

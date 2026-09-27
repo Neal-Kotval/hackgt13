@@ -2,7 +2,7 @@ import { getDatabase } from "../../../lib/auth.mjs";
 import { requireEmployee, requireMembership, type Employee } from "../../../lib/employee";
 import { body, failure, sameOrigin } from "../../../lib/http";
 import { InputError, getState, resourceAction } from "../../../lib/store";
-import { demoGpuProfile, findRunpodProfile, localDockerSandboxProfile, runpodBudgetGpuProfile, runpodGpuProfile } from "../../../lib/resource-profiles";
+import { awsCpuProfile, demoGpuProfile, findRunpodProfile, localDockerSandboxProfile, runpodBudgetGpuProfile, runpodGpuProfile } from "../../../lib/resource-profiles";
 import { listRunBoxJobs, migrateRunBoxJobs, saveRunBoxDecision } from "../../../lib/run-box-jobs.mjs";
 import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../../../lib/run-box-ssh.mjs";
 
@@ -22,6 +22,7 @@ const environmentProfiles = {
   [runpodGpuProfile.id]: { provider: runpodGpuProfile.provider, kind: "gpu", label: runpodGpuProfile.label },
   [runpodBudgetGpuProfile.id]: { provider: runpodBudgetGpuProfile.provider, kind: "gpu", label: runpodBudgetGpuProfile.label },
   [demoGpuProfile.id]: { provider: demoGpuProfile.provider, kind: "gpu", label: `AWS EC2 · ${demoGpuProfile.label}` },
+  [awsCpuProfile.id]: { provider: awsCpuProfile.provider, kind: "run-box", label: awsCpuProfile.label },
 } as const;
 type EnvironmentProfileId = keyof typeof environmentProfiles;
 type DecisionRow = {
