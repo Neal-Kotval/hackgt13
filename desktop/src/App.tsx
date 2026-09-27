@@ -1,3 +1,4 @@
+import { MotionSurface } from "./components/SurfaceMotion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CodexBrowserLogin } from "./components/CodexBrowserLogin";
 import type { LoginTarget } from "./lib/browser-login-flow";
@@ -232,14 +233,14 @@ export default function App() {
             </p>
           )}
           {loginTarget && <CodexBrowserLogin target={loginTarget} onComplete={finishLogin} onClose={() => setLoginTarget(null)} />}
-          <div
+          <MotionSurface transitionKey="chat"
             className="section-host"
             hidden={Boolean(loginTarget) || section !== "local-chat" || Boolean(chatRunBox)}
           >
             {chat.content}
-          </div>
+          </MotionSurface>
           {chatRunBox && !loginTarget && (
-            <div className="section-host" hidden={section !== "local-chat"}>
+            <MotionSurface className="section-host" transitionKey={`${chatRunBox.projectId}:${chatRunBox.runBoxId}`} hidden={section !== "local-chat"}>
               <div className="app-shell">
                 <main className="main">
                   <header className="main-header">
@@ -253,10 +254,10 @@ export default function App() {
                   />
                 </main>
               </div>
-            </div>
+            </MotionSurface>
           )}
           {environmentsMounted && !loginTarget && (
-            <div className="section-host" hidden={section !== "environments"}>
+            <MotionSurface className="section-host" transitionKey="environments" hidden={section !== "environments"}>
               <EnvironmentsPanel
                 webBaseUrl={auth.baseUrl}
                 deepLink={environmentLink}
@@ -268,7 +269,7 @@ export default function App() {
                   })
                 }
               />
-            </div>
+            </MotionSurface>
           )}
         </ShellNav>
       )}
