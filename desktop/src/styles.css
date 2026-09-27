@@ -1137,13 +1137,3 @@ input:focus-visible, textarea:focus-visible { border-color: var(--color-accent);
 @media (prefers-reduced-motion: reduce) {
   .tasks-panel, .conversation, .sidebar { scroll-behavior: auto; }
 }
-
-.codex-panel { display: flex; flex-direction: column; gap: var(--space-4); }
-.codex-selectors { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.codex-selectors > * { min-width: 0; max-width: 100%; }
-.codex-session-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.codex-events { display: flex; flex-direction: column; gap: var(--space-3); }
-.codex-event { padding: var(--space-4); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); min-width: 0; }
-.codex-event pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-body); font-size: var(--text-sm); line-height: var(--leading-relaxed); margin: var(--space-3) 0 0; }
-.codex-event[data-kind="error"] { border-color: var(--color-danger); }
-.codex-event[data-kind="command"] { background: var(--color-bg); }

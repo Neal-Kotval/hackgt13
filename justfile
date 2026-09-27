@@ -109,6 +109,14 @@ dev-docker:
 sandbox-image:
     docker build --tag agentcloud-sandbox:dev infra/sandbox
 
+# Build and exercise the agent-ready image through a real SSH run box.
+sandbox-verify: sandbox-image
+    node --test tests/docker-sandbox.integration.test.mjs
+
+# List imported local container templates in the app's data directory.
+template-list:
+    node --env-file-if-exists=.env.local scripts/container-templates.mjs list
+
 # Run the docker-local run-box worker against the same local database as `just dev`.
 worker-docker:
     node --env-file-if-exists=.env.local scripts/run-box-worker.mjs --loop docker-local

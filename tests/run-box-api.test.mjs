@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import ts from "typescript";
 import { prepareAuth } from "./auth-fixture.mjs";
+import { registerContainerTemplate } from "../lib/container-templates.mjs";
 
 const directory = await mkdtemp(path.join(os.tmpdir(), "agentcloud-run-box-api-"));
 process.env.AGENTCLOUD_DATA_DIR = path.join(directory, "data");
@@ -15,7 +16,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys"])
+for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates", "aws-organization-approval"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
 const db = fixture.getDatabase();
@@ -26,14 +27,33 @@ async function route(sourcePath, outputName, depth) {
   const code = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replaceAll(prefix, "./").replace(/from ["']\.\/([\w-]+)["']/g, (match, name) =>
-    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys"].includes(name) ? ".mjs" : ".js"}'`);
+    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates", "aws-organization-approval"].includes(name) ? ".mjs" : ".js"}'`);
   await writeFile(path.join(directory, outputName), code);
   return import(path.join(directory, outputName));
 }
 const boxes = await route("../app/api/run-boxes/route.ts", "boxes-route.js", 3);
+const approvals = await import(path.join(directory, "aws-organization-approval.mjs"));
+approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved: true,
+  maxRunMinutes: 120, monthlyMinutes: 1200, actorId: fixture.users[0].id });
+const admin = await route("../app/api/admin/aws-approvals/route.ts", "aws-approvals-route.js", 4);
 const stop = await route("../app/api/run-boxes/[id]/stop/route.ts", "stop-route.js", 5);
 const owner = fixture.users[0];
 const member = fixture.users[1];
+
+test("platform operator alone can change AWS organization approval", async () => {
+  process.env.AGENTCLOUD_PLATFORM_ADMIN_EMAIL = owner.email;
+  const input = { organizationId: fixture.organization.id, approved: false, maxRunMinutes: 60, monthlyMinutes: 60 };
+  assert.equal((await admin.GET(request("/api/admin/aws-approvals", null))).status, 401);
+  assert.equal((await admin.POST(request("/api/admin/aws-approvals", input, member.cookie))).status, 403);
+  assert.equal((await admin.POST(request("/api/admin/aws-approvals", { ...input, monthlyMinutes: 61 }, owner.cookie))).status, 400);
+  const changed = await admin.POST(request("/api/admin/aws-approvals", input, owner.cookie));
+  assert.equal(changed.status, 200);
+  assert.equal((await changed.json()).approval.approved, 0);
+  assert.equal((await (await admin.GET(request("/api/admin/aws-approvals", null, owner.cookie))).json()).organizations[0].approved, false);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM aws_organization_approval_event WHERE organization_id = ?").get(fixture.organization.id).count, 2);
+  approvals.setAwsApproval(db, { ...input, approved: true, maxRunMinutes: 120, monthlyMinutes: 1200, actorId: owner.id });
+  delete process.env.AGENTCLOUD_PLATFORM_ADMIN_EMAIL;
+});
 const projectId = (await store.action({ type: "createProject", name: "GPU test", repo: "https://example.com/repo", compute: "Hosted Linux", template: "blank" })).id;
 fixture.grantMembership(owner.id, projectId, "owner");
 fixture.grantMembership(member.id, projectId, "member");
@@ -49,6 +69,29 @@ function request(url, body, cookie) {
   });
 }
 after(async () => { db.close(); await rm(directory, { recursive: true, force: true }); });
+
+test("unapproved organization cannot queue AWS through either request path", async () => {
+  approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved: false,
+    maxRunMinutes: 120, monthlyMinutes: 1200, actorId: owner.id });
+  try {
+    const saved = await gpuRequest(owner, "owner");
+    const oldPath = await boxes.POST(request("/api/run-boxes", {
+      projectId, resourceRequestId: saved.id, idempotencyKey: "aws-unapproved-saved",
+    }, owner.cookie));
+    assert.equal(oldPath.status, 200);
+    assert.equal((await oldPath.json()).job, null);
+    const oneStep = await boxes.POST(request("/api/run-boxes", {
+      projectId, profileId: "g6-l4-small", durationHours: 1, idempotencyKey: "aws-unapproved-one-step",
+    }, owner.cookie));
+    assert.equal(oneStep.status, 200);
+    const result = await oneStep.json();
+    assert.equal(result.decision.outcome, "denied");
+    assert.equal(result.job, null);
+  } finally {
+    approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved: true,
+      maxRunMinutes: 120, monthlyMinutes: 1200, actorId: owner.id });
+  }
+});
 
 test("approval API binds a saved request to verified owner and rejects cross-project or duplicate decisions", async () => {
   const saved = await gpuRequest(owner, "owner");
@@ -182,6 +225,26 @@ test("one-step local Docker sandbox path queues a CPU-only run box", {
   const saved = (await store.getState()).projects.find((item) => item.id === projectId).resourceRequests.find((item) => item.id === decision.resource_request_id);
   assert.equal(saved.kind, "run-box");
   assert.equal(saved.computePreference.provider, "docker-local");
+});
+
+test("imported container template is listed and selectable for a local environment", async () => {
+  registerContainerTemplate(db, { id: "codex-custom", label: "Custom Codex", imageRef: "example/codex:1",
+    imageId: `sha256:${"b".repeat(64)}`, source: "registry" });
+  const project = await store.action({ type: "createProject", name: "Template test",
+    repo: "https://example.com/template-repo", compute: "Hosted Linux", template: "blank" });
+  fixture.grantMembership(owner.id, project.id, "owner");
+  const listed = await boxes.GET(request(`/api/run-boxes?projectId=${project.id}`, null, owner.cookie));
+  assert.equal(listed.status, 200);
+  assert.equal((await listed.json()).templates.find((item) => item.id === "codex-custom").label, "Custom Codex");
+  const created = await boxes.POST(request("/api/run-boxes", environment({ projectId: project.id,
+    profileId: "local-template:codex-custom", idempotencyKey: "env-template-1" }), owner.cookie));
+  assert.equal(created.status, 201);
+  const { job } = await created.json();
+  assert.equal(job.profile_id, "local-template:codex-custom");
+  assert.equal(job.provider, "docker-local");
+  const missing = await boxes.POST(request("/api/run-boxes", environment({ projectId: project.id,
+    profileId: "local-template:absent", idempotencyKey: "env-template-missing" }), owner.cookie));
+  assert.equal(missing.status, 409);
 });
 
 test("one-step local Docker sandbox path refuses cleanly while the provider is unsupported", {

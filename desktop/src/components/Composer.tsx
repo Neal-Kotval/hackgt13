@@ -3,6 +3,7 @@ import { ArrowUp, Square } from "@phosphor-icons/react";
 type ComposerProps = {
   value: string;
   disabled: boolean;
+  sendDisabled?: boolean;
   sending: boolean;
   error: string | null;
   onChange: (value: string) => void;
@@ -13,13 +14,14 @@ type ComposerProps = {
 export function Composer({
   value,
   disabled,
+  sendDisabled = false,
   sending,
   error,
   onChange,
   onSend,
   onStop,
 }: ComposerProps) {
-  const canSend = !disabled && !sending && value.trim().length > 0;
+  const canSend = !disabled && !sendDisabled && !sending && value.trim().length > 0;
 
   return (
     <form
@@ -62,6 +64,7 @@ export function Composer({
               className="button danger composer-submit"
               aria-label="Stop response"
               title="Stop response"
+              disabled={disabled}
               onClick={onStop}
             >
               <Square weight="fill" aria-hidden="true" />

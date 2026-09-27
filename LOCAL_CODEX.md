@@ -3,7 +3,7 @@
 This opt-in development path runs the web backend on the host and actual Codex
 app-server processes inside local Docker CPU containers. It does not provision
 AWS, attach GPUs, or prove the remote GPU MVP. The website initializes a registered
-Codex identity; the desktop's Codex agents view directs the same session.
+Codex identity; the desktop's Project chat directs the same session.
 
 ## Start
 
@@ -36,9 +36,9 @@ installation. The two copies do not synchronize after migration.
    clone the project's saved repository URL.
 3. Choose Sign in to Codex, open the official device verification URL, and enter
    the displayed code. Codex authentication remains in its private Docker volume.
-4. Open the desktop Codex agents view, choose the project/session, and send work.
-   Replies and command status come from Codex. The original Project chat remains
-   an independent local scratchpad.
+4. Open desktop **Project chat**, choose the project and agent conversation, and send work.
+   Replies and command status come from Codex in the same chat interface. Existing
+   legacy on-device threads remain on disk but are not shown or sent to Codex.
 5. Interrupt cancels a turn; Stop box stops Docker while retaining workspace and
    history. Reconnect restarts the same box and resumes the saved Codex thread.
 

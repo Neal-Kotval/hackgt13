@@ -4,16 +4,21 @@ import Database from "better-sqlite3";
 import { migrateRunBoxJobs, saveRunBoxDecision, requestRunBoxStop } from "../lib/run-box-jobs.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
 import { migrateAwsGpuEvidence } from "../lib/aws-gpu-evidence.mjs";
+import { setAwsApproval } from "../lib/aws-organization-approval.mjs";
 
 function setup() {
   const db = new Database(":memory:");
   db.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, emailVerified INTEGER NOT NULL);
+    CREATE TABLE organization (id TEXT PRIMARY KEY);
     CREATE TABLE member (userId TEXT NOT NULL, organizationId TEXT NOT NULL, role TEXT NOT NULL);
     CREATE TABLE project_organization (project_id TEXT PRIMARY KEY, organization_id TEXT NOT NULL);
     CREATE TABLE project_membership (user_id TEXT NOT NULL, project_id TEXT NOT NULL, role TEXT NOT NULL);`);
   migrateRunBoxJobs(db);
   migrateAwsGpuEvidence(db);
   db.prepare("INSERT INTO user VALUES ('employee-1', 1)").run();
+  db.prepare("INSERT INTO organization VALUES ('org-1')").run();
+  setAwsApproval(db, { organizationId: "org-1", approved: true, maxRunMinutes: 120,
+    monthlyMinutes: 1200, actorId: "platform-admin" });
   db.prepare("INSERT INTO member VALUES ('employee-1', 'org-1', 'owner')").run();
   db.prepare("INSERT INTO project_organization VALUES ('project-1', 'org-1')").run();
   const { job } = saveRunBoxDecision(db, {
@@ -65,6 +70,33 @@ test("revoked owner membership prevents allocation", async () => {
   const provider = { async identifyWorker() {}, async allocate() { launched = true; } };
   await assert.rejects(workOneAwsGpuJob(db, provider, { workerId: "worker-1" }), /invalid before launch/);
   assert.equal(launched, false);
+  assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+});
+
+test("revoked organization approval stops a queued AWS job before allocation", async () => {
+  const { db, job } = setup();
+  setAwsApproval(db, { organizationId: "org-1", approved: false, maxRunMinutes: 120,
+    monthlyMinutes: 1200, actorId: "platform-admin" });
+  let launched = false;
+  const provider = { async identifyWorker() {}, async allocate() { launched = true; } };
+  await assert.rejects(workOneAwsGpuJob(db, provider, { workerId: "worker-1" }), /invalid before launch/);
+  assert.equal(launched, false);
+  assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+});
+
+test("worker gives the provider a fresh approval check for the launch boundary", async () => {
+  const { db, job } = setup();
+  const provider = {
+    async identifyWorker() {},
+    async allocate(_job, authorizationStillValid) {
+      assert.equal(authorizationStillValid(), true);
+      setAwsApproval(db, { organizationId: "org-1", approved: false, maxRunMinutes: 120,
+        monthlyMinutes: 1200, actorId: "platform-admin" });
+      assert.equal(authorizationStillValid(), false);
+      throw new Error("AWS organization approval changed before launch");
+    },
+  };
+  await assert.rejects(workOneAwsGpuJob(db, provider, { workerId: "worker-1" }), /approval changed before launch/);
   assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
 });
 
