@@ -132,7 +132,10 @@ test("connection API enforces auth, membership, readiness, and injected device k
     authorizedFingerprints: [sshKeys.sshFingerprint(ed25519PublicKey())] });
   const noKey = await get(owner.cookie);
   assert.equal(noKey.status, 403);
-  assert.equal((await noKey.json()).code, "no_authorized_key");
+  const noKeyBody = await noKey.json();
+  assert.equal(noKeyBody.code, "no_authorized_key");
+  // HAC-166: a web-created environment may carry only the Codex runner key.
+  assert.match(noKeyBody.error, /created on the web/);
 
   endpoints.recordRunBoxSshEndpoint(db, job.id, { host: "203.0.113.10", port: 30222, username: "agentcloud", hostPublicKey,
     authorizedFingerprints: [sshKeys.sshFingerprint(ownerKey)] });

@@ -80,6 +80,9 @@ describe("connection API mapping", () => {
     );
     assert.equal(error.message, NO_AUTHORIZED_KEY_MESSAGE);
     assert.equal(error.code, "no_authorized_key");
+    // HAC-166: web-created environments may launch with only the Codex runner key.
+    assert.match(NO_AUTHORIZED_KEY_MESSAGE, /created on the web/);
+    assert.doesNotMatch(NO_AUTHORIZED_KEY_MESSAGE, /registered after the environment was created/);
   });
 
   it("maps 409 to not-ready and other 403 to access denied", () => {

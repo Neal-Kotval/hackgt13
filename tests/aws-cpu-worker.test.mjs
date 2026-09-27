@@ -7,7 +7,7 @@ import Database from "better-sqlite3";
 import { claimRunBoxJob, migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
 import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
 import { setAwsApproval } from "../lib/aws-organization-approval.mjs";
-import { migrateSshKeys, registerSshKey } from "../lib/ssh-keys.mjs";
+import { migrateSshKeys, registerSshKey, sshFingerprint } from "../lib/ssh-keys.mjs";
 import { getRunBoxSshEndpoint } from "../lib/run-box-ssh.mjs";
 import { getAwsCpuEnvironment, NO_DEVICE_KEYS, workOneAwsCpuJob } from "../lib/aws-cpu-worker.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
@@ -150,6 +150,31 @@ test("a pre-launch failure stopped by its owner closes on the next worker cycle"
   const result = await reconcileAwsRunBoxes(db, inventory, { workerId: "worker-1", requestStop: requestRunBoxStop });
   assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
   assert.equal(await workOneAwsCpuJob(db, provider, { workerId: "worker-1", connection, sshSourceCidr: cidr }), null);
+});
+
+// HAC-166: website-only owners (HAC-163) have no desktop device key; the install's
+// Codex runner key alone lets the environment launch.
+test("zero device keys but a Codex runner key launches with the runner key, not only the operator key", async () => {
+  const { db, job } = setup({ deviceKey: false });
+  const runnerPublicKey = ed25519PublicKey();
+  const runnerKey = { publicKey: runnerPublicKey, fingerprint: sshFingerprint(runnerPublicKey) };
+  const provider = fakeProvider();
+  const results = await runUntilSettled(db, provider, { runnerKey });
+  assert.equal(results.at(-1).state, "ready");
+  const allocate = provider.calls.find((call) => call[0] === "allocate")[1];
+  assert.deepEqual(new Set(allocate.authorizedKeys), new Set([operatorKey, runnerPublicKey]));
+  const environment = getAwsCpuEnvironment(db, job.id);
+  assert.deepEqual(environment.authorized_keys, []);
+  assert.equal(environment.server_key.fingerprint, runnerKey.fingerprint);
+});
+
+test("zero device keys and no Codex runner key still fails with the device-key message", async () => {
+  const { db, job } = setup({ deviceKey: false });
+  const provider = fakeProvider();
+  await assert.rejects(workOneAwsCpuJob(db, provider, { workerId: "worker-1", connection, sshSourceCidr: cidr,
+    runnerKey: { publicKey: "not a key", fingerprint: "SHA256:x" } }), (error) => error.message === NO_DEVICE_KEYS);
+  assert.ok(!provider.calls.some((call) => call[0] === "allocate"));
+  assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
 });
 
 test("an invalid SSH source or missing operator key is rejected before any claim", async () => {
