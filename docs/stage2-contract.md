@@ -98,6 +98,13 @@ codex exec --json --ephemeral --skip-git-repo-check -s danger-full-access -C <wo
 
 The Codex sandbox is disabled because the box itself is the boundary. The UI must say **Trusted shell access**.
 
+### Codex auth (HAC-122)
+
+- **Primary: ChatGPT device sign-in** (`codex login --device-auth`, beta) inside the box. The panel shows the `https://auth.openai.com/codex/device` link and one-time code; the token is written in the box only. If the flow errors, the panel suggests enabling "Sign in with Device Code" in ChatGPT security settings.
+- **Secondary: "Use this Mac's Codex login".** The desktop main process reads `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`) and streams it over the pinned SSH connection on stdin into `~/.codex/auth.json` (dir 0700, file 0600) as `agentcloud`. The contents never cross IPC, are never logged, and are not persisted elsewhere; only the sanitized `codex login status` line is returned. The UI warns that this may sign out Codex on the Mac (one ChatGPT session on two machines) and that the token is copied to the box.
+- Before either login the desktop sets `cli_auth_credentials_store = "file"` in the box's `~/.codex/config.toml` (rewrites an existing value or prepends the key) so credentials land in `~/.codex/auth.json`, which the HAC-121 teardown cleanup removes.
+- Additional IPC: `codex:useLocalLogin (runBoxId) -> { signedIn, detail, localLoginAvailable }`, `codex:openDeviceUrl (sessionId)`, `codex:openRunOnWeb (projectId, runId)` (opened only on the `AGENTCLOUD_URL` origin). `codex:run` takes a third argument `{ projectId, recordPrompt? }` so the main process can read `workspacePath` from the listing (fallback `~`). `codex:event` also carries `{ type: "record-note" }` and `{ type: "run-finished", status, exitCode, stopVerified?, recorded }`.
+
 Terminal (HAC-123):
 
 ```

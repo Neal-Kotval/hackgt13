@@ -135,6 +135,20 @@ Follows [docs/sandbox-mvp-contract.md](../docs/sandbox-mvp-contract.md).
 
 `npm test` includes an sshd integration test (`tests/ssh-integration.test.ts`) that builds a throwaway `alpine` + `openssh` image, connects with a generated device key and the container's real host key, runs `whoami`, and checks that a wrong pinned key and an unauthorized key are refused. It skips when Docker is unavailable; set `AGENTCLOUD_SKIP_DOCKER_TESTS=1` to skip it explicitly.
 
+## Codex panel (HAC-122)
+
+**Open Codex** on a ready environment opens a panel next to the terminal. Everything runs in the main process over the same pinned host key and device key as the terminal (`electron/codex-*.ts`); the renderer (`src/components/CodexPanel.tsx`) only receives statuses and run events.
+
+- **Sign-in.** Primary: **Sign in with ChatGPT** runs `codex login --device-auth` in the environment and shows the link (opened in the system browser) and a copyable one-time code. Secondary: **Use this Mac's Codex login** copies `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`) into the box over SSH stdin as a 0600 file. It may sign out Codex on this Mac; the token is copied to the box and removed at teardown (HAC-121 cleanup). The file contents never cross IPC and are never logged. Before either login the box's `~/.codex/config.toml` is set to `cli_auth_credentials_store = "file"`.
+- **Run.** Each prompt runs `codex exec --json --ephemeral --skip-git-repo-check -s danger-full-access -C <workspacePath> -- <prompt>` (workspace from the run-box listing, else `~`). The prompt is passed as a single-quoted positional argument, never spliced into shell text, and stdin is `/dev/null`. JSONL events stream into the transcript: messages, collapsed reasoning, commands with exit codes and bounded output, file changes. Follow-ups are new ephemeral runs that carry a bounded summary of earlier prompts and replies; workspace files persist between runs.
+- **Stop** sends TERM, then KILL, to the remote process group and reports whether it confirmed the group is gone.
+- **Export changes** saves `git status` (as `#` comments), `git diff HEAD` and untracked files as new-file diffs to a `.patch` via a save dialog. The workspace is not modified.
+- **Recording.** Runs are posted to `/api/agent-runs` (HAC-124). If the server lacks the route, the run still works and the panel says "Not recorded". **View on web** opens `/projects/<id>/runs?run=<runId>` on `AGENTCLOUD_URL` only.
+- **Trusted shell access.** Codex's sandbox is off inside the box; the environment is the boundary.
+- **Mount point.** `EnvironmentsPanel` has an `Open Codex` button and renders `<CodexPanel runBoxId projectId title onClose />` after the terminal. HAC-123 owns that file. When it merges, keep those two additions (or route `panel=codex` deep links to the same state).
+
+Tests: `tests/codex-events.test.ts` (parser, recorded fixtures), `tests/codex-remote.test.ts` (quoting through a real bash, config merge), `tests/codex-session.test.ts` (recording, 404 tolerance, stop, auth file never returned), and `tests/codex-integration.test.ts` (Docker: real Codex 0.157.1 status and device-code output, a fake `codex` for streaming and process-group stop, and patch export; skips without Docker).
+
 ### Using a local server on another port
 
 Set `AGENTCLOUD_URL=http://127.0.0.1:3010` in `desktop/.env` (or the shell) before `just desktop`. Plain `http` on loopback works because API calls run in the main process. A saved session keeps the origin it signed in against, so sign out and relaunch when switching servers.
