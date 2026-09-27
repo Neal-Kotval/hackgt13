@@ -134,9 +134,9 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
 
     // An imported template uses its immutable image ID through the same worker
     // and must pass the same pinned SSH and stop lifecycle.
-    const imageId = await inspectContainerImage("agentcloud-sandbox:dev");
+    const imageId = await inspectContainerImage(image);
     registerContainerTemplate(db, { id: "codex-template", label: "Codex template",
-      imageRef: "agentcloud-sandbox:dev", imageId, source: "registry" });
+      imageRef: image, imageId, source: "registry" });
     const custom = saveRunBoxDecision(db, { idempotencyKey: "it-template", resourceRequestId: "it-template-request",
       projectId: "project-1", employeeId: "owner-1", organizationId: "org-1", projectRole: "owner",
       provider: "docker-local", profileId: "local-template:codex-template", maxDurationMinutes: 60 }).job;
