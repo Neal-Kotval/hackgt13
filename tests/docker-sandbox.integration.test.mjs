@@ -9,6 +9,7 @@ import { migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib
 import { migrateSshKeys, normalizePublicKey, registerSshKey } from "../lib/ssh-keys.mjs";
 import { getRunBoxSshEndpoint, knownHostsLine, migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
 import { createDockerSandboxProvider, sandboxInstallId } from "../lib/docker-sandbox-provider.mjs";
+import { inspectContainerImage, registerContainerTemplate } from "../lib/container-templates.mjs";
 import { runSandboxSsh, workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
 
 // Real Docker end to end: image build, container, sshd, key injection, stop.
@@ -52,6 +53,14 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     registerSshKey(db, "member-1", { label: "Member laptop", publicKey: device.publicKey });
 
     await provider.ensureImage();
+    const cliDataDir = path.join(directory, "template-cli-data");
+    const imported = JSON.parse(execFileSync("node", ["scripts/container-templates.mjs", "import",
+      "--id", "cli-codex", "--label", "CLI Codex", "--image", image],
+    { cwd: process.cwd(), env: { ...process.env, AGENTCLOUD_DATA_DIR: cliDataDir }, encoding: "utf8", timeout: 120_000 }));
+    assert.equal(imported.template.image_ref, image);
+    assert.equal(imported.evidence.codex, "codex-cli 0.157.1");
+    assert.equal(JSON.parse(execFileSync("node", ["scripts/container-templates.mjs", "list"],
+      { cwd: process.cwd(), env: { ...process.env, AGENTCLOUD_DATA_DIR: cliDataDir }, encoding: "utf8" })).length, 1);
     const { job } = saveRunBoxDecision(db, { idempotencyKey: "it-idem", resourceRequestId: "it-request",
       projectId: "project-1", employeeId: "owner-1", organizationId: "org-1", projectRole: "owner",
       provider: "docker-local", profileId: "local-docker-sandbox", maxDurationMinutes: 60 });
@@ -122,6 +131,27 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     assert.equal(stopped.state, "stopped");
     assert.equal(await provider.find(job.id), null);
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
+
+    // An imported template uses its immutable image ID through the same worker
+    // and must pass the same pinned SSH and stop lifecycle.
+    const imageId = await inspectContainerImage("agentcloud-sandbox:dev");
+    registerContainerTemplate(db, { id: "codex-template", label: "Codex template",
+      imageRef: "agentcloud-sandbox:dev", imageId, source: "registry" });
+    const custom = saveRunBoxDecision(db, { idempotencyKey: "it-template", resourceRequestId: "it-template-request",
+      projectId: "project-1", employeeId: "owner-1", organizationId: "org-1", projectRole: "owner",
+      provider: "docker-local", profileId: "local-template:codex-template", maxDurationMinutes: 60 }).job;
+    jobId = custom.id;
+    assert.equal((await workOneDockerSandboxJob(db, provider, { workerId: "it-template-worker" })).state, "ready");
+    const customEndpoint = getRunBoxSshEndpoint(db, custom.id);
+    writeFileSync(knownHostsFile, `${knownHostsLine(customEndpoint)}\n`, { mode: 0o600 });
+    const toolProbe = await runSandboxSsh({ host: customEndpoint.host, port: customEndpoint.port,
+      username: "agentcloud", knownHostsFile, keyFile: device.keyFile },
+    "set -e; codex --version; node --version; test -w ~/workspace\n");
+    assert.equal(toolProbe.code, 0, toolProbe.stderr);
+    assert.match(toolProbe.stdout, /codex-cli 0\.157\.1/);
+    requestRunBoxStop(db, custom.id, "owner-1");
+    assert.equal((await workOneDockerSandboxJob(db, provider, { workerId: "it-template-stop" })).state, "stopped");
+    assert.equal(await provider.find(custom.id), null);
   } finally {
     if (jobId) await provider.remove(jobId).catch(() => {});
     try { execFileSync("docker", ["image", "rm", image], { stdio: "ignore", timeout: 30_000 }); }

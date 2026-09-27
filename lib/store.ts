@@ -457,7 +457,8 @@ export async function resourceAction(
         const hasGpuPreference =
           input.gpuProfileId !== undefined || input.durationHours !== undefined;
         // The CPU-only local sandbox is a run box, never a GPU request.
-        const isLocalSandbox = input.gpuProfileId === localDockerSandboxProfile.id;
+        const isLocalSandbox = input.gpuProfileId === localDockerSandboxProfile.id ||
+          (typeof input.gpuProfileId === "string" && /^local-template:[a-z][a-z0-9-]{1,47}$/.test(input.gpuProfileId));
         if (
           hasGpuPreference &&
           (resourceId ||
@@ -491,7 +492,7 @@ export async function resourceAction(
             ? {
                 computePreference: isLocalSandbox ? {
                   provider: localDockerSandboxProfile.provider,
-                  profileId: localDockerSandboxProfile.id,
+                  profileId: input.gpuProfileId as string,
                   durationHours: input.durationHours as number,
                 } : findRunpodProfile(input.gpuProfileId) ? {
                   provider: "runpod",

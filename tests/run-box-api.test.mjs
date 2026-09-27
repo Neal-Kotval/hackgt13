@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import ts from "typescript";
 import { prepareAuth } from "./auth-fixture.mjs";
+import { registerContainerTemplate } from "../lib/container-templates.mjs";
 
 const directory = await mkdtemp(path.join(os.tmpdir(), "agentcloud-run-box-api-"));
 process.env.AGENTCLOUD_DATA_DIR = path.join(directory, "data");
@@ -15,7 +16,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys"])
+for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
 const db = fixture.getDatabase();
@@ -26,7 +27,7 @@ async function route(sourcePath, outputName, depth) {
   const code = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replaceAll(prefix, "./").replace(/from ["']\.\/([\w-]+)["']/g, (match, name) =>
-    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys"].includes(name) ? ".mjs" : ".js"}'`);
+    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates"].includes(name) ? ".mjs" : ".js"}'`);
   await writeFile(path.join(directory, outputName), code);
   return import(path.join(directory, outputName));
 }
@@ -182,6 +183,26 @@ test("one-step local Docker sandbox path queues a CPU-only run box", {
   const saved = (await store.getState()).projects.find((item) => item.id === projectId).resourceRequests.find((item) => item.id === decision.resource_request_id);
   assert.equal(saved.kind, "run-box");
   assert.equal(saved.computePreference.provider, "docker-local");
+});
+
+test("imported container template is listed and selectable for a local environment", async () => {
+  registerContainerTemplate(db, { id: "codex-custom", label: "Custom Codex", imageRef: "example/codex:1",
+    imageId: `sha256:${"b".repeat(64)}`, source: "registry" });
+  const project = await store.action({ type: "createProject", name: "Template test",
+    repo: "https://example.com/template-repo", compute: "Hosted Linux", template: "blank" });
+  fixture.grantMembership(owner.id, project.id, "owner");
+  const listed = await boxes.GET(request(`/api/run-boxes?projectId=${project.id}`, null, owner.cookie));
+  assert.equal(listed.status, 200);
+  assert.equal((await listed.json()).templates.find((item) => item.id === "codex-custom").label, "Custom Codex");
+  const created = await boxes.POST(request("/api/run-boxes", environment({ projectId: project.id,
+    profileId: "local-template:codex-custom", idempotencyKey: "env-template-1" }), owner.cookie));
+  assert.equal(created.status, 201);
+  const { job } = await created.json();
+  assert.equal(job.profile_id, "local-template:codex-custom");
+  assert.equal(job.provider, "docker-local");
+  const missing = await boxes.POST(request("/api/run-boxes", environment({ projectId: project.id,
+    profileId: "local-template:absent", idempotencyKey: "env-template-missing" }), owner.cookie));
+  assert.equal(missing.status, 409);
 });
 
 test("one-step local Docker sandbox path refuses cleanly while the provider is unsupported", {

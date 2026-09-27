@@ -57,6 +57,7 @@ export type EnvironmentJob = {
 };
 
 type Role = "owner" | "member" | null;
+type ContainerTemplate = { id: string; label: string; imageId: string; source: string };
 
 const profiles = [
   {
@@ -149,10 +150,12 @@ function providerLabel(provider: EnvironmentJob["provider"]) {
   }
 }
 
-function profileLabel(job: EnvironmentJob) {
+function profileLabel(job: EnvironmentJob, templates: ContainerTemplate[] = []) {
   const id = job.profileId ?? job.profile_id;
   const known = profiles.find((profile) => profile.id === id);
   if (known) return known.label;
+  const template = templates.find((item) => `local-template:${item.id}` === id);
+  if (template) return template.label;
   if (job.provider === "aws-ec2") return profiles[2].label;
   return id || "Not recorded";
 }
@@ -172,6 +175,7 @@ function newKey() {
 
 export function Environments({ project }: { project: Project }) {
   const [jobs, setJobs] = useState<EnvironmentJob[] | null>(null);
+  const [templates, setTemplates] = useState<ContainerTemplate[]>([]);
   const [role, setRole] = useState<Role>(null);
   const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -198,10 +202,11 @@ export function Environments({ project }: { project: Project }) {
       const employee = (await employeeResponse.json()) as {
         memberships: { projectId: string; role: "owner" | "member" }[];
       };
-      const data = (await jobsResponse.json()) as { jobs: EnvironmentJob[] };
+      const data = (await jobsResponse.json()) as { jobs: EnvironmentJob[]; templates?: ContainerTemplate[] };
       if (!active) return;
       setRole(employee.memberships.find((item) => item.projectId === project.id)?.role ?? null);
       setJobs(data.jobs);
+      setTemplates(data.templates ?? []);
       setLoadError("");
     }
     const report = (caught: unknown) => {
@@ -289,7 +294,14 @@ export function Environments({ project }: { project: Project }) {
     }
   }
 
-  const selectedProfile = profiles.find((profile) => profile.id === profileId) ?? profiles[0];
+  const availableProfiles = [...profiles, ...templates.map((template) => ({
+    id: `local-template:${template.id}`,
+    label: template.label,
+    icon: <Cube aria-hidden="true" />,
+    summary: "Imported container template · CPU only · no provider cost",
+    detail: `Image ${template.imageId.slice(0, 19)}… passed import checks. Runs on the machine hosting the Docker worker with trusted SSH access.`,
+  }))];
+  const selectedProfile = availableProfiles.find((profile) => profile.id === profileId) ?? availableProfiles[0];
   const empty = jobs !== null && jobs.length === 0;
 
   return (
@@ -370,7 +382,7 @@ export function Environments({ project }: { project: Project }) {
           </div>
           <fieldset className="environment-options">
             <legend>Profile</legend>
-            {profiles.map((profile) => (
+            {availableProfiles.map((profile) => (
               <label
                 key={profile.id}
                 className={`compute-option environment-option${profileId === profile.id ? " chosen" : ""}`}
@@ -445,6 +457,7 @@ export function Environments({ project }: { project: Project }) {
               <EnvironmentCard
                 key={job.id}
                 job={job}
+                templates={templates}
                 role={role}
                 confirming={confirmingStop === job.id}
                 stopBusy={stopBusy === job.id}
@@ -463,6 +476,7 @@ export function Environments({ project }: { project: Project }) {
 
 function EnvironmentCard({
   job,
+  templates,
   role,
   confirming,
   stopBusy,
@@ -472,6 +486,7 @@ function EnvironmentCard({
   onCopy,
 }: {
   job: EnvironmentJob;
+  templates: ContainerTemplate[];
   role: Role;
   confirming: boolean;
   stopBusy: boolean;
@@ -504,7 +519,7 @@ function EnvironmentCard({
     <li className="resource-request-card resource-panel environment-card" aria-labelledby={titleId}>
       <div className="resource-detail-title">
         <div className="environment-title">
-          <h4 id={titleId}>{profileLabel(job)}</h4>
+          <h4 id={titleId}>{profileLabel(job, templates)}</h4>
           {copy.phase !== copy.label && <span className="environment-phase">{copy.phase}</span>}
         </div>
         <span className={`resource-badge resource-badge--${job.state}`}>{copy.label}</span>
