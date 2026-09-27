@@ -141,3 +141,13 @@ describe("deep-link panel routing (HAC-153)", () => {
     assert.deepEqual(parsed, { projectId: "p1", runBoxId: "j1", panel: "codex" });
   });
 });
+
+describe("Settings browser sign-in links", () => {
+  it("accepts paired environment/session identifiers only for sign-in", () => {
+    const parsed = parseAgentCloudDeepLink("agentcloud://open?projectId=p1&runBoxId=r1&codexSessionId=s1&panel=codex-login&authUrl=https://evil.test");
+    assert.deepEqual(parsed, { ok: true, target: { projectId: "p1", runBoxId: "r1", codexSessionId: "s1", panel: "codex-login" } });
+    if (parsed.ok) assert.equal(deepLinkDestination(parsed.target), "codex-browser-login");
+    for (const query of ["projectId=p1&panel=codex-login", "projectId=p1&runBoxId=r1&panel=codex-login", "projectId=p1&codexSessionId=s1&panel=codex-login", "projectId=../bad&runBoxId=r1&codexSessionId=s1&panel=codex-login", "projectId=p1&runBoxId=r1&codexSessionId=s1&panel=codex-login&environmentId=e1"])
+      assert.equal(parseAgentCloudDeepLink(`agentcloud://open?${query}`).ok, false);
+  });
+});
