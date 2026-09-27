@@ -93,6 +93,7 @@ test("reissued, revoked, expired and declined invitations cannot be accepted",as
  assert.equal(db.prepare('SELECT count(*) AS n FROM member WHERE userId=? AND organizationId=?').get(recipient.id,org.id).n,0);
 });
 test("failed SMTP reissue preserves the previously usable invitation",async()=>{
+ assert.equal(fixture.authOptions().advanced?.backgroundTasks?.handler,undefined);
  const recipient=await signup("delivery-failure@example.test");
  const issued=await call("organization/invite-member",{email:recipient.email,role:"member",organizationId:org.id},owner.cookie);
  assert.equal(issued.status,200);
