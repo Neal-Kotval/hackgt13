@@ -7,7 +7,6 @@ import {
   type DeviceLogin,
 } from "../lib/chatgpt-sign-in";
 import {
-  LOCAL_TARGET_KEY,
   deriveChatTargets,
   parseCodexSession,
   parseCodexSessions,
@@ -90,7 +89,7 @@ export function ProjectChat({
   const [runBoxesFor, setRunBoxesFor] = useState("");
   const [sessionsFor, setSessionsFor] = useState("");
   // Codex target with no session yet (picker value when nothing is selected).
-  const [targetChoice, setTargetChoice] = useState(LOCAL_TARGET_KEY);
+  const [targetChoice, setTargetChoice] = useState("");
   // Environment requested by a panel=codex link or Environments "Open Codex".
   const [pendingEnvironment, setPendingEnvironment] = useState<string | null>(null);
   const pendingEnvironmentRef = useRef<string | null>(null);
@@ -112,7 +111,6 @@ export function ProjectChat({
     session: Session;
     events: Event[];
   } | null>(null);
-  const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -209,10 +207,9 @@ export function ProjectChat({
           `/api/codex-sessions?projectId=${encodeURIComponent(projectId)}`,
         );
         if (cancelled) return;
-        const list = parseCodexSessions(data.sessions);
+        const list = parseCodexSessions(data.sessions).filter(item => item.target.kind === "runBox");
         setSessions(list);
         setSessionsFor(projectId);
-        setEnabled(data.enabled);
         setError(null);
         const requested = desiredSession.current;
         if (requested) {
@@ -290,7 +287,7 @@ export function ProjectChat({
           `/api/codex-sessions/${encodeURIComponent(sessionId)}`,
         );
         const parsed = parseCodexSession(data.session);
-        if (!cancelled && parsed && parsed.projectId === projectId) {
+        if (!cancelled && parsed?.target.kind === "runBox" && parsed.projectId === projectId) {
           setSnapshot({ session: parsed, events: data.events });
           setError(null);
           const first = data.events.find((event) => event.kind === "user");
@@ -709,8 +706,8 @@ export function ProjectChat({
     error: "Needs attention",
     stopped: "Stopped",
   };
-  const settingsUrl = projectId
-    ? `${webBaseUrl}/projects/${encodeURIComponent(projectId)}/settings`
+  const environmentsUrl = projectId
+    ? `${webBaseUrl}/projects/${encodeURIComponent(projectId)}/environments`
     : webBaseUrl;
   const messages = session ? (snapshot?.events ?? []) : [];
   const hasConversation = messages.some(
@@ -727,7 +724,7 @@ export function ProjectChat({
         : "warning";
   function chooseProject(id: string) {
     requestEnvironment(null);
-    setTargetChoice(LOCAL_TARGET_KEY);
+    setTargetChoice("");
     blockAutoProject.current = true;
     desiredSession.current = null;
     choosing.current = false;
@@ -756,7 +753,7 @@ export function ProjectChat({
     setSessionId("");
     setSnapshot(null);
     onSelectConversation?.();
-    if (key !== LOCAL_TARGET_KEY)
+    if (key.startsWith("runBox:"))
       void openEnvironmentSession(key.slice("runBox:".length));
   }
   function chooseAgent(id: string) {
@@ -779,7 +776,7 @@ export function ProjectChat({
     selectedSession?.target,
   ).map((target) => {
     const match = sessionForTarget(sessions, target.key);
-    const unavailable = target.kind === "runBox" && !target.available;
+    const unavailable = !target.available;
     return {
       value: target.key,
       label: target.label,
@@ -787,9 +784,7 @@ export function ProjectChat({
         ? "Unavailable"
         : match
           ? statusLabel[match.status]
-          : target.kind === "local"
-            ? "Not set up"
-            : "New",
+          : "Ready",
       disabled: unavailable,
     };
   });
@@ -811,7 +806,7 @@ export function ProjectChat({
   );
   const environmentName = selectedSession
     ? sessionTargetLabel(selectedSession.target)
-    : "Local Codex box";
+    : "Environment";
   const context = (variant: "empty" | "header" | "toolbar") => (
     <ChatProjectPicker
       variant={variant}
@@ -851,13 +846,15 @@ export function ProjectChat({
       selectedId={sessionId}
       busy={busy || attaching}
       loading={loading}
-      setupUrl={settingsUrl}
+      setupUrl={environmentsUrl}
       onSelect={(id) => {
         chooseAgent(id);
         close();
       }}
       onCreate={() => {
         choosing.current = true;
+        requestEnvironment(null);
+        setTargetChoice("");
         desiredSession.current = null;
         setSessionId("");
         setSnapshot(null);
@@ -915,14 +912,10 @@ export function ProjectChat({
                     ? "Choose a project to get started."
                     : pendingEnvironment
                       ? "Connecting Codex on the environment…"
-                      : !sessionId && currentTarget !== LOCAL_TARGET_KEY
+                      : busy && !sessionId
                         ? "Starting Codex on this environment…"
-                    : !enabled && !sessions.length
-                      ? "Local Codex is not enabled on this server. Choose an environment to run Codex there."
-                      : !sessions.length
-                        ? "Connect an agent in project Settings, or choose an environment."
                         : !sessionId
-                          ? "Choose an agent to open its conversation."
+                          ? "Choose a ready environment to chat with Codex."
                           : "Replies come from this project's agent via alto."}
               </p>
             </div>
@@ -970,9 +963,7 @@ export function ProjectChat({
               <p>
                 Codex on {environmentName} needs your ChatGPT account. Usage is
                 billed to your ChatGPT plan. The sign-in stays on{" "}
-                {session.target.kind === "runBox"
-                  ? "this environment until it stops"
-                  : "this local Codex box until it is removed"}
+                this environment until it stops
                 .
               </p>
               {login ? (
@@ -1090,14 +1081,14 @@ export function ProjectChat({
               )}
             </section>
           )}
-          {!sessions.length && !loading && !pendingEnvironment && currentTarget === LOCAL_TARGET_KEY && (
+          {!sessions.length && !loading && !pendingEnvironment && (
             <a
               className="button primary"
-              href={settingsUrl}
+              href={environmentsUrl}
               target="_blank"
               rel="noreferrer"
             >
-              Set up agent on website
+              Manage environments
             </a>
           )}
           {ambiguous[sessionId] && (
@@ -1130,7 +1121,7 @@ export function ProjectChat({
                 ? hasConversation
                   ? `Message ${agentName(session)}`
                   : `Ask ${agentName(session)} to work on ${project?.name || "this project"}`
-                : "Choose an agent to start chatting"
+                : "Choose an environment to start chatting"
             }
             context={hasConversation ? context("toolbar") : undefined}
             attachments={draftAttachments}

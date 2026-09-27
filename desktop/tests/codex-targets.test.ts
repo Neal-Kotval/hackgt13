@@ -42,7 +42,7 @@ describe("run-box agent.codex parsing", () => {
 });
 
 describe("deriveChatTargets", () => {
-  it("offers the local box plus ready environments whose Codex check is ready", () => {
+  it("offers only ready environments whose Codex check is ready", () => {
     const targets = deriveChatTargets("p1", [
       job("abcdef123456"),
       job("pending1", { agent: { codex: { state: "pending" } } }),
@@ -53,17 +53,20 @@ describe("deriveChatTargets", () => {
       job("otherprj", { projectId: "p2" }),
       job("runpod01", { provider: "runpod", profileId: null }),
     ]);
-    assert.deepEqual(targets.map(target => target.key), ["local", "runBox:abcdef123456", "runBox:runpod01"]);
-    assert.equal(targets[0].label, "Local Codex box");
-    assert.equal(targets[1].label, "AWS EC2 CPU · abcdef12");
-    assert.equal(targets[2].label, "Runpod · runpod01");
+    assert.deepEqual(targets.map(target => target.key), ["runBox:abcdef123456", "runBox:runpod01"]);
+    assert.equal(targets[0].label, "AWS EC2 CPU · abcdef12");
+    assert.equal(targets[1].label, "Runpod · runpod01");
   });
 
   it("keeps the current session's environment listed as unavailable after it stops", () => {
     const targets = deriveChatTargets("p1", [], { kind: "runBox", runBoxId: "gone1234", provider: "aws-ec2", profileId: "aws-cpu", state: "stopped" });
-    assert.equal(targets.length, 2);
-    assert.equal(targets[1].kind === "runBox" && targets[1].available, false);
-    assert.match(targets[1].label, /AWS EC2 CPU · gone1234 \(unavailable\)/);
+    assert.equal(targets.length, 1);
+    assert.equal(targets[0].kind === "runBox" && targets[0].available, false);
+    assert.match(targets[0].label, /AWS EC2 CPU · gone1234 \(unavailable\)/);
+  });
+
+  it("never creates a local option for empty projects or a legacy local session", () => {
+    assert.deepEqual(deriveChatTargets("p1", [], { kind: "local" }), []);
   });
 
   it("labels unknown providers and profiles honestly", () => {
