@@ -397,3 +397,6 @@
 .project-create-content { width: 100%; max-width: var(--content-narrow); margin: 0 auto; padding: var(--space-6) var(--page-gutter); }
 .project-existing-choice { display: grid; gap: var(--space-2); margin-bottom: var(--space-6); font-size: var(--text-sm); color: var(--color-muted); }
 .project-chat-status > .button svg { width: var(--icon-sm); height: var(--icon-sm); }
+
+.project-chat-main .main-header { flex-wrap: wrap; }
+.project-chat-status { flex-wrap: wrap; max-width: 100%; }

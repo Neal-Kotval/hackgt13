@@ -94,6 +94,17 @@ try {
   await page.getByRole('button', { name: 'Copy code', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('// bounded results\nconst message = "ready";');
   await layout('active');
+  await page.evaluate(()=>{window.__test.sessions.find(s=>s.id==='s1').status='stopped';});
+  await page.setViewportSize({width:375,height:900});
+  await page.getByRole('button',{name:'Reconnect',exact:true}).waitFor();
+  for(const name of ['New project','Reconnect']) {
+    const bounds=await page.getByRole('button',{name,exact:true}).boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x+bounds.width).toBeLessThanOrEqual(375);
+  }
+  await page.evaluate(()=>{window.__test.sessions.find(s=>s.id==='s1').status='ready';});
+  await expect(page.getByRole('button',{name:'Reconnect',exact:true})).toHaveCount(0);
+  await page.setViewportSize({width:1440,height:900});
   // A lost Retry response must retain its idempotency key, and never consume an unrelated draft.
   await input.fill('Unrelated unsent draft');
   await page.evaluate(() => { window.__test.loseResponse = true; });
@@ -181,6 +192,8 @@ try {
   await expect(page.getByText('This legacy link names a catalog resource. Select its environment from the list below.', { exact: true })).toBeVisible();
   await page.evaluate(() => window.__test.deepLink({ ok: true, target: { projectId: 'p1', serverUrl: 'https://other.example.invalid' } }));
   await expect(page.getByText(/This link came from a different alto server/)).toBeVisible();
+  await page.evaluate(()=>window.__test.deepLink({ok:true,target:{projectId:'missing-project'}}));
+  await expect(page.getByRole('alert')).toContainText('linked project is not available');
   await page.goto(`${base}/?no-projects`);
   await expect(page.getByRole('heading', {name:'Create a project'})).toBeVisible();
   await expect(page.getByRole('link', {name:'Open website'})).toHaveCount(0);

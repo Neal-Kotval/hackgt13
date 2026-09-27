@@ -791,6 +791,7 @@ export function ProjectChat({
             </Select>
           </label>}
           {error && <p className="error-banner" role="alert">{error}</p>}
+          {actionError && <p className="error-banner" role="alert">{actionError}</p>}
           <CreateProjectForm busy={creatingProject} error={createError} onCreate={values => void createProject(values)} />
         </div>
       </main>
