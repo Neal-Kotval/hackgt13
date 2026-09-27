@@ -54,3 +54,13 @@ test("unmount while login is pending cancels once response arrives", async () =>
   const cancelled = flow.cancel(); release(); await cancelled;
   assert.ok(!calls.includes("tunnel:start")); assert.ok(calls.includes("cancelLogin"));
 });
+test("web cancellation closes tunnel and stops waiting", async () => {
+  const { bridge, calls } = fixture(); const original = bridge.fetchHuman; let reads = 0; const errors: string[] = [];
+  bridge.fetchHuman = async (path, options) => {
+    if (!options && ++reads > 1) return { ok: true, status: 200, body: JSON.stringify({ session: { ...session(), loginPending: false } }) };
+    return original(path, options);
+  };
+  await beginBrowserLogin(bridge, target, () => {}, assert.fail, e => errors.push(e), 1).done;
+  assert.match(errors[0], /cancelled or expired/);
+  assert.ok(calls.includes("tunnel:stop")); assert.ok(calls.includes("cancelLogin"));
+});

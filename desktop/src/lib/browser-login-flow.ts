@@ -55,9 +55,11 @@ export function beginBrowserLogin(bridge: LoginBridge, target: LoginTarget, noti
       if (cancelled) return;
       notify("Finish signing in to ChatGPT in your browser. This window will continue automatically.");
       while (!cancelled) {
-        const session = validateLoginSession((await request()).session, target);
+        const snapshot = await request();
+        const session = validateLoginSession(snapshot.session, target);
         if (cancelled) return;
         if (session.status === "ready" || session.status === "running") { finished = true; break; }
+        if (snapshot.session.loginPending === false) throw new Error("Sign-in was cancelled or expired. Start it again from project Settings.");
         if (session.status === "error" || session.status === "stopped") throw new Error(session.error || "Codex sign-in stopped. Retry from project Settings.");
         await new Promise<void>(resolve => { const timer = setTimeout(resolve, pollMs); wake = () => { clearTimeout(timer); resolve(); }; });
       }
