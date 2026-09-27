@@ -121,6 +121,8 @@ test("connection API enforces auth, membership, readiness, and injected device k
 
   db.prepare("UPDATE run_box_job SET state = 'ready' WHERE id = ?").run(job.id);
   assert.equal((await get(owner.cookie)).status, 409); // ready but no endpoint
+  const withoutEndpoint = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
+  assert.equal(withoutEndpoint.desktopUrl, null); // no terminal without an SSH endpoint
 
   const ownerKey = ed25519PublicKey();
   await register(owner.cookie, ownerKey);
@@ -158,6 +160,10 @@ test("connection API enforces auth, membership, readiness, and injected device k
   assert.deepEqual(listed[0].ssh, { host: "203.0.113.10", port: 30222, username: "agentcloud" });
   assert.equal(listed[0].desktopUrl, `agentcloud://open?projectId=${projectId}&runBoxId=${job.id}`);
   assert.equal(listed[0].access, "trusted-shell");
+  db.prepare("UPDATE run_box_job SET stop_requested_at = ? WHERE id = ?").run(new Date().toISOString(), job.id);
+  const stopRequested = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
+  assert.equal(stopRequested.desktopUrl, null);
+  assert.equal(stopRequested.ssh, null);
   db.prepare("UPDATE run_box_job SET state = 'stopping' WHERE id = ?").run(job.id);
   const stopping = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
   assert.equal(stopping.desktopUrl, null);

@@ -54,6 +54,9 @@ function ProjectCodexSessions({ project }: { project: Project }) {
   const [pending, setPending] = useState<string | null>(null);
   const [logins, setLogins] = useState<Record<string, Login>>({});
   const [retry, setRetry] = useState(0);
+  const [serverUrl, setServerUrl] = useState("");
+
+  useEffect(() => setServerUrl(window.location.origin), []);
 
   useEffect(() => {
     let disposed = false;
@@ -131,10 +134,11 @@ function ProjectCodexSessions({ project }: { project: Project }) {
               {login && <div className="codex-login"><p>Open OpenAI sign-in and enter this device code:</p><code>{login.userCode}</code><a className="button secondary" href={login.verificationUrl} target="_blank" rel="noopener noreferrer">Open OpenAI sign-in <ArrowUpRight aria-hidden="true" /></a><p className="muted">Keep this page open. Status updates when sign-in finishes. If the code expires, request a new one.</p></div>}
               <div className="codex-session-actions">
                 {owner && session.status === "auth_required" && <button className="button primary" disabled={pending !== null} onClick={() => void mutate(session, "login")}>{pending === session.id ? "Requesting sign-in…" : login ? "Get a new sign-in code" : "Sign in to Codex"}</button>}
-                {(session.status === "ready" || session.status === "running") && <a className="button primary" href={`agentcloud://open?projectId=${encodeURIComponent(project.id)}&codexSessionId=${encodeURIComponent(session.id)}`}><Desktop aria-hidden="true" />Open in desktop</a>}
+                {(session.status === "ready" || session.status === "running") && serverUrl && <a className="button primary" href={`agentcloud://open?${new URLSearchParams({ projectId: project.id, codexSessionId: session.id, serverUrl })}`}><Desktop aria-hidden="true" />Open in desktop</a>}
                 {owner && (session.status === "stopped" || session.status === "error") && <button className="button secondary" disabled={pending !== null} onClick={() => void mutate(session, "resume")}><Play aria-hidden="true" />Resume Codex</button>}
                 {owner && session.status !== "stopped" && <button className="button danger" disabled={pending !== null} onClick={() => void mutate(session, "stop")}><Stop aria-hidden="true" />Stop box</button>}
               </div>
+              {(session.status === "ready" || session.status === "running") && <details className="muted"><summary>Desktop didn’t open?</summary><p>Start the desktop app with <code>just desktop</code>, then select this project and Codex session.</p><p>Project ID: <code>{project.id}</code><br />Session ID: <code>{session.id}</code></p></details>}
             </article>;
           })}
         </div>
