@@ -151,7 +151,8 @@
   background: var(--color-transparent);
   color: var(--color-muted);
 }
-.chat-history-more:hover { background: var(--color-glass-hover); color: var(--color-text); }
+.chat-history-more { transition: color var(--duration-normal) var(--ease-standard); }
+.chat-history-more:hover, .chat-history-more[aria-expanded="true"] { color: var(--color-accent); }
 .chat-history-more svg { width: var(--icon-md); height: var(--icon-md); }
 .chat-history-more:focus-visible, .chat-history-actions button:focus-visible {
   outline: var(--focus-width) solid var(--color-accent);
