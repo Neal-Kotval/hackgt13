@@ -189,6 +189,23 @@ try {
   await expect(page.getByText('Choose an environment to access its chats.', { exact: true })).toBeVisible();
   await selectEnvironment();
   await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toBeVisible();
+  for (const width of [375, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const setup = page.getByRole('region', { name: 'Connect Codex' });
+    await expect(setup).toBeVisible();
+    const settings = setup.getByRole('link', { name: 'Project settings' });
+    await expect(settings).toHaveAttribute('href', /projects\/p1\/settings#agent-setup$/);
+    await settings.focus();
+    await expect(settings).toBeFocused();
+    expect(await settings.evaluate(el => getComputedStyle(el).textDecorationLine)).toBe('none');
+    expect(await settings.evaluate(el => getComputedStyle(el).outlineStyle)).toBe('solid');
+    const button = await setup.getByRole('button', { name: 'Sign in with ChatGPT' }).boundingBox();
+    const card = await setup.boundingBox();
+    expect(button.width).toBeLessThan(card.width);
+    expect(button.x + button.width).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
+    await page.screenshot({ path: path.join(artifacts, `refined-setup-${width}.png`) });
+  }
   expect(await page.evaluate(() => window.__test.created)).toBeUndefined();
   await page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true }).click();
   await expect(page.getByText(/Finish signing in to ChatGPT/)).toBeVisible();

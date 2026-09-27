@@ -159,3 +159,9 @@ filters, name/slug search, and responsive two-column approval panels. Reservatio
 meters describe reserved monthly hours, not measured usage. Approval, revocation,
 and force-close retain their existing authorization and confirmation behavior.
 All styling uses existing semantic tokens; no new visual primitives are added.
+
+Desktop setup panels use one concise explanation, a compact primary sign-in
+action, and secondary project settings in the same wrapping action row. External
+actions use directional icons. Button links inherit the web's decoration reset
+and visible keyboard focus. Without a selected project, the fallback says Open
+website rather than implying project-specific settings.
