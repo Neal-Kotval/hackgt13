@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Turn on real email delivery (org invitations, email verification) for staging through Gmail SMTP.
 # Usage: AWS_PROFILE=agentcloud-operator bash scripts/aws-auth/set-smtp.sh you@gmail.com
-# Prompts for a Google app password (myaccount.google.com/apppasswords) without echoing it, merges
+#   or, with the password kept in Doppler (hackgt/dev GMAIL_APP_PASSWORD):
+#   doppler run --project hackgt --config dev -- env AWS_PROFILE=agentcloud-operator bash scripts/aws-auth/set-smtp.sh you@gmail.com
+# Uses GMAIL_APP_PASSWORD from the environment when set, otherwise prompts for a Google app
+# password (myaccount.google.com/apppasswords) without echoing it. Merges
 # the SMTP settings into the staging runtime secret, and restarts the web service. The password is
 # never printed, logged, or written to disk.
 set -euo pipefail
@@ -16,8 +19,13 @@ SENDER="${1:-}"
 load_staging_outputs
 require_command node
 
-read -rsp "Google app password for $SENDER (input hidden): " APP_PASSWORD
-echo
+if [[ -n "${GMAIL_APP_PASSWORD:-}" ]]; then
+  APP_PASSWORD="$GMAIL_APP_PASSWORD"
+  unset GMAIL_APP_PASSWORD
+else
+  read -rsp "Google app password for $SENDER (input hidden): " APP_PASSWORD
+  echo
+fi
 APP_PASSWORD="${APP_PASSWORD// /}"
 [[ ${#APP_PASSWORD} -eq 16 ]] || { echo 'A Google app password is 16 letters (spaces are ignored).' >&2; exit 1; }
 
