@@ -1,10 +1,75 @@
-/* HAC-166: platform-admin table of active AWS environments on /admin/aws. */
-.organization-page.organization-page--wide {
-  max-width: none;
+.aws-environments {
+  min-width: 0;
 }
-.organization-page--wide > :not(.aws-environments) {
-  width: 100%;
-  max-width: var(--content-narrow);
+.aws-environments-heading,
+.aws-environments-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+}
+.aws-environments-heading > div {
+  display: grid;
+  gap: var(--space-2);
+}
+.aws-environments-heading > .button {
+  flex-shrink: 0;
+}
+.aws-environments-toolbar {
+  flex-wrap: wrap;
+  padding-block: var(--space-3);
+  border-block: var(--border-width) solid var(--color-border-subtle);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+.aws-environments-toolbar > :first-child {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+.aws-environments-empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  padding-block: var(--space-8);
+}
+.aws-environments-empty > svg {
+  color: var(--color-muted);
+  width: var(--space-8);
+  height: var(--space-8);
+  margin-bottom: var(--space-2);
+}
+.aws-environments-empty h3 {
+  font-size: var(--text-lg);
+}
+.aws-environments-policy {
+  border-top: var(--border-width) solid var(--color-border-subtle);
+  padding-top: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.aws-environments-policy summary {
+  cursor: pointer;
+  color: var(--color-text);
+  min-height: var(--control-height);
+  align-content: center;
+}
+.aws-environments-policy p {
+  padding-top: var(--space-2);
+}
+.aws-environments-instance {
+  color: var(--color-muted);
+}
+.aws-environments .table-scroll th,
+.aws-environments .table-scroll td {
+  padding: var(--space-4) var(--space-3);
+}
+.aws-environments .table-scroll th:first-child,
+.aws-environments .table-scroll td:first-child {
+  padding-left: 0;
+}
+.aws-environments .table-scroll th:last-child,
+.aws-environments .table-scroll td:last-child {
+  padding-right: 0;
 }
 .aws-environments-notice:empty {
   display: none;
@@ -15,7 +80,6 @@
 .aws-environments td:first-child {
   min-width: 0;
 }
-.aws-environments-id,
 .aws-environments-buttons {
   display: flex;
   flex-wrap: wrap;
@@ -43,7 +107,7 @@
 .aws-environments-stack small,
 .aws-environments-confirm small {
   color: var(--color-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 .aws-environments-age {
@@ -65,6 +129,19 @@
 }
 
 @media (max-width: 768px) {
+  .aws-environments-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .aws-environments-policy summary {
+    min-height: var(--control-height-touch);
+  }
+  .aws-environments .table-scroll td,
+  .aws-environments .table-scroll td:first-child,
+  .aws-environments .table-scroll td:last-child {
+    padding: var(--space-2) 0;
+  }
+
   .aws-environments .table-scroll tr {
     grid-template-columns: minmax(0, 1fr);
   }

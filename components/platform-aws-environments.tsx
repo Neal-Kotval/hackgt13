@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Copy } from "@phosphor-icons/react";
+import { ArrowClockwise, Copy, HardDrives } from "@phosphor-icons/react";
+import { SkeletonRegion, SkeletonRows } from "./ui/skeleton";
 import "./resources/resources.css";
 import "./platform-aws-environments.css";
 
@@ -54,28 +55,42 @@ function profileLabel(profile: string) {
 export function PlatformAwsEnvironments() {
   const [environments, setEnvironments] = useState<AwsEnvironment[] | null>(null);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
-    const response = await fetch("/api/admin/aws-environments", { cache: "no-store" });
-    if (response.status === 401) {
-      window.location.assign("/sign-in");
-      return;
+    setRefreshing(true);
+    try {
+      const response = await fetch("/api/admin/aws-environments", { cache: "no-store" });
+      if (response.status === 401) {
+        window.location.assign("/sign-in");
+        return;
+      }
+      if (!response.ok) throw new Error("Could not load AWS environments. Try refreshing.");
+      setEnvironments((await response.json()).environments);
+      const timestamp = Date.now();
+      setNow(timestamp);
+      setUpdatedAt(timestamp);
+      setLoadError("");
+    } finally {
+      setRefreshing(false);
     }
-    if (!response.ok) throw new Error("Could not load AWS environments. Reload the page to try again.");
-    setEnvironments((await response.json()).environments);
-    setNow(Date.now());
   }, []);
 
+  const refresh = useCallback(() => {
+    void load().catch((failure) => setLoadError(failure instanceof Error ? failure.message : "Could not load AWS environments."));
+  }, [load]);
+
   useEffect(() => {
-    const refresh = () => void load().catch((failure) => setError(failure instanceof Error ? failure.message : "Could not load AWS environments."));
     refresh();
     const timer = window.setInterval(refresh, POLL_MS);
     return () => window.clearInterval(timer);
-  }, [load]);
+  }, [refresh]);
 
   async function copyId(id: string) {
     setError("");
@@ -110,14 +125,32 @@ export function PlatformAwsEnvironments() {
   }
 
   return <section className="organization-panel aws-environments" aria-labelledby="aws-environments-title">
-    <div>
-      <h2 id="aws-environments-title">Active AWS environments</h2>
-      <p>Every AWS environment that is not stopped across all organizations, plus any force closed in the last day. Only one may be active at a time. Force close is performed by the AWS worker on its next cycle: with no EC2 resources tagged for the environment it is closed; otherwise the standard teardown runs.</p>
+    <div className="aws-environments-heading">
+      <div>
+        <h2 id="aws-environments-title">AWS environments</h2>
+        <p>Active environments across all organizations, with force closures from the last 24 hours.</p>
+      </div>
+      <button className="button" type="button" disabled={refreshing} onClick={refresh}>
+        <ArrowClockwise aria-hidden="true" /> {refreshing ? "Refreshing…" : "Refresh"}
+      </button>
     </div>
+    <div className="aws-environments-toolbar">
+      <span>{environments === null ? "Environment inventory" : `${environments.filter((environment) => environment.state !== "stopped").length} active · ${environments.length} listed`}</span>
+      <span>{loadError ? "Refresh failed · data may be outdated" : updatedAt ? `Updated ${new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })} · refreshes every 15s` : "Refreshes every 15s"}</span>
+    </div>
+    {loadError && <p className="auth-error" role="alert">{loadError}</p>}
     {error && <p className="auth-error" role="alert">{error}</p>}
     <p className="auth-success aws-environments-notice" role="status">{notice}</p>
-    {environments === null ? <p role="status">Loading AWS environments…</p> : environments.length === 0 ?
-      <p>No AWS environments are active.</p> :
+    {environments === null ? loadError ? <div className="aws-environments-empty">
+      <HardDrives aria-hidden="true" />
+      <h3>Environment inventory unavailable</h3>
+      <p>Refresh to try loading the current environment records again.</p>
+    </div> : <SkeletonRegion label="Loading AWS environments"><SkeletonRows count={3} /></SkeletonRegion> : environments.length === 0 ?
+      <div className="aws-environments-empty">
+        <HardDrives aria-hidden="true" />
+        <h3>No active AWS environments</h3>
+        <p>Active environments and recent force closures will appear here. Nothing needs your attention.</p>
+      </div> :
       <div className="table-scroll">
         <table>
           <thead>
@@ -125,9 +158,7 @@ export function PlatformAwsEnvironments() {
               <th scope="col">Environment</th>
               <th scope="col">Owner</th>
               <th scope="col">Profile and state</th>
-              <th scope="col">Age</th>
               <th scope="col">Last transition</th>
-              <th scope="col">EC2 instance</th>
               <th scope="col">Force close</th>
             </tr>
           </thead>
@@ -139,6 +170,10 @@ export function PlatformAwsEnvironments() {
           </tbody>
         </table>
       </div>}
+    <details className="aws-environments-policy">
+      <summary>Capacity and force-close policy</summary>
+      <p>Only one AWS environment may be active at a time. Force close queues a request for the AWS worker’s next cycle. The worker closes the record when no EC2 resources are tagged for it; otherwise, it runs the standard teardown first.</p>
+    </details>
   </section>;
 }
 
@@ -168,8 +203,10 @@ function EnvironmentRow({ environment, now, confirming, busy, anyBusy, onCopy, o
 
   return <tr>
     <td data-label="Environment">
-      <span className="aws-environments-id">
+      <span className="aws-environments-id aws-environments-stack">
         <code title={environment.id}>{environment.shortId}</code>
+        <small>Age: {age(environment.createdAt, now)}</small>
+        <code className="aws-environments-instance">{environment.instanceId ?? "No EC2 instance"}</code>
         <button className="button ghost aws-environments-copy" type="button" onClick={onCopy}
           aria-label={`Copy full environment ID ${environment.id}`}>
           <Copy aria-hidden="true" /> Copy full ID
@@ -188,9 +225,7 @@ function EnvironmentRow({ environment, now, confirming, busy, anyBusy, onCopy, o
         <span className={`resource-badge resource-badge--${environment.state}`}>{environment.state}</span>
       </span>
     </td>
-    <td data-label="Age" className="aws-environments-age">{age(environment.createdAt, now)}</td>
     <td data-label="Last transition" className="aws-environments-reason">{environment.lastReason ?? "No reason recorded"}</td>
-    <td data-label="EC2 instance"><code>{environment.instanceId ?? "none"}</code></td>
     <td data-label="Force close">
       <span className="aws-environments-stack aws-environments-action">
         {status && <span className={`resource-badge resource-badge--${forceCloseTone[status]}`}
