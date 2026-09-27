@@ -40,6 +40,11 @@ try {
     expect(composer.x).toBeGreaterThanOrEqual(0);
     expect(composer.x + composer.width).toBeLessThanOrEqual(width);
     expect(composer.y + composer.height).toBeLessThanOrEqual(900);
+    const transcript = await page.locator('.conversation:visible').boundingBox();
+    expect(Math.abs(composer.x + composer.width / 2 - transcript.x - transcript.width / 2)).toBeLessThan(1);
+    const message = await page.locator('.conversation:visible .message[data-role="assistant"]').first().boundingBox();
+    expect(Math.abs(composer.x - message.x)).toBeLessThan(1);
+    expect(Math.abs(composer.width - message.width)).toBeLessThan(1);
     await page.screenshot({ path: path.join(artifacts, `environment-chat-${width}.png`) });
   }
   await input().fill('Saved draft');

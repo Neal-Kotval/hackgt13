@@ -289,6 +289,13 @@
   overflow: hidden;
 }
 .environment-chat-session[hidden] { display: none; }
+.environment-chat-session .conversation {
+  flex: 1;
+}
+.environment-chat-session .chat-compose-area {
+  flex-shrink: 0;
+  margin-inline: auto;
+}
 .environment-chat-session .codex-signin {
   max-height: var(--sidebar-width);
   overflow-y: auto;
