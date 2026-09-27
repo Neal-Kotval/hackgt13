@@ -346,3 +346,11 @@ The public `/download` page recommends a platform using browser OS hints and off
 Release `desktop-v0.1.1` on GitHub hosts `alto-0.1.1-macos-arm64.dmg`, built using `npm run package:macos --prefix desktop`, and its SHA-256 checksum. The DMG includes the desktop app and `alto` CLI; it is ad-hoc signed and not notarized. Install the app in Applications, launch and sign in, then run `/Applications/alto.app/Contents/Resources/bin/alto install` to install the CLI in `~/.local/bin`. Keep the desktop app running for `alto ssh <environment-id>`. Publish and verify new release assets before updating the download manifest in `lib/desktop-downloads.mjs`.
 
 Hosted release builds use `ALTO_DESKTOP_SERVER_URL=https://d12myzdaxmn92r.cloudfront.net npm run package:macos --prefix desktop` to configure the portal connection. Runtime `AGENTCLOUD_URL` or `BETTER_AUTH_URL` overrides remain available for self-hosted installs. Builds without this packaging option retain the local development default.
+
+## Account environment limits
+
+Open **Account settings** from the account navigation (`/settings`) to choose 1–5 active cloud environments (default 1). The preference belongs to the signed-in user and covers AWS and Runpod environments they create across projects and organizations. Queued, starting, ready, and failed jobs awaiting cleanup count toward the limit. Stop requests still count until AWS accepts termination; other providers release capacity after confirmed cleanup. Lowering it never stops existing environments. Local Docker sandboxes retain their separate one-per-project guard. Organization approvals, reserved runtime budgets, expiry guards, provider quotas, and cleanup gates still apply.
+
+`GET/PATCH /api/account/settings` returns `{maxActiveEnvironments, activeEnvironments}`. PATCH accepts `{maxActiveEnvironments}` with an integer from 1 through 5; the verified session supplies identity and mutations require the same origin. Admission counts and job creation share the SQLite transaction, so competing requests cannot exceed the saved limit.
+
+Stopping remains asynchronous: AWS can take several minutes to terminate a machine and delete its disposable disk. The worker releases an AWS slot when AWS accepts termination, while continuing to verify final machine and disk cleanup. Other providers release their slots after confirmed cleanup.

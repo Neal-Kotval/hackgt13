@@ -67,7 +67,7 @@ const stateCopy: Record<JobState, { label: string; phase: string; detail: string
   stopping: {
     label: "Stopping",
     phase: "Stopping",
-    detail: "Stop requested. Waiting for the worker to confirm teardown.",
+    detail: "Shutdown can take several minutes. Waiting for the provider to confirm this environment is released.",
   },
   stopped: {
     label: "Stopped",
@@ -306,7 +306,7 @@ export function Environments({ project }: { project: Project }) {
       setNotice(
         data.outcome === "stopped"
           ? "Stopped. No machine was ever launched for this environment, so it was closed immediately."
-          : "Termination requested. This environment keeps blocking new ones until the worker confirms the provider released it.",
+          : "Termination requested. Waiting for the provider to confirm this environment is released.",
       );
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "Could not force stop.");
@@ -598,9 +598,10 @@ function EnvironmentCard({
   const command = job.ssh ? sshCommand(job.ssh) : "";
   const canStop = role === "owner" && job.state !== "stopped" && !job.stop_requested_at;
   const ready = job.state === "ready" && !job.stop_requested_at;
-  // A failed or stuck-stopping job still holds the provider's single active slot.
+  // Failed jobs awaiting cleanup still count toward cloud capacity.
   // Nothing left to force once AWS is already terminating the machine.
   const canForceStop = role === "owner" && job.state !== "stopped" && !job.force_stop_requested_at && !job.termination_requested_at &&
+
     (Boolean(job.stop_requested_at) || job.state === "failed" || job.state === "stopping");
   const terminationRequested = Boolean(job.force_stop_requested_at) && job.state !== "stopped";
   const chatUrl = ready && serverUrl
@@ -614,9 +615,10 @@ function EnvironmentCard({
       : progress
         ? progress.detail
         : terminationRequested
-          ? "Termination requested. The worker must confirm the provider released this environment before it stops blocking new ones."
+          ? "Termination requested. Waiting for the provider to confirm this environment is released."
           : copy.detail;
   const phase = progress ? progress.phase : terminationRequested ? "Termination requested" : copy.phase;
+
 
   return (
     <li id={`rb-${job.id}`} className="resource-request-card resource-panel environment-card" aria-labelledby={titleId}>
@@ -826,7 +828,7 @@ function EnvironmentCard({
           <p>
             Force stop this environment? If no machine was ever launched, it closes now.
             Otherwise AgentCloud requests termination from the provider, and this
-            environment keeps blocking new ones until the release is confirmed.
+            environment is not fully released until the provider confirms teardown.
             Anything not pushed from it is lost.
           </p>
           <div className="environment-actions">

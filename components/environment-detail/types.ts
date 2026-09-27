@@ -88,7 +88,7 @@ export const stateLabels: Record<RunBoxJobState, { label: string; detail: string
   connecting: { label: "Connecting", detail: "The machine was allocated. The worker is establishing SSH access." },
   verifying: { label: "Verifying", detail: "The worker is checking the pinned host key, workspace, and hardware." },
   ready: { label: "Ready", detail: "The worker verified SSH access against the host key it generated." },
-  stopping: { label: "Stopping", detail: "Stop requested. Waiting for the worker to confirm teardown." },
+  stopping: { label: "Stopping", detail: "Shutdown can take several minutes. Waiting for the provider to confirm this environment is released." },
   stopped: { label: "Stopped", detail: "The worker recorded this environment as stopped." },
   failed: { label: "Failed", detail: "The worker recorded a failure. Request a stop so it confirms cleanup." },
 };
@@ -102,9 +102,9 @@ type TeardownJob = { state: string; stop_requested_at?: string | null; terminati
 /** Plain-language progress for stopping and waiting jobs, or null to use the state's default copy. */
 export function progressInfo(job: TeardownJob): { phase: string; detail: string } | null {
   if (job.state !== "stopped" && job.termination_requested_at)
-    return { phase: "Shutting down", detail: "AWS is terminating the machine and compute billing has stopped. It shows as stopped once AWS confirms the machine and its disk are gone, usually within 1–5 minutes. You can start another environment now." };
+    return { phase: "Shutting down", detail: "AWS is terminating the machine and compute billing has stopped. It shows as stopped once AWS confirms the machine and its disk are gone, usually within 1–5 minutes. It no longer counts toward its creator’s cloud environment limit." };
   if (job.state === "stopping" || (job.stop_requested_at && job.state !== "stopped"))
-    return { phase: "Stopping", detail: "Stop requested. Signing Codex out, removing credentials, and asking AWS to terminate the machine." };
+    return { phase: "Stopping", detail: "Stop requested. Signing Codex out, removing credentials, and asking the provider to stop the environment." };
   if ((job.state === "queued" || job.state === "allocating") && job.waitReason)
     return { phase: "Waiting", detail: job.waitReason };
   return null;

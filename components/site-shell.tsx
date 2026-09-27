@@ -95,7 +95,7 @@ function SiteShell({ children }: { children: ReactNode }) {
         {projects && projects.length > 0 && <div className="site-nav-group"><div className="site-project-picker"><h2 className="site-nav-label">Project</h2><Select aria-label="Current project" value={project?.id || ""} onChange={event => {router.push(`/projects/${event.target.value}`); setOpen(false);}}><option value="" disabled>Select project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></div>
         {project && views.map(([label, segment, Icon]) => navLink(label, `/projects/${project.id}${segment ? "/" + segment : ""}`, Icon, pieces[1] === "projects" && pieces[2] === project.id && section === segment))}</div>}
       </nav>
-      <div className="site-account"><EmployeeMenu navigation={false} /></div>
+      <div className="site-account"><EmployeeMenu navigation={false} onNavigate={() => setOpen(false)} /></div>
     </aside>
     <div ref={content} id="site-content" className="site-content" tabIndex={-1}>{children}</div>
   </div>;
