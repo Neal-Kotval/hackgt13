@@ -49,6 +49,10 @@ export default function MarketingPage() {
           <a className="marketing-button marketing-button-secondary" href="#platform">Explore the platform <ArrowRight aria-hidden="true" /></a>
         </div>
       </div>
+    </section>
+
+    <section className="marketing-showcase" id="platform" aria-labelledby="showcase-title">
+      <div className="marketing-showcase-copy"><p className="marketing-kicker">The Alto workspace</p><h2 id="showcase-title">The work moves together.</h2><p>One shared project keeps direction, ownership, and handoffs visible while agents contribute.</p></div>
       <div className="marketing-hero-art" aria-label="Diagram showing a person directing two agents toward shared project work" role="img">
         <div className="marketing-art-top"><span>One shared project</span><span>alto / workspace</span></div>
         <div className="marketing-art-stage">
@@ -68,8 +72,8 @@ export default function MarketingPage() {
       <p>Projects outlast a single prompt. Alto keeps the people, agents, decisions, and handoffs in view as the work moves forward.</p>
     </section>
 
-    <section className="marketing-platform" id="platform" aria-labelledby="platform-title">
-      <div className="marketing-section-heading"><p className="marketing-kicker">The platform</p><h2 id="platform-title">One project. Clear ownership. Shared progress.</h2></div>
+    <section className="marketing-platform" aria-labelledby="platform-title">
+      <div className="marketing-section-heading"><p className="marketing-kicker">What you get</p><h2 id="platform-title">One project. Clear ownership. Shared progress.</h2></div>
       <div className="marketing-strengths">{strengths.map(item => <article className="marketing-strength" key={item.title}><div className="marketing-strength-icon">{item.icon}</div><h3>{item.title}</h3><p>{item.text}</p></article>)}</div>
     </section>
 

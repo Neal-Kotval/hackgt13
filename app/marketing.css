@@ -1,8 +1,9 @@
 .marketing {
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--color-marketing-canvas);
+  color: var(--color-marketing-text);
   font-family: var(--font-heading);
   overflow: clip;
+  color-scheme: light;
 }
 .marketing-skip {
   position: absolute;
@@ -10,12 +11,13 @@
   left: var(--page-gutter);
   z-index: var(--z-header);
   padding: var(--space-3) var(--space-4);
-  background: var(--color-accent);
-  color: var(--color-accent-text);
+  background: var(--color-marketing-text);
+  color: var(--color-marketing-canvas);
 }
 .marketing-skip:focus { top: var(--space-2); }
 .marketing-header,
 .marketing-hero,
+.marketing-showcase,
 .marketing-statement,
 .marketing-platform,
 .marketing-flow,
@@ -30,93 +32,123 @@
   display: flex;
   align-items: center;
   gap: var(--space-16);
-  border-bottom: var(--border-width) solid var(--color-border-subtle);
 }
 .marketing-wordmark {
-  font-family: var(--font-heading);
   font-size: var(--text-2xl);
   font-weight: var(--font-weight-bold);
   letter-spacing: var(--tracking-tight);
   line-height: var(--leading-tight);
 }
-.marketing-wordmark span,
-.marketing-hero h1 span { color: var(--color-accent); }
+.marketing-wordmark span { color: var(--color-marketing-accent); }
 .marketing-header nav,
 .marketing-footer > div { display: flex; align-items: center; gap: var(--space-8); }
 .marketing-header nav a,
 .marketing-header-action,
 .marketing-footer a:not(.marketing-wordmark) {
-  font-family: var(--font-body);
-  font-size: var(--text-sm);
-  color: var(--color-muted);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-medium);
 }
 .marketing-header nav a:hover,
-.marketing-footer a:hover { color: var(--color-text); }
+.marketing-footer a:hover { color: var(--color-marketing-accent); }
 .marketing-header-action {
+  min-height: var(--control-height-touch);
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text);
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-sm);
+  background: var(--color-marketing-text);
+  color: var(--color-marketing-canvas);
 }
+.marketing-header-action:hover { background: var(--color-marketing-accent); }
 .marketing-header-action svg,
 .marketing-button svg,
 .marketing-roadmap a svg { width: var(--icon-md); height: var(--icon-md); }
 .marketing-hero {
-  min-height: calc(var(--marketing-visual-height) + var(--space-24));
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  min-height: var(--marketing-hero-height);
+  display: flex;
   align-items: center;
-  gap: var(--space-16);
-  padding-block: var(--space-24);
+  justify-content: center;
+  padding-block: var(--space-20) var(--space-24);
+  text-align: center;
 }
-.marketing-hero-copy { max-width: var(--marketing-copy-width); }
+.marketing-hero-copy { max-width: var(--marketing-hero-copy-width); }
 .marketing-kicker {
-  color: var(--color-accent);
+  color: var(--color-marketing-accent);
   font-family: var(--font-body);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
   line-height: var(--leading-normal);
 }
 .marketing-hero h1 {
-  margin-block: var(--space-5) var(--space-8);
+  margin-block: var(--space-6) var(--space-8);
   font-size: var(--marketing-display-size);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-bold);
   letter-spacing: var(--tracking-tight);
   line-height: var(--leading-tight);
 }
+.marketing-hero h1 span { color: var(--color-marketing-accent); }
 .marketing-intro {
-  max-width: var(--marketing-copy-width);
-  color: var(--color-secondary);
+  max-width: var(--content-narrow);
+  margin-inline: auto;
+  color: var(--color-marketing-muted);
   font-size: var(--text-xl);
   line-height: var(--leading-normal);
 }
-.marketing-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-8); }
+.marketing-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
 .marketing-button {
   min-height: var(--space-12);
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-6);
-  padding: var(--space-3) var(--space-5);
-  border: var(--border-width) solid var(--color-border-strong);
+  padding: var(--space-3) var(--space-6);
+  border: var(--border-width) solid var(--color-marketing-text);
   border-radius: var(--radius-sm);
-  font-family: var(--font-body);
-  font-size: var(--text-sm);
+  font-size: var(--text-lg);
   font-weight: var(--font-weight-semibold);
 }
-.marketing-button-primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-text); }
-.marketing-button-primary:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
-.marketing-button-secondary:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.marketing-button-primary { background: var(--color-marketing-text); color: var(--color-marketing-canvas); }
+.marketing-button-primary:hover { background: var(--color-marketing-accent); border-color: var(--color-marketing-accent); }
+.marketing-button-secondary:hover { border-color: var(--color-marketing-accent); color: var(--color-marketing-accent); }
+.marketing-showcase {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: var(--space-16);
+  padding-block: var(--space-24);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+.marketing-showcase-copy { max-width: var(--marketing-copy-width); }
+.marketing-showcase .marketing-kicker,
+.marketing-roadmap .marketing-kicker { color: var(--color-accent); }
+.marketing-showcase h2,
+.marketing-statement h2,
+.marketing-section-heading h2,
+.marketing-flow h2,
+.marketing-roadmap h2 {
+  font-size: var(--marketing-title-size);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+.marketing-showcase h2 { margin-block: var(--space-5) var(--space-8); }
+.marketing-showcase-copy > p:last-child,
+.marketing-roadmap > div > p:not(.marketing-kicker) {
+  color: var(--color-muted);
+  font-size: var(--text-xl);
+  line-height: var(--leading-normal);
+}
 .marketing-hero-art {
-  height: var(--marketing-visual-height);
+  min-height: var(--marketing-visual-height);
   display: flex;
   flex-direction: column;
   border: var(--border-width) solid var(--color-border-strong);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
 }
 .marketing-art-top,
 .marketing-art-bottom {
@@ -135,7 +167,7 @@
   flex: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr 1fr;
+  grid-template-rows: repeat(3, minmax(min-content, 1fr));
   gap: var(--space-5);
   align-items: center;
   padding: var(--space-8);
@@ -165,108 +197,69 @@
 .marketing-art-outcome { grid-column: 2; grid-row: 3; background: var(--color-accent-soft); border-color: var(--color-accent); }
 .marketing-art-outcome svg { color: var(--color-accent); }
 .marketing-art-symbol { color: var(--color-accent); font-size: var(--text-xl); line-height: var(--leading-tight); }
-.marketing-art-track {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.marketing-art-track span {
-  position: absolute;
-  width: 29%;
-  border-top: var(--border-width) solid var(--color-accent);
-  transform-origin: left center;
-  left: 43%;
-}
+.marketing-art-track { position: absolute; inset: 0; pointer-events: none; }
+.marketing-art-track span { position: absolute; width: 29%; border-top: var(--border-width) solid var(--color-accent); transform-origin: left center; left: 43%; }
 .marketing-art-track span:nth-child(1) { top: 48%; transform: rotate(calc(-1 * var(--marketing-track-angle))); }
 .marketing-art-track span:nth-child(2) { top: 51%; }
 .marketing-art-track span:nth-child(3) { top: 53%; transform: rotate(var(--marketing-track-angle)); }
-.marketing-statement {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-16);
-  padding-block: var(--space-24);
-  border-top: var(--border-width) solid var(--color-border-subtle);
-}
+.marketing-statement,
+.marketing-flow,
+.marketing-roadmap { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-16); padding-block: var(--space-24); }
 .marketing-statement .marketing-kicker { grid-column: 1 / -1; }
-.marketing-statement h2,
-.marketing-section-heading h2,
-.marketing-flow h2,
-.marketing-roadmap h2 {
-  font-size: var(--marketing-title-size);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-tight);
-}
 .marketing-statement > p:last-child,
-.marketing-flow-intro > p:last-child,
-.marketing-roadmap > div > p:not(.marketing-kicker) {
+.marketing-flow-intro > p:last-child {
   align-self: end;
   max-width: var(--marketing-copy-width);
-  color: var(--color-muted);
+  color: var(--color-marketing-muted);
   font-size: var(--text-xl);
   line-height: var(--leading-normal);
 }
-.marketing-platform { padding-block: var(--space-24); border-top: var(--border-width) solid var(--color-border-subtle); }
+.marketing-platform { padding-block: var(--space-24); border-top: var(--border-width) solid var(--color-marketing-line); }
 .marketing-section-heading { max-width: var(--content-narrow); }
 .marketing-section-heading h2 { margin-top: var(--space-5); }
 .marketing-strengths { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-8); margin-top: var(--space-16); }
-.marketing-strength { padding-top: var(--space-6); border-top: var(--border-width) solid var(--color-border-strong); }
-.marketing-strength-icon { color: var(--color-accent); margin-bottom: var(--space-8); }
+.marketing-strength { padding-top: var(--space-6); border-top: var(--border-width) solid var(--color-marketing-line); }
+.marketing-strength-icon { color: var(--color-marketing-accent); margin-bottom: var(--space-8); }
 .marketing-strength-icon svg { width: var(--icon-xl); height: var(--icon-xl); }
 .marketing-strength h3,
-.marketing-steps h3 { font-size: var(--text-2xl); font-weight: var(--font-weight-medium); line-height: var(--leading-tight); }
+.marketing-steps h3 { font-size: var(--text-2xl); font-weight: var(--font-weight-semibold); line-height: var(--leading-tight); }
 .marketing-strength p,
-.marketing-steps p { margin-top: var(--space-4); color: var(--color-muted); font-size: var(--text-lg); line-height: var(--leading-normal); }
-.marketing-flow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-16);
-  padding-block: var(--space-24);
-  border-top: var(--border-width) solid var(--color-border-subtle);
-}
+.marketing-steps p { margin-top: var(--space-4); color: var(--color-marketing-muted); font-size: var(--text-lg); line-height: var(--leading-normal); }
+.marketing-flow { max-width: none; background: var(--color-marketing-surface); }
 .marketing-flow h2 { margin-block: var(--space-5) var(--space-8); }
 .marketing-steps { margin: 0; padding: 0; list-style: none; }
-.marketing-steps li { display: grid; grid-template-columns: var(--space-12) 1fr; gap: var(--space-6); padding-block: var(--space-6); border-bottom: var(--border-width) solid var(--color-border-subtle); }
-.marketing-steps li:first-child { border-top: var(--border-width) solid var(--color-border-subtle); }
-.marketing-steps li > span { color: var(--color-accent); font-family: var(--font-body); font-size: var(--text-sm); }
-.marketing-roadmap {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-16);
-  padding-block: var(--space-24);
-  border-top: var(--border-width) solid var(--color-border-subtle);
-  background: var(--color-surface);
-}
+.marketing-steps li { display: grid; grid-template-columns: var(--space-12) 1fr; gap: var(--space-6); padding-block: var(--space-6); border-bottom: var(--border-width) solid var(--color-marketing-line); }
+.marketing-steps li:first-child { border-top: var(--border-width) solid var(--color-marketing-line); }
+.marketing-steps li > span { color: var(--color-marketing-accent); font-family: var(--font-body); font-size: var(--text-sm); }
+.marketing-roadmap { background: var(--color-bg); color: var(--color-text); }
 .marketing-roadmap h2 { margin-top: var(--space-5); }
-.marketing-roadmap a { display: inline-flex; align-items: center; gap: var(--space-3); margin-top: var(--space-8); color: var(--color-accent); font-family: var(--font-body); font-size: var(--text-sm); font-weight: var(--font-weight-semibold); }
-.marketing-footer { min-height: var(--space-24); display: flex; align-items: center; gap: var(--space-8); border-top: var(--border-width) solid var(--color-border-subtle); }
-.marketing-footer p { color: var(--color-muted); font-family: var(--font-body); font-size: var(--text-sm); }
+.marketing-roadmap a { display: inline-flex; align-items: center; gap: var(--space-3); margin-top: var(--space-8); color: var(--color-accent); font-size: var(--text-lg); font-weight: var(--font-weight-semibold); }
+.marketing-footer { min-height: var(--space-24); display: flex; align-items: center; gap: var(--space-8); border-top: var(--border-width) solid var(--color-marketing-line); }
+.marketing-footer p { color: var(--color-marketing-muted); font-size: var(--text-lg); }
 .marketing-footer > div { margin-left: auto; }
 @media (max-width: 768px) {
   .marketing-header { gap: var(--space-6); }
   .marketing-header nav { display: none; }
-  .marketing-hero,
+  .marketing-header-action { padding-inline: var(--space-4); }
+  .marketing-hero { min-height: var(--marketing-hero-height-mobile); padding-block: var(--space-16); }
+  .marketing-showcase,
   .marketing-statement,
   .marketing-flow,
-  .marketing-roadmap { grid-template-columns: 1fr; gap: var(--space-12); }
-  .marketing-hero { padding-block: var(--space-16); }
-  .marketing-hero-art { height: var(--marketing-visual-height-mobile); }
-  .marketing-statement,
-  .marketing-platform,
-  .marketing-flow,
-  .marketing-roadmap { padding-block: var(--space-16); }
+  .marketing-roadmap { grid-template-columns: 1fr; gap: var(--space-12); padding-block: var(--space-16); }
+  .marketing-hero-art { min-height: var(--marketing-visual-height-mobile); }
+  .marketing-art-stage { padding: var(--space-4); gap: var(--space-2); }
+  .marketing-art-source,
+  .marketing-art-agent,
+  .marketing-art-outcome { padding: var(--space-2); font-size: var(--text-xs); }
+  .marketing-art-agent small { padding-left: 0; }
   .marketing-statement .marketing-kicker { grid-column: 1; }
+  .marketing-platform { padding-block: var(--space-16); }
   .marketing-strengths { grid-template-columns: 1fr; gap: var(--space-8); margin-top: var(--space-12); }
   .marketing-strength-icon { margin-bottom: var(--space-5); }
   .marketing-footer { flex-wrap: wrap; padding-block: var(--space-8); }
   .marketing-footer > div { margin-left: 0; flex-wrap: wrap; }
 }
 @media (max-width: 375px) {
-  .marketing-art-stage { padding: var(--space-4); gap: var(--space-2); }
-  .marketing-art-source,
-  .marketing-art-agent,
-  .marketing-art-outcome { padding: var(--space-2); font-size: var(--text-xs); }
-  .marketing-art-agent small { padding-left: 0; }
   .marketing-art-top,
   .marketing-art-bottom { padding-inline: var(--space-3); }
 }

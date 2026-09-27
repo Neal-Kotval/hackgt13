@@ -115,6 +115,10 @@
   --palette-coral: #e6a098;
   --palette-coral-dark: #422b2c;
   --palette-transparent: transparent;
+  --palette-marketing-white: #ffffff;
+  --palette-marketing-soft: #f6f7f9;
+  --palette-marketing-line: #d8dce3;
+  --palette-marketing-blue: #285cae;
 
   /* Semantic colors: component CSS references these, never primitives. */
   --color-bg: var(--palette-ink);
@@ -149,6 +153,13 @@
   --color-transparent: var(--palette-transparent);
   --color-overlay: rgb(0 0 0 / 65%);
   --color-dot-grid: color-mix(in srgb, var(--palette-paper) 8%, transparent);
+  /* Public sales surface: light editorial canvas beside the dark product UI. */
+  --color-marketing-canvas: var(--palette-marketing-white);
+  --color-marketing-surface: var(--palette-marketing-soft);
+  --color-marketing-text: var(--palette-ink);
+  --color-marketing-muted: var(--palette-gray-300);
+  --color-marketing-line: var(--palette-marketing-line);
+  --color-marketing-accent: var(--palette-marketing-blue);
 
   /* Quiet glass navigation: dark translucent fill, restrained edge highlights. */
   --color-glass: rgb(18 21 27 / 90%);
@@ -234,11 +245,14 @@
   --motion-drawer-distance: 48px;
 
   /* Marketing page: one expressive display scale and a legible diagram canvas. */
-  --marketing-display-size: clamp(4.5rem, 9vw, 9rem);
-  --marketing-title-size: clamp(2.5rem, 4vw, 4.5rem);
+  --marketing-display-size: clamp(4rem, 7.2vw, 7.5rem);
+  --marketing-title-size: clamp(2.5rem, 4vw, 4.25rem);
   --marketing-visual-height: 33rem;
   --marketing-visual-height-mobile: 25rem;
   --marketing-copy-width: 37rem;
+  --marketing-hero-copy-width: 65rem;
+  --marketing-hero-height: 42rem;
+  --marketing-hero-height-mobile: 35rem;
   --marketing-track-angle: 24deg;
 
   /* Layout and component dimensions. */
