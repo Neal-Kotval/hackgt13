@@ -2186,6 +2186,11 @@ dialog::backdrop {
   .auth-panel {
     padding: var(--space-5);
   }
+  .auth-panel a:not(.button) {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-height);
+  }
 }
 
 /* Keep select labels above their controls, including inline member actions. */
