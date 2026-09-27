@@ -12,6 +12,8 @@ systemctl is-active --quiet amazon-ssm-agent || { echo 'Amazon SSM agent is not 
 dnf install -y nodejs22 nodejs22-npm tar gzip make gcc-c++ >/dev/null
 command -v curl >/dev/null 2>&1 || dnf install -y curl-minimal >/dev/null
 command -v aws >/dev/null 2>&1 || dnf install -y awscli >/dev/null
+# Codex sessions on remote environments run the system ssh with the install's runner key.
+command -v ssh >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1 || dnf install -y openssh-clients >/dev/null
 if ! id agentcloud >/dev/null 2>&1; then
   useradd --system --home-dir /var/lib/agentcloud --shell /sbin/nologin agentcloud
 fi
@@ -49,6 +51,9 @@ Environment=AGENTCLOUD_AUTH_SECRET_ID=$SECRET_ID
 Environment=AWS_DEFAULT_REGION=$REGION
 Environment=AGENTCLOUD_PUBLIC_ORIGIN=$PUBLIC_URL
 Environment=AGENTCLOUD_PLATFORM_ADMIN_EMAIL=$PLATFORM_ADMIN_EMAIL
+# HAC-166: the app port admits only CloudFront's origin-facing prefix list, so the
+# CloudFront-Viewer-Address header is trustworthy here (aws-cpu requester SSH access).
+Environment=AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER=1
 Environment=HOME=/var/lib/agentcloud
 ExecStartPre=/usr/local/bin/agentcloud-service-start setup
 ExecStart=/usr/local/bin/agentcloud-service-start start
