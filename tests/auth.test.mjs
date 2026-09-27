@@ -185,6 +185,49 @@ test("membership and employee identity come from the server, never client IDs", 
     200,
   );
 });
+test("project owners can rotate and revoke an agent token while members cannot", async () => {
+  const [owner, member] = fixture.users;
+  const created = await routes.state.POST(request("state", {
+    type: "createProject", name: "Token lifecycle", repo: "https://example.com/repo", template: "blank", compute: "Hosted Linux",
+  }, owner.cookie));
+  assert.equal(created.status, 200);
+  const projectId = (await created.json()).id;
+  fixture.grantMembership(member.id, projectId, "member");
+  const agent = await routes.state.POST(request("state", {
+    type: "addAgent", projectId, client: "Codex", role: "test",
+  }, owner.cookie));
+  assert.equal(agent.status, 200);
+  const { agentId, token: oldToken } = await agent.json();
+  const context = (token) => routes.agent.POST(request("agent", { type: "context", projectId, agentId }, null, { authorization: `Bearer ${token}` }));
+  assert.equal((await context(oldToken)).status, 200);
+
+  for (const type of ["rotateAgentToken", "revokeAgentToken"]) {
+    assert.equal((await routes.state.POST(request("state", { type, projectId, agentId }, member.cookie))).status, 403);
+  }
+  assert.equal((await context(oldToken)).status, 200);
+
+  const rotated = await routes.state.POST(request("state", { type: "rotateAgentToken", projectId, agentId }, owner.cookie));
+  assert.equal(rotated.status, 200);
+  const { token: newToken } = await rotated.json();
+  assert.ok(newToken);
+  assert.notEqual(newToken, oldToken);
+  assert.equal((await context(oldToken)).status, 401);
+  assert.equal((await context(newToken)).status, 200);
+  assert.ok(!JSON.stringify(await (await routes.state.GET(request("state", null, owner.cookie))).json()).includes(newToken));
+  const saved = await readFile(path.join(process.env.AGENTCLOUD_DATA_DIR, "state.json"), "utf8");
+  assert.ok(!saved.includes(oldToken) && !saved.includes(newToken));
+  assert.equal(JSON.parse(saved).credentials.filter((c) => c.agentId === agentId).length, 1);
+
+  const revoked = await routes.state.POST(request("state", { type: "revokeAgentToken", projectId, agentId }, owner.cookie));
+  assert.equal(revoked.status, 200);
+  assert.equal((await context(newToken)).status, 401);
+  const restored = await routes.state.POST(request("state", { type: "rotateAgentToken", projectId, agentId }, owner.cookie));
+  assert.equal(restored.status, 200);
+  const restoredToken = (await restored.json()).token;
+  assert.ok(restoredToken);
+  assert.equal((await context(newToken)).status, 401);
+  assert.equal((await context(restoredToken)).status, 200);
+});
 test("signup requires verification, wrong passwords fail, sessions survive a new process, logout revokes", async () => {
   const auth = fixture.getAuth();
   const signup = await auth.handler(
