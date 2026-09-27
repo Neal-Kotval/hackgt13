@@ -23,6 +23,7 @@ export function CodexEnvironmentSetup({ projectId, runBoxId, owner, desktopUrl }
   projectId: string; runBoxId: string; owner: boolean; desktopUrl: string;
 }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [peers, setPeers] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -31,6 +32,7 @@ export function CodexEnvironmentSetup({ projectId, runBoxId, owner, desktopUrl }
   const [opening, setOpening] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const redirectAfterSignIn = useRef(false);
+  const peerRequestId = useRef<string | null>(null);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
@@ -42,9 +44,10 @@ export function CodexEnvironmentSetup({ projectId, runBoxId, owner, desktopUrl }
         if (!active) return;
         const matches = data.sessions.filter(item => item.target?.kind === "runBox" && item.target.runBoxId === runBoxId);
         setSession(matches.find(item => item.isSetupSession) || matches[0] || null);
+        setPeers(matches.filter(item => item.isSetupSession && item.agentId !== (matches.find(candidate => candidate.isSetupSession) || matches[0])?.agentId));
         setLoadError("");
       } catch (cause) {
-        if (active) { setLoadError(cause instanceof Error ? cause.message : "Could not check Codex sign-in."); setSession(null); }
+        if (active) { setLoadError(cause instanceof Error ? cause.message : "Could not check Codex sign-in."); setSession(null); setPeers([]); }
       } finally {
         if (active) { setLoading(false); timer = setTimeout(poll, 2500); }
       }
@@ -70,6 +73,16 @@ export function CodexEnvironmentSetup({ projectId, runBoxId, owner, desktopUrl }
         : await request<{ session: Session }>("/api/codex-sessions", { projectId, runBoxId });
       if (mounted.current) { setSession(result.session); setRefresh(value => value + 1); }
     } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : "Could not prepare Codex."); }
+    finally { if (mounted.current) setBusy(false); }
+  }
+  async function addPeer() {
+    setBusy(true); setError("");
+    peerRequestId.current ||= crypto.randomUUID();
+    try {
+      await request<{ session: Session }>("/api/codex-sessions", { projectId, runBoxId, newAgent: true, requestId: peerRequestId.current });
+      peerRequestId.current = null;
+      if (mounted.current) setRefresh(value => value + 1);
+    } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : "Could not add another agent."); }
     finally { if (mounted.current) setBusy(false); }
   }
   function signIn() {
@@ -107,6 +120,18 @@ export function CodexEnvironmentSetup({ projectId, runBoxId, owner, desktopUrl }
       {!owner && !ready && !loading && <p className="resource-note">A project owner needs to finish Codex setup for this environment.</p>}
       {(error || loadError) && <button className="button" type="button" onClick={() => { setError(""); setRefresh(value => value + 1); }}>Check again</button>}
     </div>
+    {ready && <div className="environment-codex-peers">
+      <p className="resource-note">Each additional agent gets its own workspace and chat in this environment.</p>
+      {peers.map((peer, index) => {
+        const url = desktopUrl ? new URL(desktopUrl) : null;
+        url?.searchParams.set("codexSessionId", peer.id);
+        return <div className="environment-actions" key={peer.id}>
+          <span>Codex {index + 2} · {peer.status === "ready" || peer.status === "running" ? "Ready" : peer.status === "initializing" ? "Connecting" : peer.status === "auth_required" ? "Sign-in needed" : peer.status}</span>
+          {url && <a className="button" href={url.toString()}>Open in desktop</a>}
+        </div>;
+      })}
+      {owner && <div className="environment-actions"><button className="button" type="button" disabled={busy} onClick={() => void addPeer()}>{busy ? "Adding agent…" : "Add another Codex agent"}</button></div>}
+    </div>}
     {opening && ready && <p className="resource-note" role="status"><CheckCircle aria-hidden="true" />Signed in. If desktop didn’t open, use Open in desktop above.</p>}
   </section>;
 }

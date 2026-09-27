@@ -165,15 +165,20 @@ For a local coordination walkthrough, create a project and two agent identities,
 
 ### Send a message between Codex agents
 
-Create two Codex agent identities and two sessions on the same ready environment.
-For a project with a cloned repository, new sessions use separate verified Git
-worktrees by agent ID. A project member can send from a session with
+In Agent settings, sign in to Codex on a ready environment, then select
+**Add another Codex agent**. Each agent has a separate session and, when the
+project has a repository, a separate verified Git worktree on that environment.
+Open either agent's session in the desktop app. The sign-in account is shared
+by agents on the same environment.
+A project member can send from a session with
 `POST /api/codex-sessions/<sourceSessionId>/peer-messages` and JSON
 `{ "toSessionId": "...", "text": "...", "requestId": "<stable unique ID>" }`.
 `GET` on that route lists the recipient's pending messages; add
 `?messageId=<id>` to inspect one message from either endpoint.
 
-A connected agent can use its own scoped token (kept outside the repository):
+An existing token-bearing agent can use its own scoped token (kept outside the
+repository). Agents created through Codex setup are tokenless, so this CLI
+route does not authenticate them:
 
 ```sh
 node cli/agentcloud.mjs peer <projectId> --agent <agentId> \
