@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CodexPanel } from "./components/CodexPanel";
 import { Composer } from "./components/Composer";
 import { Conversation } from "./components/Conversation";
 import { ShellNav, type AppSection } from "./components/ShellNav";
@@ -26,7 +27,7 @@ const LANDING_DRAFT_KEY = "__landing__";
 export default function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [authBootError, setAuthBootError] = useState<string | null>(null);
-  const [section, setSection] = useState<AppSection>("local-chat");
+  const [section, setSection] = useState<AppSection>("codex");
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
@@ -35,7 +36,12 @@ export default function App() {
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [credentials, setCredentials] = useState<CredentialStatus | null>(null);
+  const [credentials, setCredentials] = useState<CredentialStatus | null>(
+    null,
+  );
+  const [codexLink, setCodexLink] = useState<DeepLinkParseResult | null>(null);
+  const [codexMounted, setCodexMounted] = useState(true);
+  const clearCodexLink = useCallback(() => setCodexLink(null), []);
   const [deepLink, setDeepLink] = useState<DeepLinkParseResult | null>(null);
   const [environmentsLink, setEnvironmentsLink] =
     useState<DeepLinkParseResult | null>(null);
@@ -56,6 +62,9 @@ export default function App() {
 
   // runBoxId links open Environments (HAC-90); other links keep the Tasks flow.
   const routeDeepLink = useCallback((result: DeepLinkParseResult) => {
+    if (result.ok && result.target.codexSessionId) {
+      setSection("codex"); setCodexMounted(true); setCodexLink(result); return;
+    }
     if (result.ok && result.target.runBoxId) {
       setSection("environments");
       setEnvironmentsMounted(true);
@@ -67,6 +76,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (section === "codex") setCodexMounted(true);
     if (section === "environments") setEnvironmentsMounted(true);
   }, [section]);
 
@@ -247,6 +257,7 @@ export default function App() {
       setActiveThread(null);
       setDrafts({});
       setEnvironmentsMounted(false);
+      setCodexMounted(false);
       setSection("tasks");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-out failed");
@@ -425,7 +436,7 @@ export default function App() {
     );
   }
 
-  if (bootError) {
+  if (bootError && section === "local-chat") {
     return (
       <div className="app-error" role="alert">
         <h1>Chat storage error</h1>
@@ -471,6 +482,7 @@ export default function App() {
         void handleSignOut();
       }}
     >
+      {codexMounted && <div className="section-host" hidden={section !== "codex"}><CodexPanel webBaseUrl={auth.baseUrl} deepLink={codexLink} onDeepLinkHandled={clearCodexLink} /></div>}
       {environmentsMounted ? (
         <div className="section-host" hidden={section !== "environments"}>
           <EnvironmentsPanel
@@ -480,7 +492,7 @@ export default function App() {
           />
         </div>
       ) : null}
-      {section === "environments" ? null : section === "tasks" ? (
+      {section === "environments" || section === "codex" ? null : section === "tasks" ? (
         <ProjectPicker
           webBaseUrl={auth.baseUrl}
           deepLink={deepLink}
