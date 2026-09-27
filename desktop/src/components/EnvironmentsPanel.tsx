@@ -1,6 +1,7 @@
 import { Select } from "./ui/Select";
 import { useCallback, useEffect, useState } from "react";
 import { TerminalPanel } from "./TerminalPanel";
+import { CodexPanel } from "./CodexPanel";
 import { desktopApi } from "../lib/desktop-api";
 import type { DeepLinkParseResult } from "../lib/deep-link";
 import {
@@ -98,6 +99,8 @@ export function EnvironmentsPanel({
   const [deviceKey, setDeviceKey] = useState<DeviceKeyStatus | null>(null);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   const [terminalFor, setTerminalFor] = useState<RunBoxSummary | null>(null);
+  // HAC-122: Codex panel for a ready environment, shown beside the terminal.
+  const [codexFor, setCodexFor] = useState<RunBoxSummary | null>(null);
   const [notice, setNotice] = useState<{ tone: "error" | "info"; text: string } | null>(
     null,
   );
@@ -396,6 +399,15 @@ export function EnvironmentsPanel({
                       >
                         {active ? "Terminal open" : "Open terminal"}
                       </button>
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={blocked !== null}
+                        aria-describedby={blocked ? `blocked-${job.id}` : undefined}
+                        onClick={() => setCodexFor(job)}
+                      >
+                        {codexFor?.id === job.id ? "Codex open" : "Open Codex"}
+                      </button>
                       {blocked ? (
                         <span className="detail-secondary" id={`blocked-${job.id}`}>
                           {blocked}
@@ -416,6 +428,16 @@ export function EnvironmentsPanel({
           runBoxId={terminalFor.id}
           title={`${providerLabel(terminalFor)} · ${terminalFor.id}`}
           onClose={() => setTerminalFor(null)}
+        />
+      ) : null}
+
+      {codexFor ? (
+        <CodexPanel
+          key={codexFor.id}
+          runBoxId={codexFor.id}
+          projectId={codexFor.projectId || projectId || ""}
+          title={`${providerLabel(codexFor)} · ${codexFor.id}`}
+          onClose={() => setCodexFor(null)}
         />
       ) : null}
     </main>
