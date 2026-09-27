@@ -171,3 +171,29 @@
     flex: 1 1 100%;
   }
 }
+
+.environment-codex,
+.environment-signin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.environment-codex {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.environment-signin p {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.environment-signin-code {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-lg);
+  color: var(--color-accent);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  user-select: all;
+}

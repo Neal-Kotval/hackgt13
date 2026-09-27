@@ -120,8 +120,8 @@ describe("deep-link panel routing (HAC-153)", () => {
     assert.equal(deepLinkDestination(parsed), "project-chat-environment-codex");
   });
 
-  it("keeps terminal links (explicit or implied) on the Project chat terminal", () => {
-    assert.equal(deepLinkDestination(target("agentcloud://open?projectId=p1&runBoxId=job-42")), "project-chat-environment-terminal");
+  it("opens environment chats by default and keeps explicit terminal links", () => {
+    assert.equal(deepLinkDestination(target("agentcloud://open?projectId=p1&runBoxId=job-42")), "project-chat-environment-codex");
     assert.equal(deepLinkDestination(target("agentcloud://open?projectId=p1&runBoxId=job-42&panel=terminal")), "project-chat-environment-terminal");
   });
 

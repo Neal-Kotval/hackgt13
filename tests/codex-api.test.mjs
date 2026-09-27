@@ -18,7 +18,7 @@ const fixture=await prepareAuth(dir),store=await import(path.join(dir,'store.js'
 // Stub only execution; all employee/session/organization checks use real Better Auth.
 await writeFile(path.join(dir,'codex-service.js'),`import {failure} from './http.js';
 export const codexEnabled=()=>true;export const codexFailure=failure;
-let saved;export function codexService(){return {list:()=>saved?[saved]:[],initialize:({projectId,agentId})=>(saved={id:'s1',projectId,agentId,status:'auth_required'}),get:()=>saved,snapshot:()=>({session:saved,events:[]}),action:async()=>({session:saved})};}`);
+let saved;export function codexService(){return {list:()=>saved?[saved]:[],initialize:({projectId,agentId,runBoxId,newChat})=>(saved={id:'s1',projectId,agentId,status:'auth_required',isSetupSession:!newChat,target:runBoxId?{kind:'runBox',runBoxId}:{kind:'local'}}),get:()=>saved,snapshot:()=>({session:saved,events:[]}),action:async()=>({session:saved})};}`);
 const routes=await compile('../app/api/codex-sessions/route.ts','sessions.js');
 const detail=await compile('../app/api/codex-sessions/[id]/route.ts','detail.js');
 const owner=fixture.users[0],member=fixture.users[1];
@@ -42,9 +42,17 @@ test('Codex setup is owner-scoped; session reads and messages require project me
  assert.equal((await detail.POST(request({action:'login',method:'browser'},member.cookie),ctx)).status,403);
  assert.equal((await detail.POST(request({action:'cancelLogin'},member.cookie),ctx)).status,403);
  assert.equal((await detail.POST(request({action:'message',text:'hello'},member.cookie),ctx)).status,200);
+ assert.equal((await detail.POST(request({action:'resume'},member.cookie),ctx)).status,403);
+ assert.equal((await routes.POST(request({...input,newChat:'yes'},member.cookie))).status,400);
+ assert.equal((await routes.POST(request({...input,newChat:true},member.cookie))).status,400);
+ assert.equal((await routes.POST(request({...input,newChat:true,runBoxId:'rb-1',requestId:'test'},member.cookie))).status,202);
+ assert.equal((await detail.POST(request({action:'resume'},member.cookie),ctx)).status,200);
+ assert.equal((await detail.POST(request({action:'login'},member.cookie),ctx)).status,403);
+ assert.equal((await detail.POST(request({action:'stop'},member.cookie),ctx)).status,403);
  const cross=request({action:'message'},owner.cookie);cross.headers.set('origin','https://other.example');
  assert.equal((await detail.POST(cross,ctx)).status,403);
  fixture.getDatabase().prepare('DELETE FROM project_membership WHERE user_id=?').run(member.id);
  assert.equal((await detail.GET(request(null,member.cookie),ctx)).status,403);
  assert.equal((await detail.POST(request({action:'message'},member.cookie),ctx)).status,403);
+ assert.equal((await routes.POST(request({...input,newChat:true,runBoxId:'rb-1',requestId:'test'},member.cookie))).status,403);
 });
