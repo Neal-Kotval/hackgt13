@@ -4,7 +4,7 @@ import path from "node:path";
 import ts from "typescript";
 import { betterAuth } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
-export async function prepareAuth(directory) {
+export async function prepareAuth(directory, { mailModuleSource } = {}) {
   process.env.BETTER_AUTH_SECRET = randomBytes(48).toString("base64url");
   process.env.BETTER_AUTH_URL = "http://localhost:3000";
   process.env.AGENTCLOUD_MAIL_MODE = "local";
@@ -16,7 +16,10 @@ export async function prepareAuth(directory) {
     new URL("../lib/auth.mjs", import.meta.url),
     path.join(directory, "auth.mjs"),
   );
-  await copyFile(new URL("../lib/mail.mjs", import.meta.url), path.join(directory, "mail.mjs"));
+  if (mailModuleSource) {
+    await copyFile(new URL("../lib/mail.mjs", import.meta.url), path.join(directory, "mail-real.mjs"));
+    await writeFile(path.join(directory, "mail.mjs"), mailModuleSource);
+  } else await copyFile(new URL("../lib/mail.mjs", import.meta.url), path.join(directory, "mail.mjs"));
   const auth = await import(path.join(directory, "auth.mjs"));
   await (await getMigrations(auth.authOptions())).runMigrations();
   auth.migrateMemberships();

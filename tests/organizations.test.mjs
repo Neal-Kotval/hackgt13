@@ -13,7 +13,11 @@ for(const name of ["store","http","resource-profiles"]) {
  const source=await readFile(new URL(`../lib/${name}.ts`,import.meta.url),"utf8");
  await writeFile(path.join(directory,`${name}.js`),ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace(/from ["']\.\/([\w-]+)["']/g,"from './$1.js'"));
 }
-const fixture=await prepareAuth(directory); const db=fixture.getDatabase(); const auth=fixture.getAuth();
+const fixture=await prepareAuth(directory,{mailModuleSource:`import * as real from "./mail-real.mjs";
+export const mailMode=real.mailMode;
+export const mailDeliveryStatus=real.mailDeliveryStatus;
+export const sendAuthMail=(message)=>globalThis.__agentcloudTestMail ? globalThis.__agentcloudTestMail(message,real.sendAuthMail) : real.sendAuthMail(message);
+`}); const db=fixture.getDatabase(); const auth=fixture.getAuth();
 const store=await import(path.join(directory,"store.js"));
 const routes={};
 for(const name of ["organizations","state","events","resources"]) {
@@ -75,7 +79,10 @@ test("new invitee can verify, accept, and see no projects until explicitly assig
 test("reissued, revoked, expired and declined invitations cannot be accepted",async()=>{
  const recipient=await signup("lifecycle@example.test");
  const issue=async()=>{const r=await call("organization/invite-member",{email:recipient.email,role:"member",organizationId:org.id},owner.cookie);assert.equal(r.status,200);return r.json();};
- const first=await issue();const second=await issue();assert.notEqual(first.id,second.id);
+ const first=await issue();
+ assert.equal((await call("organization/invite-member",{email:recipient.email,role:"member",organizationId:org.id},member.cookie)).status,403);
+ assert.equal(db.prepare("SELECT status FROM invitation WHERE id=?").get(first.id).status,"pending");
+ const second=await issue();assert.notEqual(first.id,second.id);
  assert.equal((await call("organization/accept-invitation",{invitationId:first.id},recipient.cookie)).ok,false);
  assert.equal((await call("organization/cancel-invitation",{invitationId:second.id},owner.cookie)).status,200);
  assert.equal((await call("organization/accept-invitation",{invitationId:second.id},recipient.cookie)).ok,false);
@@ -84,6 +91,65 @@ test("reissued, revoked, expired and declined invitations cannot be accepted",as
  const declined=await issue();assert.equal((await call("organization/reject-invitation",{invitationId:declined.id},recipient.cookie)).status,200);
  assert.equal((await call("organization/accept-invitation",{invitationId:declined.id},recipient.cookie)).ok,false);
  assert.equal(db.prepare('SELECT count(*) AS n FROM member WHERE userId=? AND organizationId=?').get(recipient.id,org.id).n,0);
+});
+test("failed SMTP reissue preserves the previously usable invitation",async()=>{
+ const recipient=await signup("delivery-failure@example.test");
+ const issued=await call("organization/invite-member",{email:recipient.email,role:"member",organizationId:org.id},owner.cookie);
+ assert.equal(issued.status,200);
+ const original=await issued.json();
+ const mode=process.env.AGENTCLOUD_MAIL_MODE;
+ const host=process.env.SMTP_HOST;
+ const port=process.env.SMTP_PORT;
+ const from=process.env.SMTP_FROM;
+ try {
+  process.env.AGENTCLOUD_MAIL_MODE="smtp";
+  process.env.SMTP_HOST="127.0.0.1";
+  process.env.SMTP_PORT="1";
+  process.env.SMTP_FROM="AgentCloud <hello@example.test>";
+  const failed=await call("organization/invite-member",{email:recipient.email,role:"member",organizationId:org.id},owner.cookie);
+  assert.equal(failed.status,503);
+  assert.equal(db.prepare("SELECT status FROM invitation WHERE id=?").get(original.id).status,"pending");
+  assert.equal(db.prepare("SELECT count(*) AS n FROM invitation WHERE organizationId=? AND email=? AND status='pending'").get(org.id,recipient.email).n,1);
+  assert.equal(db.prepare("SELECT d.status AS delivery, i.status FROM invitation i JOIN invitation_delivery d ON d.invitation_id=i.id WHERE i.organizationId=? AND i.email=? AND i.id<>?").get(org.id,recipient.email,original.id).delivery,"failed");
+  const firstFailure=await call("organization/invite-member",{email:"first-failure@example.test",role:"member",organizationId:org.id},owner.cookie);
+  assert.equal(firstFailure.status,503);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM invitation WHERE organizationId=? AND email=? AND status='pending'").get(org.id,"first-failure@example.test").n,0);
+ } finally {
+  if(mode===undefined)delete process.env.AGENTCLOUD_MAIL_MODE;else process.env.AGENTCLOUD_MAIL_MODE=mode;
+  if(host===undefined)delete process.env.SMTP_HOST;else process.env.SMTP_HOST=host;
+  if(port===undefined)delete process.env.SMTP_PORT;else process.env.SMTP_PORT=port;
+  if(from===undefined)delete process.env.SMTP_FROM;else process.env.SMTP_FROM=from;
+ }
+ const failedId=db.prepare("SELECT i.id FROM invitation i JOIN invitation_delivery d ON d.invitation_id=i.id WHERE i.organizationId=? AND i.email=? AND d.status='failed' ORDER BY i.createdAt DESC LIMIT 1").get(org.id,recipient.email).id;
+ assert.equal((await call("organization/accept-invitation",{invitationId:failedId},recipient.cookie)).ok,false);
+ assert.equal((await call("organization/accept-invitation",{invitationId:original.id},recipient.cookie)).status,200);
+});
+test("concurrent reissue waits for delivery before invalidating the previous link",async()=>{
+ const recipient=await signup("concurrent-invite@example.test");
+ const original=await (await call("organization/invite-member",{email:recipient.email,role:"member",organizationId:org.id},owner.cookie)).json();
+ let signalStarted,releaseMail;
+ const started=new Promise(resolve=>{signalStarted=resolve;});
+ const blocked=new Promise(resolve=>{releaseMail=resolve;});
+ globalThis.__agentcloudTestMail=async(message,real)=>{
+  if(message.to===recipient.email&&message.subject.startsWith("Join")) {signalStarted();await blocked;}
+  return real(message);
+ };
+ const firstCall=call("organization/invite-member",{email:recipient.email,role:"member",organizationId:org.id},owner.cookie);
+ await started;
+ try {
+  assert.equal(db.prepare("SELECT status FROM invitation WHERE id=?").get(original.id).status,"pending");
+  const concurrent=await call("organization/invite-member",{email:recipient.email,role:"member",organizationId:org.id},owner.cookie);
+  assert.equal(concurrent.status,409);
+  assert.equal(db.prepare("SELECT status FROM invitation WHERE id=?").get(original.id).status,"pending");
+ } finally {releaseMail();delete globalThis.__agentcloudTestMail;}
+ const replacementResponse=await firstCall;
+ assert.equal(replacementResponse.status,200);
+ const replacement=await replacementResponse.json();
+ assert.notEqual(replacement.id,original.id);
+ assert.equal(db.prepare("SELECT status FROM invitation WHERE id=?").get(original.id).status,"canceled");
+ assert.equal(db.prepare("SELECT status FROM invitation_delivery WHERE invitation_id=?").get(replacement.id).status,"captured");
+ assert.equal((await call("organization/accept-invitation",{invitationId:original.id},recipient.cookie)).ok,false);
+ assert.equal((await call("organization/accept-invitation",{invitationId:replacement.id},recipient.cookie)).status,200);
 });
 test("member removal revokes current project access and last owner cannot be demoted",async()=>{
  const id=db.prepare('SELECT id FROM member WHERE userId=? AND organizationId=?').get(member.id,org.id).id;
