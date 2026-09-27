@@ -6,8 +6,9 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { claimRunBoxJob, migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
-import { migrateSshKeys, registerSshKey } from "../lib/ssh-keys.mjs";
+import { migrateSshKeys, registerSshKey, revokeSshKey } from "../lib/ssh-keys.mjs";
 import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
+import { registerContainerTemplate } from "../lib/container-templates.mjs";
 import { NO_DEVICE_KEYS, reconcileDockerSandboxes, verifyDockerSandboxSsh,
   workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
 
@@ -19,7 +20,7 @@ function devicePublicKey() {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
-function setup({ keys = 1 } = {}) {
+function setup({ keys = 1, profileId = "local-docker-sandbox" } = {}) {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   db.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, emailVerified INTEGER NOT NULL);
@@ -34,7 +35,7 @@ function setup({ keys = 1 } = {}) {
   db.prepare("INSERT INTO project_organization VALUES ('project-1', 'org-1'), ('project-2', 'org-1')").run();
   for (let index = 0; index < keys; index += 1) registerSshKey(db, "owner-1", { label: `device ${index}`, publicKey: devicePublicKey() });
   registerSshKey(db, "outsider", { label: "not a member", publicKey: devicePublicKey() });
-  return { db, job: decide(db).job };
+  return { db, job: decide(db, { profileId }).job };
 }
 
 function decide(db, overrides = {}) {
@@ -64,8 +65,36 @@ function fakeProvider(overrides = {}) {
       for (const [jobId, item] of containers) if (item.id === id) containers.delete(jobId);
     },
     async listManaged() { return [...containers.values()].map(({ id, jobId, state }) => ({ id, jobId, state })); },
+    async replaceAuthorizedKeys(jobId, keys) {
+      calls.push(["replaceAuthorizedKeys", jobId, keys]);
+      containers.get(jobId).authorizedKeys = keys;
+      return keys;
+    },
     ...overrides };
 }
+
+test("revoked device key is removed from a ready sandbox, not just the connection API", async () => {
+  const { db, job } = setup();
+  const sandbox = fakeProvider();
+  await workOneDockerSandboxJob(db, sandbox, { workerId: "worker", verify: passingVerify() });
+  const key = db.prepare("SELECT id, public_key FROM employee_ssh_key WHERE user_id = 'owner-1'").get();
+  assert.ok(sandbox.containers.get(job.id).authorizedKeys.includes(key.public_key));
+  revokeSshKey(db, "owner-1", key.id);
+  await reconcileDockerSandboxes(db, sandbox);
+  assert.ok(!sandbox.containers.get(job.id).authorizedKeys.includes(key.public_key));
+  db.close();
+});
+
+test("membership loss removes existing SSH access from a ready sandbox", async () => {
+  const { db, job } = setup();
+  const sandbox = fakeProvider();
+  await workOneDockerSandboxJob(db, sandbox, { workerId: "worker", verify: passingVerify() });
+  db.prepare("UPDATE member SET role = 'member' WHERE userId = 'owner-1'").run();
+  const outcomes = await reconcileDockerSandboxes(db, sandbox);
+  assert.equal(outcomes.find((item) => item.jobId === job.id)?.status, "access-updated");
+  assert.deepEqual(sandbox.containers.get(job.id).authorizedKeys, []);
+  db.close();
+});
 
 function passingVerify(calls = []) {
   return async (job, connection) => {
@@ -162,6 +191,28 @@ test("worker reaches ready with pinned endpoint, member keys plus a one-time ver
   assert.throws(() => readFileSync(verifyCalls[0].keyFile), /ENOENT/, "ephemeral key directory is deleted");
   assert.equal(await workOneDockerSandboxJob(db, provider, { workerId: "docker-worker", verify: passingVerify() }), null);
   assert.equal(provider.containers.size, 1);
+  db.close();
+});
+
+test("worker runs an imported template by immutable image ID", async () => {
+  const { db, job } = setup({ profileId: "local-template:python-agent" });
+  const imageId = `sha256:${"a".repeat(64)}`;
+  registerContainerTemplate(db, { id: "python-agent", label: "Python agent", imageRef: "example/agent:1",
+    imageId, source: "registry" });
+  const provider = fakeProvider();
+  const result = await workOneDockerSandboxJob(db, provider, { verify: passingVerify() });
+  assert.equal(result.state, "ready");
+  assert.equal(provider.calls.find((call) => call[0] === "create")[1].imageId, imageId);
+  db.close();
+});
+
+test("worker never allocates a missing imported template", async () => {
+  const { db, job } = setup({ profileId: "local-template:missing" });
+  const provider = fakeProvider();
+  await assert.rejects(() => workOneDockerSandboxJob(db, provider, { verify: passingVerify() }),
+    /template is unavailable/);
+  assert.equal(provider.calls.filter((call) => call[0] === "create").length, 0);
+  assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
   db.close();
 });
 

@@ -30,14 +30,14 @@ This repository is the web application and a local coordination foundation. New 
 | Collaboration | Shared service records, structured handoffs, and streamed activity |
 | Persistence | JSON state on the application server's local disk; not remote workspace persistence |
 | Dashboard and review | Human coordination views and functional handoffs; Changes and Checks are explicit empty future-state panels |
-| Employee login and resource policy | Local Better Auth verified accounts, organization invitations/roles, and project memberships; human routes require authentication. Resource decisions remain unevaluated; no allocation approval or SSH enforcement |
+| Employee login and resource policy | Local Better Auth verified accounts, organization invitations/roles, and project memberships; human routes require authentication. Local run-box requests receive an owner/member decision and device-key SSH access; broader resource policy remains planned |
 | Resource graph and inference | Graph of persisted coordination relationships and configuration drafts only; no GPU allocation, private endpoint, or serving process |
-| SSH / hosted compute | Local Docker sandbox and Runpod providers bring an environment to `ready` only after SSH verification against a per-environment pinned host key. Employees reach it with a per-device ed25519 key through the desktop terminal. AWS EC2 CPU environments are in progress (HAC-125) |
-| Run boxes and artifact homes | The Environments page records a request and owner decision in one step and queues a run-box job for a server-owned profile; a separate worker must allocate and verify it before it is shown as ready. Artifact homes remain planned |
+| SSH / hosted compute | Local Docker sandbox and Runpod providers bring an environment to `ready` only after SSH verification against a per-environment pinned host key. Employees reach it with a per-device ed25519 key through the desktop terminal. AWS EC2 CPU environments are in progress (HAC-125); other remote VM execution remains separate work |
+| Run boxes and artifact homes | The Environments page records a request and owner decision in one step and queues a run-box job for a server-owned profile or an imported local container template; a separate worker must allocate and verify it before it is shown as ready. Artifact homes remain planned |
 | Repository import / worktrees | Repository and branch metadata in the app; an isolated local Git provider exists but is not connected to project actions, so no project clone or Git isolation is claimed |
-| Codex / Claude execution | Environments install pinned Codex CLI 0.157.1 and record a per-environment agent check (`agent.codex.state`). Signed-in Codex state is removed at teardown. Agent runs and their events are recorded through `/api/agent-runs` and shown on the Runs page. The desktop Codex panel (HAC-122) is in progress. Claude remains planned |
+| Codex / Claude execution | Environments install pinned Codex CLI 0.157.1 and record a per-environment agent check (`agent.codex.state`). Signed-in Codex state is removed at teardown. Agent runs and their events are recorded through `/api/agent-runs` and shown on the Runs page. The desktop Codex panel (HAC-122) is in progress. Separately, an opt-in local Codex app-server in a Docker CPU box backs desktop Project chat ([LOCAL_CODEX.md](LOCAL_CODEX.md)). Claude remains planned |
 | Merge / test execution | Planned operations; no live diff, merge, or test execution |
-| Access control | Scope checks on agent API operations. SSH to an environment is **trusted shell access** for keys injected at allocation, and a key that was not injected is denied by sshd. There is no filesystem or command sandbox claim |
+| Access control | Scope checks on agent API operations. SSH to an environment is **trusted shell access** for the project's current member device keys; a key that was never injected, or was revoked and reconciled by the docker-local or Runpod worker, is denied by sshd. There is no filesystem or command sandbox claim |
 
 See [ROADMAP.md](ROADMAP.md) for acceptance gates before claiming the remote demo is complete.
 
@@ -117,3 +117,14 @@ For the remote MVP: show employee login, an actual provisioned or attached run e
 Managed GPU purchasing, spend management, generalized resource marketplaces, two-agent service integration, artifact homes, snapshots and restore, graphical desktop packaging, and automatic conflict resolution are outside the first reliable demo. Attaching an existing SSH-accessible GPU machine is part of the remote-computer path; AgentCloud must verify access before showing it as ready. A resource request must control an actual allocation or attachment to be presented as functional. Do not claim enforced cost or expiry limits until they affect the real resource.
 
 The normal project navigation is Overview, Environments, Runs, and Settings. Overview shows read-only task progress and setup guidance; Environments groups resource requests/approvals with an expandable catalog; Runs contains activity and reported output; Settings contains agent registration and an expandable CLI guide. Organization management is labeled Organizations. Design system, collaboration/stretch pages, and the legacy task board remain directly addressable but are absent from normal navigation. This presentation change preserves records and API contracts; it does not claim desktop integration or remote execution is complete.
+
+## Local Docker Codex integration (HAC-116)
+
+The opt-in local Codex path initializes a real Codex app-server in a Docker CPU
+box from project Settings and lets desktop **Project chat** send turns to the same
+persistent thread. Project and agent conversation selection live in the shared
+sidebar; there is no separate Codex agents tab. Employee membership gates reads and chat; owners control setup and
+lifecycle. SQLite stores bounded attributed session items, while the Docker
+volume retains Codex history and workspace files. This local implementation does
+not satisfy the AWS/GPU execution or public multi-tenant milestones above. See
+[LOCAL_CODEX.md](LOCAL_CODEX.md) for setup, authentication, recovery and limits.

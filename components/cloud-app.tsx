@@ -40,6 +40,7 @@ import { ResourceCatalog, ResourceRequests, InferenceDraft } from "./resources";
 import { RunControl } from "./runs/run-control";
 import { ResourceGraph } from "./resource-graph";
 import { Environments } from "./environments";
+import { CodexSessionPanel } from "./codex-session-panel";
 type Action = Record<string, unknown>;
 const iconProps = { weight: "duotone" as const };
 function Icon({ children }: { children: ReactNode }) {
@@ -276,6 +277,7 @@ export function CloudApp() {
               </div>
             ) : page === "settings" ? (
               <div className="project-sections">
+                <CodexSessionPanel project={project} />
                 <AgentSetup project={project} action={action} busy={busy} notify={setNotice} />
                 <details className="project-disclosure" id="cli-guide">
                   <summary>CLI connection guide</summary>

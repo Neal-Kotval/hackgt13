@@ -1,6 +1,6 @@
 # AgentCloud
 
-A token-based React web application laying the coordination foundation for agent-usable remote computers. The planned product gives an agent a persistent project environment that can reach resources such as an SSH-accessible GPU host, and lets the human observe its real work. The GPU host may be the agent's environment or a separate target. Multiple agents, shared services, handoffs, and durable artifact homes build on that core. This build does not connect to remote machines or provision run boxes or artifact homes.
+A token-based React web application laying the coordination foundation for agent-usable remote computers. The planned product gives an agent a persistent project environment that can reach resources such as an SSH-accessible GPU host, and lets the human observe its real work. The GPU host may be the agent's environment or a separate target. Multiple agents, shared services, handoffs, and durable artifact homes build on that core. This build provisions verified local CPU Docker run boxes; remote computer hosting and artifact homes remain separate work.
 
 Built with Next.js 16, React 19, and TypeScript. The supplied HTML design exports are preserved in `reference/` as visual inspiration only; the application implements its own reusable token system and does not load their fictional data.
 
@@ -48,13 +48,26 @@ The Compose volume keeps accounts, sessions, projects, mail, and an automaticall
 
 ### Local Docker sandbox worker (no cloud spend)
 
-The `docker-local` provider with server-owned profile `local-docker-sandbox` runs a CPU-only Linux container with sshd on the machine running the worker. It has no GPU and costs nothing. SSH access is trusted shell access as the non-root `agentcloud` user; it is not a filesystem or command sandbox.
+The `docker-local` provider with server-owned profile `local-docker-sandbox` runs a CPU-only Linux container with sshd on the machine running the worker. The default image includes Node 22, Git, Python, common CLI tools, and pinned Codex CLI 0.157.1. It contains no model credentials and does not start Codex automatically. It has no GPU and costs nothing beyond the host. SSH access is trusted shell access as the non-root `agentcloud` user; it is not a filesystem or command sandbox.
 
 Run `just sandbox-image` once (the worker also builds `agentcloud-sandbox:dev` from `infra/sandbox/` when it is absent or built from an older `infra/sandbox/`; the image includes Node 22, tmux, and Codex CLI 0.157.1), then `just worker-docker` alongside `just dev`. The worker loads `.env.local` with `node --env-file-if-exists`, so it opens the same `AGENTCLOUD_DATA_DIR` (default `.agentcloud/auth.sqlite` in the repository root) as the app; with Doppler use `doppler run -- just worker-docker`. Every 3 seconds it removes containers for stopped, failed, or unknown jobs, requests stop for expired sandboxes, and processes one queued or stopping job.
 
 For a supervised Runpod test from a developer machine, see [Local supervised test](RUNPOD_SETUP.md#local-supervised-test-from-a-developer-machine): `just runpod-local-check` confirms read-only that Doppler supplies `RUNPOD_API_KEY`, `just runpod-watchdog` runs the cleanup guard, and `just worker-runpod-local` runs the worker. Local Runpod Pods are billable.
 
-For each job the worker generates a pinned ed25519 host key and a one-time verification key in a private temporary directory, starts `agentcloud-sandbox-<jobId>` with a random `127.0.0.1` port, 2 GB memory, 2 CPUs, a PID limit, and dropped capabilities, and records the SSH endpoint. The job becomes `ready` only after SSH with strict host-key checking confirms the account and `~/workspace` (and, when the approved job has a repository URL, clones it to `~/workspace/repo` and records the revision), the verification key has been removed, and that key is refused. Only registered device keys of project members at allocation time remain authorized; with none registered, the job fails with a clear reason. Keys registered later need a new sandbox. The host private key is passed to Docker through the environment, so anyone with Docker access on the worker machine can read it with `docker inspect`. At most one active local sandbox per project is allowed.
+Run `just sandbox-verify` to rebuild the image and test a real create, pinned SSH login, tool availability, access denial, and stop. Rebuild explicitly after pulling an image change: an existing `agentcloud-sandbox:dev` tag is reused by the worker until rebuilt.
+
+Custom local templates can use a registry image already pulled onto the Docker worker host or a local Docker image archive. Import checks the image through a temporary SSH container before it appears on the Environments page. Import only trusted images: startup code runs with network access and temporary SSH key material. This check verifies behavior, not image safety; a malicious image can read or send those keys.
+
+```sh
+node --env-file-if-exists=.env.local scripts/container-templates.mjs import --id my-agent --label "My agent" --image registry.example/my-agent:1
+node --env-file-if-exists=.env.local scripts/container-templates.mjs import --id offline-agent --label "Offline agent" --image offline-agent:1 --archive /absolute/path/agent.tar
+just template-list
+node --env-file-if-exists=.env.local scripts/container-templates.mjs test --id my-agent
+```
+
+Imported images must obey the sandbox contract: the SSH entrypoint accepts the worker's host and authorized keys, runs a non-root `agentcloud` account with writable `~/workspace`, denies unknown keys and root login, and provides Node, npm, Codex CLI, and Git. Import stores the immutable local image ID and retains it under `agentcloud-template-<id>:pinned`; a later source-tag change cannot silently alter existing templates. The worker host and web server must share the same app data directory and Docker engine. Imported templates are selectable as local Docker environments and use the existing per-environment SSH key and stop flow. Archive import is a local CLI operation, not a browser upload. To deploy the same image on AWS VMs, publish it to a registry by digest and add a remote container host, reachable SSH endpoint, and host verification; this repository does not yet run these templates on AWS VMs.
+
+For each job the worker generates a pinned ed25519 host key and a one-time verification key in a private temporary directory, starts `agentcloud-sandbox-<jobId>` with a random `127.0.0.1` port, 2 GB memory, 2 CPUs, a PID limit, and dropped capabilities, and records the SSH endpoint. The job becomes `ready` only after SSH with strict host-key checking confirms the account and `~/workspace` (and, when the approved job has a repository URL, clones it to `~/workspace/repo` and records the revision), the verification key has been removed, and that key is refused. The worker compares recorded fingerprints with registered keys and current project membership every 3 seconds and atomically replaces the host's `authorized_keys` when they differ. If replacement cannot be verified, it requests a stop. Revocation takes effect for new SSH connections after a successful worker cycle; while the worker is down or before its next cycle, an already installed key can still connect directly. Existing SSH sessions continue after key removal. An out-of-band change to the host key file is not detected when recorded fingerprints still match the database. With no registered device keys at allocation, the job fails with a clear reason. The host private key is passed to Docker through the environment, so anyone with Docker access on the worker machine can read it with `docker inspect`. At most one active local sandbox per project is allowed.
 
 ### Local frontend with shared AWS data
 
@@ -86,7 +99,7 @@ npm run build
 npm start
 ```
 
-The development and production scripts bind to loopback. This is a local organization-aware demo with employee login, but no production tenant isolation; do not expose it publicly as a multi-user service.
+The development and production scripts bind to loopback. This is a local organization-aware demo with employee login, but no production tenant isolation; do not expose it publicly as a multi-user service. [PUBLIC_DEPLOYMENT_BOUNDARY.md](PUBLIC_DEPLOYMENT_BOUNDARY.md) defines the blockers and required evidence before accepting unrelated organizations on a public service.
 
 ## Employee authentication (HAC-1)
 
@@ -103,7 +116,9 @@ For real delivery, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_PORT` (de
 
 Invitations expire after 48 hours. Reissuing creates a new invitation and cancels the old link; revoked, declined, and expired invitations cannot be accepted. The UI distinguishes locally captured messages from SMTP submissions. Ownership can be assigned separately by an owner; the last owner cannot be removed or demoted.
 
-Existing pre-organization projects remain hidden until their recorded owner moves them into an organization using the organization page. `auth:bootstrap` remains an optional administrative helper for two accounts and legacy project memberships; it does not replace verification or organization membership. Supply its `AGENTCLOUD_EMPLOYEE1_EMAIL`, `AGENTCLOUD_EMPLOYEE2_EMAIL`, and corresponding `_PASSWORD` variables privately; never commit credentials. Existing passwords are preserved.
+Organization names and URL slugs use the same validation on creation and update. Names must be nonempty and at most 100 characters; slugs must be lowercase letters and numbers separated by single hyphens, at most 80 characters. Slugs are stored identifiers, not yet website routes.
+
+Existing pre-organization projects remain hidden until their recorded owner moves them into an organization using the organization page. Adoption clears previous project assignments except the adopting owner's; organization members need an explicit new project grant. Organization owners and admins can access every project in their organization. `auth:bootstrap` remains an optional administrative helper for two accounts and legacy project memberships; it does not replace verification or organization membership. Supply its `AGENTCLOUD_EMPLOYEE1_EMAIL`, `AGENTCLOUD_EMPLOYEE2_EMAIL`, and corresponding `_PASSWORD` variables privately; never commit credentials. Existing passwords are preserved.
 
 All human state, event, and resource routes require verified cookie sessions and organization/project access. Agent CLI bearer tokens remain separate and work only on `/api/agent`. Sign-out invalidates the session; open event streams recheck sessions and memberships every tick. Sessions last seven days. SQLite stores users, sessions, organizations, invitations, and memberships; JSON retains coordination data. Back up both stores and the secret together. Project creation spans both stores without a transaction, so an interrupted write can require administrative repair. This is not production tenant isolation, enterprise SSO, resource approval policy, or SSH enforcement.
 
@@ -134,7 +149,7 @@ The proposed backend uses one provider-neutral run-box contract: attach an exist
 - **Project dashboard:** agent roster, assigned tasks, services, handoffs, and activity.
 - **Agent setup:** create an identity and obtain a scoped connection token.
 - **Review:** inspect and accept handoffs; Changes and Checks describe pending infrastructure.
-- **Desktop:** CLI connection workflow in the web app; a separate Electron shell for Tasks + Local chat lives in [`desktop/`](desktop/) (`just desktop`). See [`desktop/README.md`](desktop/README.md).
+- **Desktop:** CLI connection workflow in the web app; a separate Electron shell for Tasks, Environments, and Project chat lives in [`desktop/`](desktop/) (`just desktop`). See [`desktop/README.md`](desktop/README.md).
 - **Environments:** request a time-limited environment in one step, follow its verified state, copy the SSH command, open it in the desktop app, and stop it.
 - **Resources:** register and inspect intended resource metadata and its unverified availability.
 - **Requests:** save resource requests and inspect the explicit unavailable policy decision.
@@ -169,6 +184,8 @@ Replace the uppercase IDs with actual values. Service registration stores a repo
 
 The CLI defaults to `http://127.0.0.1:3000`. Override with `AGENTCLOUD_URL`; nonlocal URLs require HTTPS. The CLI reads its environment directly, so values in Next.js `.env.local` are not automatically loaded into the CLI shell. Set `AGENTCLOUD_TOKEN` separately for each agent identity and run `unset AGENTCLOUD_TOKEN` when finished.
 
+Project owners can invalidate an agent's coordination credential with authenticated `POST /api/state` requests. Send `{ "type": "revokeAgentToken", "projectId": "...", "agentId": "..." }` to remove all active credentials for that identity, or `{ "type": "rotateAgentToken", "projectId": "...", "agentId": "..." }` to replace them. Rotation returns the new plaintext `token` once in the response; the server stores only its hash. Both actions disconnect the displayed agent status, and the prior token immediately receives HTTP 401 from `/api/agent`. A revoked identity remains in the project and can be reissued a token by rotating it. Stop a CLI client using the old token and supply the new `AGENTCLOUD_TOKEN` privately before reconnecting. Project members cannot perform these actions. The Settings page does not yet have revoke or rotate controls, so these actions currently require the API.
+
 ## Persistence
 
 By default, state is stored in `.agentcloud/state.json`, beneath the application working directory. `AGENTCLOUD_DATA_DIR` can point to a different writable directory. Keep this directory on persistent storage if running the app in a container. It contains private project metadata and credential hashes and should not be committed. Fresh storage starts empty; existing saved projects are preserved, not automatically deleted or migrated into demo content.
@@ -202,12 +219,13 @@ The token check enforces the visual-system rules; it does not replace visual ins
 | [AWS_SETUP.md](AWS_SETUP.md) | Live AWS GPU demo preflight, Terraform workflow, spending policy, quota request, and launch gates |
 | [AWS_AUTH_STAGING.md](AWS_AUTH_STAGING.md) | Private EC2 staging deployment, SSM tunnel, and Better Auth verification workflow |
 | [ROADMAP.md](ROADMAP.md) | Dependency-ordered delivery phases and acceptance gates |
+| [PUBLIC_DEPLOYMENT_BOUNDARY.md](PUBLIC_DEPLOYMENT_BOUNDARY.md) | Public multi-organization threat model and launch gates; not an implemented deployment claim |
 | [VERIFICATION.md](VERIFICATION.md) | Recorded check results, remaining verification, and browser-tool limitations |
 | [AGENTS.md](AGENTS.md) | Contributor rules for design, testing, collaboration, and truthful capabilities |
 | `app/` | Next.js routes, UI, API handlers, and application styling |
 | `lib/` | Shared types, initial empty state, and persisted coordination state |
 | `cli/` | Node.js agent coordination client |
-| `desktop/` | Electron Tasks + Local chat shell (see desktop/README.md) |
+| `desktop/` | Electron Tasks + Project chat shell (see desktop/README.md) |
 | `scripts/` | Repository checks, including token enforcement |
 | `tests/` | Backend behavior and authorization verification |
 | `reference/` | Original supplied prototype exports |

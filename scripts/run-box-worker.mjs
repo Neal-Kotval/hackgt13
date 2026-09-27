@@ -12,7 +12,7 @@ import { createRunpodProvider } from "../lib/runpod-provider.mjs";
 import { verifyRunpodSsh } from "../lib/runpod-ssh-proof.mjs";
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
 import { migrateRunpodCleanup, reconcileRunpodJobs } from "../lib/runpod-reconcile.mjs";
-import { checkRunpodAgent, createRunpodAgentCleanup, workOneRunpodJob } from "../lib/runpod-worker.mjs";
+import { checkRunpodAgent, createRunpodAgentCleanup, reconcileRunpodSshAccess, workOneRunpodJob } from "../lib/runpod-worker.mjs";
 import { migrateSshKeys } from "../lib/ssh-keys.mjs";
 import { migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
 import { createDockerSandboxProvider } from "../lib/docker-sandbox-provider.mjs";
@@ -81,6 +81,8 @@ async function runpodCycle() {
     checkCleanupGuard: runpodGuard, cleanupAgent: createRunpodAgentCleanup(db, connection) });
   if (reconciled.some((item) => item.status === "retry"))
     throw new Error("Runpod cleanup remains unconfirmed; refusing another allocation");
+  for (const item of await reconcileRunpodSshAccess(db, provider, connection))
+    console.log(`Reconciled Runpod SSH access ${item.jobId}: ${item.status}`);
   const result = await workOneRunpodJob(db, provider, { workerId, connection, verify: verifyRunpodSsh,
     checkCleanupGuard: runpodGuard, checkAgent: checkRunpodAgent });
   if (result) console.log(`Processed Runpod job ${result.jobId}: ${result.state}${result.retry ? " (verification pending)" : ""}`);

@@ -58,6 +58,7 @@ export type EnvironmentJob = {
 };
 
 type Role = "owner" | "member" | null;
+type ContainerTemplate = { id: string; label: string; imageId: string; source: string };
 
 const profiles = [
   {
@@ -158,10 +159,12 @@ function providerLabel(provider: EnvironmentJob["provider"]) {
   }
 }
 
-function profileLabel(job: EnvironmentJob) {
+function profileLabel(job: EnvironmentJob, templates: ContainerTemplate[] = []) {
   const id = job.profileId ?? job.profile_id;
   const known = profiles.find((profile) => profile.id === id);
   if (known) return known.label;
+  const template = templates.find((item) => `local-template:${item.id}` === id);
+  if (template) return template.label;
   if (job.provider === "aws-ec2") return profiles[2].label;
   return id || "Not recorded";
 }
@@ -181,6 +184,7 @@ function newKey() {
 
 export function Environments({ project }: { project: Project }) {
   const [jobs, setJobs] = useState<EnvironmentJob[] | null>(null);
+  const [templates, setTemplates] = useState<ContainerTemplate[]>([]);
   const [role, setRole] = useState<Role>(null);
   const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -193,7 +197,10 @@ export function Environments({ project }: { project: Project }) {
   const [actionError, setActionError] = useState("");
   const [confirmingStop, setConfirmingStop] = useState("");
   const [stopBusy, setStopBusy] = useState("");
+  const [serverUrl, setServerUrl] = useState("");
   const formHeading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => setServerUrl(window.location.origin), []);
 
   useEffect(() => {
     let active = true;
@@ -207,10 +214,11 @@ export function Environments({ project }: { project: Project }) {
       const employee = (await employeeResponse.json()) as {
         memberships: { projectId: string; role: "owner" | "member" }[];
       };
-      const data = (await jobsResponse.json()) as { jobs: EnvironmentJob[] };
+      const data = (await jobsResponse.json()) as { jobs: EnvironmentJob[]; templates?: ContainerTemplate[] };
       if (!active) return;
       setRole(employee.memberships.find((item) => item.projectId === project.id)?.role ?? null);
       setJobs(data.jobs);
+      setTemplates(data.templates ?? []);
       setLoadError("");
     }
     const report = (caught: unknown) => {
@@ -298,7 +306,14 @@ export function Environments({ project }: { project: Project }) {
     }
   }
 
-  const selectedProfile = profiles.find((profile) => profile.id === profileId) ?? profiles[0];
+  const availableProfiles = [...profiles, ...templates.map((template) => ({
+    id: `local-template:${template.id}`,
+    label: template.label,
+    icon: <Cube aria-hidden="true" />,
+    summary: "Imported container template · CPU only · no provider cost",
+    detail: `Image ${template.imageId.slice(0, 19)}… passed import checks. Runs on the machine hosting the Docker worker with trusted SSH access.`,
+  }))];
+  const selectedProfile = availableProfiles.find((profile) => profile.id === profileId) ?? availableProfiles[0];
   const empty = jobs !== null && jobs.length === 0;
 
   return (
@@ -379,7 +394,7 @@ export function Environments({ project }: { project: Project }) {
           </div>
           <fieldset className="environment-options">
             <legend>Profile</legend>
-            {profiles.map((profile) => (
+            {availableProfiles.map((profile) => (
               <label
                 key={profile.id}
                 className={`compute-option environment-option${profileId === profile.id ? " chosen" : ""}`}
@@ -454,6 +469,9 @@ export function Environments({ project }: { project: Project }) {
               <EnvironmentCard
                 key={job.id}
                 job={job}
+                templates={templates}
+                projectId={project.id}
+                serverUrl={serverUrl}
                 role={role}
                 confirming={confirmingStop === job.id}
                 stopBusy={stopBusy === job.id}
@@ -472,6 +490,9 @@ export function Environments({ project }: { project: Project }) {
 
 function EnvironmentCard({
   job,
+  templates,
+  projectId,
+  serverUrl,
   role,
   confirming,
   stopBusy,
@@ -481,6 +502,9 @@ function EnvironmentCard({
   onCopy,
 }: {
   job: EnvironmentJob;
+  templates: ContainerTemplate[];
+  projectId: string;
+  serverUrl: string;
   role: Role;
   confirming: boolean;
   stopBusy: boolean;
@@ -503,6 +527,13 @@ function EnvironmentCard({
   const expiresAt = Date.parse(job.created_at) + job.max_duration_minutes * 60_000;
   const command = job.ssh ? sshCommand(job.ssh) : "";
   const canStop = role === "owner" && job.state !== "stopped" && !job.stop_requested_at;
+  const ready = job.state === "ready" && !job.stop_requested_at;
+  const taskUrl = ready && serverUrl
+    ? `agentcloud://open?${new URLSearchParams({ projectId, taskRunBoxId: job.id, serverUrl })}`
+    : "";
+  const terminalUrl = ready && serverUrl && job.ssh && job.desktopUrl
+    ? `${job.desktopUrl}&${new URLSearchParams({ serverUrl })}`
+    : "";
   const stopped = job.state === "stopped";
   const stopDetail =
     stopped && !job.provider_resource_id
@@ -513,7 +544,7 @@ function EnvironmentCard({
     <li id={`rb-${job.id}`} className="resource-request-card resource-panel environment-card" aria-labelledby={titleId}>
       <div className="resource-detail-title">
         <div className="environment-title">
-          <h4 id={titleId}>{profileLabel(job)}</h4>
+          <h4 id={titleId}>{profileLabel(job, templates)}</h4>
           {copy.phase !== copy.label && <span className="environment-phase">{copy.phase}</span>}
         </div>
         <span className={`resource-badge resource-badge--${job.state}`}>{copy.label}</span>
@@ -586,9 +617,14 @@ function EnvironmentCard({
       </div>
 
       <div className="environment-actions">
-        {job.desktopUrl && job.state === "ready" && (
-          <a className="button primary" href={job.desktopUrl}>
-            <Desktop aria-hidden="true" /> Open in desktop
+        {taskUrl && (
+          <a className="button primary" href={taskUrl}>
+            <Desktop aria-hidden="true" /> Continue in desktop
+          </a>
+        )}
+        {terminalUrl && (
+          <a className="button secondary" href={terminalUrl}>
+            <Desktop aria-hidden="true" /> Open terminal in desktop
           </a>
         )}
         {job.ssh && (
@@ -608,6 +644,13 @@ function EnvironmentCard({
           </button>
         )}
       </div>
+      {ready && (
+        <details className="resource-note">
+          <summary>Desktop didn’t open?</summary>
+          <p>Start the desktop app with <code>just desktop</code>, then select this project and environment.</p>
+          <p>Project ID: <code>{projectId}</code><br />Environment ID: <code>{job.id}</code></p>
+        </details>
+      )}
       {canStop && confirming && (
         <div
           id={`environment-${job.id}-stop`}

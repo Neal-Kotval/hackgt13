@@ -161,7 +161,7 @@ function setTask(p: Project, taskId: unknown, value: unknown, actor: string) {
   event(p, actor, `${task.title}: ${task.status}`, "task");
 }
 export async function action(input: Record<string, unknown>) {
-  return transaction((disk) => {
+  return transaction(async (disk) => {
     let result: Record<string, unknown> = {};
     if (input.type === "createProject") {
       const projectId = id();
@@ -221,6 +221,24 @@ export async function action(input: Record<string, unknown>) {
               );
             }
           }
+          const runBoxId = input.runBoxId === undefined || input.runBoxId === ""
+            ? undefined
+            : str(input.runBoxId, "runBoxId", 100);
+          if (runBoxId && environmentId)
+            throw new InputError("Choose one task environment");
+          if (runBoxId) {
+            const [{ getDatabase }, { getRunBoxJob, migrateRunBoxJobs }] = await Promise.all([
+              import("./auth.mjs"),
+              import("./run-box-jobs.mjs"),
+            ]);
+            const db = getDatabase();
+            migrateRunBoxJobs(db);
+            const runBox = getRunBoxJob(db, runBoxId);
+            if (!runBox || runBox.project_id !== p.id)
+              throw new InputError("Run box not found", 404);
+            if (runBox.state !== "ready" || runBox.stop_requested_at)
+              throw new InputError("Run box must be ready before binding a task", 409);
+          }
           p.tasks.push({
             id: id(),
             title: str(input.title, "title", 200),
@@ -229,6 +247,7 @@ export async function action(input: Record<string, unknown>) {
             dependency,
             ...(instructions ? { instructions } : {}),
             ...(environmentId ? { environmentId } : {}),
+            ...(runBoxId ? { runBoxId } : {}),
           });
           event(p, "human", "Created a task", "task");
           break;
@@ -298,6 +317,22 @@ export async function action(input: Record<string, unknown>) {
             "agent",
           );
           result = { token, agentId };
+          break;
+        }
+        case "rotateAgentToken":
+        case "revokeAgentToken": {
+          const a = agent(p, input.agentId);
+          disk.credentials = disk.credentials.filter(
+            (credential) => credential.projectId !== p.id || credential.agentId !== a.id,
+          );
+          a.status = "disconnected";
+          delete a.lastSeen;
+          if (input.type === "rotateAgentToken") {
+            const token = randomBytes(32).toString("base64url");
+            disk.credentials.push({ hash: hash(token), projectId: p.id, agentId: a.id });
+            result = { agentId: a.id, token };
+          } else result = { agentId: a.id };
+          event(p, "human", `${input.type === "rotateAgentToken" ? "Rotated" : "Revoked"} connection token for ${a.name}`, "agent");
           break;
         }
         default:
@@ -458,7 +493,8 @@ export async function resourceAction(
         const hasGpuPreference =
           input.gpuProfileId !== undefined || input.durationHours !== undefined;
         // The CPU-only local sandbox is a run box, never a GPU request.
-        const isLocalSandbox = input.gpuProfileId === localDockerSandboxProfile.id;
+        const isLocalSandbox = input.gpuProfileId === localDockerSandboxProfile.id ||
+          (typeof input.gpuProfileId === "string" && /^local-template:[a-z][a-z0-9-]{1,47}$/.test(input.gpuProfileId));
         // The AWS CPU environment (HAC-125) is also a run box, not GPU capacity.
         const isAwsCpu = input.gpuProfileId === awsCpuProfile.id;
         if (
@@ -494,7 +530,7 @@ export async function resourceAction(
             ? {
                 computePreference: isLocalSandbox ? {
                   provider: localDockerSandboxProfile.provider,
-                  profileId: localDockerSandboxProfile.id,
+                  profileId: input.gpuProfileId as string,
                   durationHours: input.durationHours as number,
                 } : isAwsCpu ? {
                   provider: awsCpuProfile.provider,
@@ -655,5 +691,80 @@ export async function agentAction(
     }
     disk.state.revision++;
     return { project: structuredClone(p), agentId: a.id, ...result };
+  });
+}
+
+const DESKTOP_CHAT_CLIENT = "desktop-chat";
+
+/**
+ * Resolve or create the project's desktop chat agent identity.
+ * Never returns a plaintext credential token — chat uses the employee session.
+ */
+export async function ensureProjectChatAgent(
+  projectId: string,
+  agentId?: string,
+): Promise<{ agentId: string; name: string; created: boolean }> {
+  return transaction((disk) => {
+    const p = project(disk, projectId);
+    if (agentId) {
+      const existing = agent(p, agentId);
+      return {
+        agentId: existing.id,
+        name: existing.name,
+        created: false,
+      };
+    }
+    const named = p.agents.find(
+      (row) =>
+        row.client === DESKTOP_CHAT_CLIENT || row.name === DESKTOP_CHAT_CLIENT,
+    );
+    if (named) {
+      return { agentId: named.id, name: named.name, created: false };
+    }
+    const createdId = id();
+    const token = randomBytes(32).toString("base64url");
+    p.agents.push({
+      id: createdId,
+      name: DESKTOP_CHAT_CLIENT,
+      client: DESKTOP_CHAT_CLIENT,
+      role: "Desktop project chat",
+      branch: `agents/${createdId.slice(0, 8)}`,
+      status: "disconnected",
+    });
+    disk.credentials.push({
+      hash: hash(token),
+      projectId: p.id,
+      agentId: createdId,
+    });
+    event(
+      p,
+      "human",
+      `Created ${DESKTOP_CHAT_CLIENT} connection identity for project chat; workspace branch is planned, not provisioned`,
+      "agent",
+    );
+    disk.state.revision++;
+    return {
+      agentId: createdId,
+      name: DESKTOP_CHAT_CLIENT,
+      created: true,
+    };
+  });
+}
+
+/** Attribute a desktop chat turn without storing message contents. */
+export async function recordProjectChatTurn(
+  projectId: string,
+  actor: string,
+  agentName: string,
+): Promise<void> {
+  await transaction((disk) => {
+    const p = project(disk, projectId);
+    event(
+      p,
+      actor,
+      `Desktop chat turn with project agent ${agentName}`,
+      "agent",
+    );
+    disk.state.revision++;
   });
 }

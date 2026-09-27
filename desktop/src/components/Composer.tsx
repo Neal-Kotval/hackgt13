@@ -1,6 +1,9 @@
+import { ArrowUp, Square } from "@phosphor-icons/react";
+
 type ComposerProps = {
   value: string;
   disabled: boolean;
+  sendDisabled?: boolean;
   sending: boolean;
   error: string | null;
   onChange: (value: string) => void;
@@ -11,13 +14,14 @@ type ComposerProps = {
 export function Composer({
   value,
   disabled,
+  sendDisabled = false,
   sending,
   error,
   onChange,
   onSend,
   onStop,
 }: ComposerProps) {
-  const canSend = !disabled && !sending && value.trim().length > 0;
+  const canSend = !disabled && !sendDisabled && !sending && value.trim().length > 0;
 
   return (
     <form
@@ -27,22 +31,27 @@ export function Composer({
         if (canSend) onSend();
       }}
     >
-      <label className="composer-hint" htmlFor="composer-input">
-        Enter sends · Shift+Enter inserts a newline
+      <label className="visually-hidden" htmlFor="composer-input">
+        Message
       </label>
+      <span id="composer-shortcut" className="visually-hidden">
+        Enter sends. Shift+Enter inserts a newline.
+      </span>
       <div className="composer-row">
         <textarea
           id="composer-input"
           value={value}
           disabled={disabled}
-          placeholder={
-            disabled
-              ? "Select or create a chat to compose a message"
-              : "Message the assistant"
-          }
+          placeholder="Ask anything"
+          aria-describedby="composer-shortcut"
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing &&
+              event.keyCode !== 229
+            ) {
               event.preventDefault();
               if (canSend) onSend();
             }
@@ -50,16 +59,25 @@ export function Composer({
         />
         <div className="composer-actions">
           {sending ? (
-            <button type="button" className="button danger" onClick={onStop}>
-              Stop
+            <button
+              type="button"
+              className="button danger composer-submit"
+              aria-label="Stop response"
+              title="Stop response"
+              disabled={disabled}
+              onClick={onStop}
+            >
+              <Square weight="fill" aria-hidden="true" />
             </button>
           ) : (
             <button
               type="submit"
-              className="button primary"
+              className="button primary composer-submit"
+              aria-label="Send message"
+              title="Send message"
               disabled={!canSend}
             >
-              Send
+              <ArrowUp weight="bold" aria-hidden="true" />
             </button>
           )}
         </div>

@@ -6,6 +6,7 @@ import { awsCpuProfile, demoGpuProfile, findRunpodProfile, localDockerSandboxPro
 import { listRunBoxJobs, migrateRunBoxJobs, saveRunBoxDecision } from "../../../lib/run-box-jobs.mjs";
 import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../../../lib/run-box-ssh.mjs";
 import { getAgentCheck, getWorkspacePath, migrateAgentCheck } from "../../../lib/agent-check.mjs";
+import { getContainerTemplate, listContainerTemplates, templateIdFromProfile } from "../../../lib/container-templates.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,15 +69,20 @@ async function createEnvironment(employee: Employee, input: Record<string, unkno
   const projectId = identifier(input.projectId, "project ID");
   const idempotencyKey = identifier(input.idempotencyKey, "idempotency key");
   if (idempotencyKey.length > 128) throw new InputError("Invalid idempotency key");
-  if (typeof input.profileId !== "string" || !Object.hasOwn(environmentProfiles, input.profileId))
+  if (typeof input.profileId !== "string" ||
+      (!Object.hasOwn(environmentProfiles, input.profileId) && !templateIdFromProfile(input.profileId)))
     throw new InputError("Unsupported environment profile");
-  const profileId = input.profileId as EnvironmentProfileId;
+  const profileId = input.profileId;
   const durationHours = input.durationHours;
   if (durationHours !== 1 && durationHours !== 2) throw new InputError("Duration must be 1 or 2 hours");
   const membership = requireMembership(employee, projectId);
   const organizationId = employee.activeOrganization?.id;
   if (!organizationId) throw new InputError("Active organization required", 403);
-  const profile = environmentProfiles[profileId];
+  const templateId = templateIdFromProfile(profileId);
+  const template = templateId ? getContainerTemplate(getDatabase(), templateId) : null;
+  if (templateId && !template) throw new InputError("Container template is unavailable", 409);
+  const profile = template ? { provider: "docker-local", kind: "run-box", label: template.label }
+    : environmentProfiles[profileId as EnvironmentProfileId];
   const project = (await getState()).projects.find((item) => item.id === projectId);
   if (!project) throw new InputError("Project not found", 404);
   const db = getDatabase();
@@ -195,16 +201,16 @@ export async function GET(request: Request) {
     migrateRunBoxJobs(db);
     migrateRunBoxSsh(db);
     migrateAgentCheck(db);
-    const jobs = (listRunBoxJobs(db, projectId) as { id: string; state: string; profile_id: string | null }[])
+    const jobs = (listRunBoxJobs(db, projectId) as { id: string; state: string; profile_id: string | null; stop_requested_at: string | null }[])
       .map((job) => {
-        const ready = job.state === "ready";
+        const ready = job.state === "ready" && !job.stop_requested_at;
         const endpoint = ready ? getRunBoxSshEndpoint(db, job.id) : null;
         const codex = getAgentCheck(db, job.id, "codex");
         return {
           ...job,
           profileId: job.profile_id,
           ssh: endpoint ? { host: endpoint.host, port: endpoint.port, username: endpoint.username } : null,
-          desktopUrl: ready
+          desktopUrl: endpoint
             ? `agentcloud://open?${new URLSearchParams({ projectId, runBoxId: job.id })}`
             : null,
           access: "trusted-shell",
@@ -213,7 +219,9 @@ export async function GET(request: Request) {
           agent: { codex: { state: codex.state, version: codex.version, reason: codex.reason } },
         };
       });
-    return Response.json({ jobs });
+    return Response.json({ jobs, templates: listContainerTemplates(db).map((item: {
+      id: string; label: string; image_id: string; source: string;
+    }) => ({ id: item.id, label: item.label, imageId: item.image_id, source: item.source })) });
   } catch (error) {
     return failure(error);
   }

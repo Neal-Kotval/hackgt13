@@ -17,8 +17,8 @@ for (const name of ["store", "http", "resource-profiles"]) {
   const source = await readFile(new URL(`../lib/${name}.ts`, import.meta.url), "utf8");
   await writeFile(path.join(directory, `${name}.js`), transpile(source).replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check"];
-for (const name of ["run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check"])
+const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates"];
+for (const name of ["run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
 const db = fixture.getDatabase();
@@ -122,6 +122,8 @@ test("connection API enforces auth, membership, readiness, and injected device k
 
   db.prepare("UPDATE run_box_job SET state = 'ready' WHERE id = ?").run(job.id);
   assert.equal((await get(owner.cookie)).status, 409); // ready but no endpoint
+  const withoutEndpoint = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
+  assert.equal(withoutEndpoint.desktopUrl, null); // no terminal without an SSH endpoint
 
   const ownerKey = ed25519PublicKey();
   await register(owner.cookie, ownerKey);
@@ -171,6 +173,10 @@ test("connection API enforces auth, membership, readiness, and injected device k
   const mismatch = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
   assert.deepEqual(mismatch.agent.codex, { state: "failed", version: "0.150.0", reason: "Codex 0.150.0 is installed; 0.157.1 is required" });
   assert.equal(mismatch.state, "ready", "SSH readiness is unchanged by a failed agent check");
+  db.prepare("UPDATE run_box_job SET stop_requested_at = ? WHERE id = ?").run(new Date().toISOString(), job.id);
+  const stopRequested = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
+  assert.equal(stopRequested.desktopUrl, null);
+  assert.equal(stopRequested.ssh, null);
   db.prepare("UPDATE run_box_job SET state = 'stopping' WHERE id = ?").run(job.id);
   const stopping = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
   assert.equal(stopping.desktopUrl, null);

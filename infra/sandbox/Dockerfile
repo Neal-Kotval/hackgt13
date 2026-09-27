@@ -37,7 +37,9 @@ FROM debian:bookworm-slim
 
 # usermod '*' means no usable password without locking the account (sshd refuses locked accounts).
 RUN apt-get update \
- && apt-get install --yes --no-install-recommends openssh-server git bash ca-certificates tmux \
+ && apt-get install --yes --no-install-recommends \
+      openssh-server git bash ca-certificates tmux curl jq ripgrep \
+      python3 python3-venv build-essential \
  && rm -rf /var/lib/apt/lists/* \
  && rm -f /etc/ssh/ssh_host_* \
  && mkdir -p /run/sshd \

@@ -6,10 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
-import { migrateSshKeys, normalizePublicKey, registerSshKey } from "../lib/ssh-keys.mjs";
+import { migrateSshKeys, normalizePublicKey, registerSshKey, revokeSshKey } from "../lib/ssh-keys.mjs";
 import { getRunBoxSshEndpoint, knownHostsLine, migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
 import { createDockerSandboxProvider, sandboxInstallId } from "../lib/docker-sandbox-provider.mjs";
-import { runSandboxSsh, workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
+import { inspectContainerImage, registerContainerTemplate } from "../lib/container-templates.mjs";
+import { reconcileDockerSandboxes, runSandboxSsh, workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
 import { getAgentCheck, getWorkspacePath, listCleanupSteps } from "../lib/agent-check.mjs";
 
 // Real Docker end to end: image build, container, sshd, key injection, stop.
@@ -31,7 +32,10 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   // Isolated from any live worker on this Docker host.
-  const provider = createDockerSandboxProvider({ installId: sandboxInstallId(directory) });
+  // A unique tag forces this test to build the current Dockerfile even when a
+  // developer already has an older agentcloud-sandbox:dev image locally.
+  const image = `agentcloud-sandbox:test-${sandboxInstallId(directory)}`;
+  const provider = createDockerSandboxProvider({ installId: sandboxInstallId(directory), image });
   let jobId;
   try {
     db.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, emailVerified INTEGER NOT NULL);
@@ -47,9 +51,17 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     db.prepare("INSERT INTO project_membership VALUES ('member-1', 'project-1', 'member')").run();
     const device = keypair(directory, "device");
     const outsider = keypair(directory, "outsider");
-    registerSshKey(db, "member-1", { label: "Member laptop", publicKey: device.publicKey });
+    const registered = registerSshKey(db, "member-1", { label: "Member laptop", publicKey: device.publicKey });
 
     await provider.ensureImage();
+    const cliDataDir = path.join(directory, "template-cli-data");
+    const imported = JSON.parse(execFileSync("node", ["scripts/container-templates.mjs", "import",
+      "--id", "cli-codex", "--label", "CLI Codex", "--image", image],
+    { cwd: process.cwd(), env: { ...process.env, AGENTCLOUD_DATA_DIR: cliDataDir }, encoding: "utf8", timeout: 120_000 }));
+    assert.equal(imported.template.image_ref, image);
+    assert.equal(imported.evidence.codex, "codex-cli 0.157.1");
+    assert.equal(JSON.parse(execFileSync("node", ["scripts/container-templates.mjs", "list"],
+      { cwd: process.cwd(), env: { ...process.env, AGENTCLOUD_DATA_DIR: cliDataDir }, encoding: "utf8" })).length, 1);
     const { job } = saveRunBoxDecision(db, { idempotencyKey: "it-idem", resourceRequestId: "it-request",
       projectId: "project-1", employeeId: "owner-1", organizationId: "org-1", projectRole: "owner",
       provider: "docker-local", profileId: "local-docker-sandbox", maxDurationMinutes: 60 });
@@ -93,6 +105,18 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
       "stat -c '%U %a' ~/.codex/config.toml; cat ~/.codex/config.toml\n");
     assert.equal(config.code, 0, config.stderr);
     assert.equal(config.stdout, 'agentcloud 600\ncli_auth_credentials_store = "file"\n');
+    const toolchain = await runSandboxSsh({ ...connection, keyFile: device.keyFile },
+      "node --version; npm --version; git --version; codex --version; " +
+      "command -v python3; command -v rg; command -v jq\n");
+    assert.equal(toolchain.code, 0, toolchain.stderr);
+    const versions = toolchain.stdout.trim().split("\n");
+    assert.match(versions[0], /^v22\./);
+    assert.match(versions[1], /^\d+\./);
+    assert.match(versions[2], /^git version /);
+    assert.equal(versions[3], "codex-cli 0.157.1");
+    assert.match(versions[4], /\/python3$/);
+    assert.match(versions[5], /\/rg$/);
+    assert.match(versions[6], /\/jq$/);
 
     // The private host key is neither in the session environment nor readable from sshd's.
     const secrets = await runSandboxSsh({ ...connection, keyFile: device.keyFile },
@@ -121,6 +145,13 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     assert.equal(reuse.reused, true);
     assert.equal((await provider.listManaged()).filter((item) => item.jobId === job.id).length, 1);
 
+    revokeSshKey(db, "member-1", registered.key.id);
+    assert.equal((await reconcileDockerSandboxes(db, provider)).find((item) => item.jobId === job.id)?.status, "access-updated");
+    const revokedLogin = await runSandboxSsh({ ...connection, keyFile: device.keyFile }, "whoami\n");
+    assert.equal(revokedLogin.code, 255);
+    assert.match(revokedLogin.stderr, /Permission denied/);
+    assert.deepEqual(getRunBoxSshEndpoint(db, job.id).authorizedFingerprints, []);
+
     // Seed a (fake) Codex credential and AgentCloud scratch as the agentcloud user.
     const containerId = (await provider.find(job.id)).id;
     execFileSync("docker", ["exec", "--user", "agentcloud", containerId, "bash", "-c",
@@ -141,8 +172,32 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
       ["codex-logout", true], ["remove-codex-auth", true], ["remove-scratch", true], ["verify-auth-absent", true]]);
     assert.equal(await provider.find(job.id), null);
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
+
+    // An imported template uses its immutable image ID through the same worker
+    // and must pass the same pinned SSH and stop lifecycle.
+    registerSshKey(db, "member-1", { label: "Member laptop re-enrolled", publicKey: device.publicKey });
+    const imageId = await inspectContainerImage(image);
+    registerContainerTemplate(db, { id: "codex-template", label: "Codex template",
+      imageRef: image, imageId, source: "registry" });
+    const custom = saveRunBoxDecision(db, { idempotencyKey: "it-template", resourceRequestId: "it-template-request",
+      projectId: "project-1", employeeId: "owner-1", organizationId: "org-1", projectRole: "owner",
+      provider: "docker-local", profileId: "local-template:codex-template", maxDurationMinutes: 60 }).job;
+    jobId = custom.id;
+    assert.equal((await workOneDockerSandboxJob(db, provider, { workerId: "it-template-worker" })).state, "ready");
+    const customEndpoint = getRunBoxSshEndpoint(db, custom.id);
+    writeFileSync(knownHostsFile, `${knownHostsLine(customEndpoint)}\n`, { mode: 0o600 });
+    const toolProbe = await runSandboxSsh({ host: customEndpoint.host, port: customEndpoint.port,
+      username: "agentcloud", knownHostsFile, keyFile: device.keyFile },
+    "set -e; codex --version; node --version; test -w ~/workspace\n");
+    assert.equal(toolProbe.code, 0, toolProbe.stderr);
+    assert.match(toolProbe.stdout, /codex-cli 0\.157\.1/);
+    requestRunBoxStop(db, custom.id, "owner-1");
+    assert.equal((await workOneDockerSandboxJob(db, provider, { workerId: "it-template-stop" })).state, "stopped");
+    assert.equal(await provider.find(custom.id), null);
   } finally {
     if (jobId) await provider.remove(jobId).catch(() => {});
+    try { execFileSync("docker", ["image", "rm", image], { stdio: "ignore", timeout: 30_000 }); }
+    catch { /* A failed build leaves no image to remove. */ }
     db.close();
     rmSync(directory, { recursive: true, force: true });
   }
