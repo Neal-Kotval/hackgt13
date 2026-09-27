@@ -28,6 +28,7 @@ export function ProjectChat({ webBaseUrl, deepLink, onDeepLinkHandled, onSelectC
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
   const requestedBox = useRef<string | null>(null);
+  const blockAutoProject = useRef(false);
   const busy = Object.values(conversations).some(item => item.busy);
   const busyRef = useRef(busy);
   busyRef.current = busy;
@@ -41,6 +42,7 @@ export function ProjectChat({ webBaseUrl, deepLink, onDeepLinkHandled, onSelectC
         if (busyRef.current) {
           setError("Finish or stop the current operation before opening another environment.");
         } else if (!state.projects.some(project => project.id === deepLink.target.projectId)) {
+          blockAutoProject.current = true;
           setProjectId(""); setSelectedId(""); setRunBoxes([]); requestedBox.current = null;
           setError("The linked project is not available to your account. Choose a project to continue.");
         } else {
@@ -50,7 +52,7 @@ export function ProjectChat({ webBaseUrl, deepLink, onDeepLinkHandled, onSelectC
           setRetry(value => value + 1);
         }
         onDeepLinkHandled();
-      } else setProjectId(current => current || state.projects[0]?.id || "");
+      } else if (!blockAutoProject.current) setProjectId(current => current || state.projects[0]?.id || "");
       setLoading(false);
     }).catch(cause => {
       if (!cancelled) { setError(cause.message); setLoading(false); onDeepLinkHandled(); }
