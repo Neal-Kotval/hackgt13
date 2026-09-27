@@ -229,3 +229,30 @@ test("an undeliverable SSM host-key readback is retried as pending; a script fai
     subnetId, sleep: async () => {} });
   await assert.rejects(scriptFailed.readHostKey(instance), /Host key readback failed/);
 });
+
+test("HAC-166: worker and requester /32 rules share the job tag; revokeSshForJob removes both and nothing else", async () => {
+  const calls = [];
+  const other = { SecurityGroupRuleId: "sgr-0999", IsEgress: false, CidrIpv4: "198.51.100.9/32",
+    Tags: [{ Key: "AgentCloudJobId", Value: "33333333-3333-4333-8333-333333333333" }] };
+  const rules = [other];
+  let next = 0;
+  const aws = fakeAws({ rules, calls, overrides: {
+    "ec2:authorize-security-group-ingress": (args) => {
+      const input = JSON.parse(args.at(-1));
+      const rule = { SecurityGroupRuleId: `sgr-0a${next++}`, IsEgress: false, IpProtocol: "tcp", FromPort: 22, ToPort: 22,
+        CidrIpv4: input.IpPermissions[0].IpRanges[0].CidrIp, Tags: input.TagSpecifications[0].Tags };
+      rules.push(rule);
+      return { Return: true, SecurityGroupRules: [rule] };
+    },
+  } });
+  const provider = createAwsCpuProvider({ aws, subnetId });
+  const worker = await provider.authorizeSsh(job(), "184.192.120.7/32");
+  const requester = await provider.authorizeSsh(job(), "203.0.113.50/32");
+  const again = await provider.authorizeSsh(job(), "184.192.120.7/32");
+  assert.notEqual(worker.ruleId, requester.ruleId);
+  assert.equal(again.ruleId, worker.ruleId);
+  assert.equal(calls.filter((call) => call.key === "ec2:authorize-security-group-ingress").length, 2);
+  const revoked = await provider.revokeSshForJob(jobId);
+  assert.deepEqual(revoked.sort(), [worker.ruleId, requester.ruleId].sort());
+  assert.deepEqual(rules, [other]);
+});
