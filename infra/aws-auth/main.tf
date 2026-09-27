@@ -154,6 +154,17 @@ resource "aws_vpc_security_group_egress_rule" "aws_cpu_ssh" {
   description       = "Outbound SSH to AgentCloud aws-cpu environments"
 }
 
+# Email delivery: the app submits invitation and verification mail over SMTP with STARTTLS
+# on port 587 (scripts/aws-auth/set-smtp.sh configures Gmail).
+resource "aws_vpc_security_group_egress_rule" "smtp_submission" {
+  security_group_id = aws_security_group.instance.id
+  ip_protocol       = "tcp"
+  from_port         = 587
+  to_port           = 587
+  cidr_ipv4         = "0.0.0.0/0"
+  description       = "Outbound SMTP submission for invitation email"
+}
+
 resource "aws_vpc_security_group_egress_rule" "runpod_ssh" {
   security_group_id = aws_security_group.instance.id
   ip_protocol       = "tcp"
@@ -234,7 +245,8 @@ resource "aws_instance" "app" {
     aws_iam_role_policy.runtime_secret_read,
     aws_vpc_security_group_egress_rule.https,
     aws_vpc_security_group_egress_rule.runpod_ssh,
-    aws_vpc_security_group_egress_rule.aws_cpu_ssh
+    aws_vpc_security_group_egress_rule.aws_cpu_ssh,
+    aws_vpc_security_group_egress_rule.smtp_submission
   ]
 }
 
