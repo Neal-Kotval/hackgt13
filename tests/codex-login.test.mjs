@@ -51,13 +51,13 @@ test('login method defaults to browser; legacy device code requires explicit sel
   assert.equal(loginMethod('password'), null);
 });
 
-function fixture({ start } = {}) {
+function fixture({ start, readAccount } = {}) {
   const db = new Database(':memory:');
   let callbacks; const calls = [];
   const runtime = {
     async request(method, params) {
       calls.push({ method, params });
-      if (method === 'account/read') return { account: null };
+      if (method === 'account/read') return readAccount ? readAccount() : { account: null };
       if (method === 'thread/start') return { thread: { id: 'thread-1', turns: [] } };
       if (method === 'account/login/start') {
         if (params.type === 'chatgptDeviceCode') return { type: 'chatgptDeviceCode', loginId: 'device-1', verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234' };
@@ -135,5 +135,23 @@ test('an unusable browser authorize URL is refused without echoing it', async ()
   await assert.rejects(f.service.action(id, { action: 'login', method: 'browser' }),
     (error) => error.status === 502 && !error.message.includes('4444') && /cannot use/.test(error.message));
   assert.equal((await f.service.action(id, { action: 'cancelLogin' })).cancelled, false);
+  f.service.close(); f.db.close();
+});
+
+test('pending login does not appear cancelled while successful account refresh is still in flight', async () => {
+  let signedIn = false, release;
+  const f = fixture({readAccount: () => signedIn ? new Promise(resolve => { release = resolve; }) : {account:null}});
+  const {id} = f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});
+  await tick();
+  const {login} = await f.service.action(id,{action:'login'});
+  signedIn = true;
+  f.notify('account/login/completed',{loginId:login.loginId,success:true});
+  await tick();
+  assert.equal(f.service.get(id).status,'auth_required');
+  assert.equal(f.service.get(id).loginPending,true);
+  release({account:{type:'chatgpt'}});
+  await tick();
+  assert.equal(f.service.get(id).status,'ready');
+  assert.equal(f.service.get(id).loginPending,false);
   f.service.close(); f.db.close();
 });
