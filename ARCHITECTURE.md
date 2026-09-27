@@ -174,6 +174,9 @@ Project members can queue a peer message from one Codex session to another with
 `POST /api/codex-sessions/:id/peer-messages`; an agent bearer token can use
 `POST /api/agent-peer-messages` only for its own source identity. Both sessions
 must belong to different agents in the same project and ready run box. The
+same POST accepts `broadcast:true` with a UUID request ID to queue one message
+for each other agent identity on that box. SQLite stores the recipient-session
+snapshot with the request ID so retries cannot notify newly joined agents.
 backend sends the oldest queued message to the recipient's app-server when its
 thread is ready, then advances after that turn completes. Queued messages survive
 server restart. `delivered` records a delivery attempt, `acknowledged` records
