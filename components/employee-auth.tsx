@@ -2,15 +2,32 @@
 import { Select } from "@/components/ui/select";
 import Link from "next/link";
 import { DownloadSimple, SignOut, User } from "@phosphor-icons/react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { authClient as client } from "@/lib/auth-client";
 import { Skeleton, SkeletonRegion } from "@/components/ui/skeleton";
+const confirmationStorageKey = "alto:pending-email-confirmation";
 export function SignIn({ signup = false, invite = "", verified = false, verificationError = false }: { signup?: boolean; invite?: string; verified?: boolean; verificationError?: boolean }) {
   const [error, setError] = useState(verificationError ? "This verification link is invalid or expired. Request another email below." : "");
   const [pending, setPending] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
   const [email, setEmail] = useState("");
   const [notice, setNotice] = useState(verified ? "Email verified. You can sign in now." : "");
+  const [sentEmail, setSentEmail] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const normalizedEmail = email.trim().toLowerCase();
+  const canResend = !!sentEmail && sentEmail === normalizedEmail;
+  const needsConfirmation = verificationError || (!!recoveryEmail && recoveryEmail === normalizedEmail);
+  useEffect(() => {
+    try {
+      if (verified) { setSentEmail(""); sessionStorage.removeItem(confirmationStorageKey); return; }
+      const saved = sessionStorage.getItem(confirmationStorageKey);
+      if (saved) { setSentEmail(saved); setEmail(current => current || saved); }
+    } catch { /* Verification remains usable when browser storage is unavailable. */ }
+  }, [verified]);
+  function confirmationRequested(address: string) {
+    setSentEmail(address);
+    try { sessionStorage.setItem(confirmationStorageKey, address); } catch { /* Optional navigation convenience. */ }
+  }
   const suffix = invite ? `?invite=${encodeURIComponent(invite)}` : "";
   const callbackURL = `/sign-in?verified=1${invite ? `&invite=${encodeURIComponent(invite)}` : ""}`;
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -22,18 +39,23 @@ export function SignIn({ signup = false, invite = "", verified = false, verifica
         ? await client.signUp.email({ ...credentials, name: String(data.get("name")).trim(), callbackURL })
         : await client.signIn.email(credentials);
       if (result.error) {
-        setError(result.error.status === 429 ? "Too many attempts. Wait a moment, then try again." : result.error.code === "EMAIL_NOT_VERIFIED" ? "Verify your email first. You can resend the verification email below." : signup ? "Account creation failed. Try signing in or request a verification email." : "Sign-in failed. Check your email and password.");
-      } else if (signup) setCheckEmail(true);
-      else window.location.assign(invite ? `/invitations/${encodeURIComponent(invite)}` : "/organizations");
+        if (result.error.code === "EMAIL_NOT_VERIFIED") setRecoveryEmail(normalizedEmail);
+        setError(result.error.status === 429 ? "Too many attempts. Wait a moment, then try again." : result.error.code === "EMAIL_NOT_VERIFIED" ? "Confirm your email before signing in. Request a confirmation email below." : signup ? "Account creation failed. Try again or sign in with an existing account." : "Sign-in failed. Check your email and password.");
+      } else if (signup) { confirmationRequested(normalizedEmail); setCheckEmail(true); }
+      else {
+        try { sessionStorage.removeItem(confirmationStorageKey); } catch { /* Optional navigation convenience. */ }
+        window.location.assign(invite ? `/invitations/${encodeURIComponent(invite)}` : "/organizations");
+      }
     } catch { setError("Unable to complete this request. Please try again."); }
     finally { setPending(false); }
   }
   async function resend() {
-    setPending(true); setError("");
+    if (pending || (!canResend && !needsConfirmation)) return;
+    setPending(true); setError(""); setNotice("");
     try {
       const result = await client.sendVerificationEmail({ email: email.trim(), callbackURL });
       if (result.error) setError("Could not send verification email. Wait a moment and retry.");
-      else setNotice("If this account needs verification, a new email is on its way.");
+      else { confirmationRequested(normalizedEmail); setNotice("If this account needs verification, a confirmation email is on its way."); }
     } catch { setError("Unable to send verification email. Please try again."); }
     finally { setPending(false); }
   }
@@ -43,14 +65,14 @@ export function SignIn({ signup = false, invite = "", verified = false, verifica
     <p>{checkEmail ? "Open the verification link, then return here to sign in." : invite ? "Use the email address that received the invitation. You’ll review it after signing in." : signup ? "Verify your email to create an organization or join your team." : "Continue to your organizations and projects."}</p>
     {!checkEmail && <form onSubmit={submit}>
       {signup && <><label htmlFor="name">Your name</label><input id="name" name="name" autoComplete="name" maxLength={100} required /></>}
-      <label htmlFor="email">Email</label><input id="email" name="email" type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required />
+      <label htmlFor="email">Email</label><input id="email" name="email" type="email" autoComplete="username" value={email} onChange={e => { setEmail(e.target.value); setNotice(""); }} disabled={pending} required />
       <label htmlFor="password">Password</label><input id="password" name="password" type="password" autoComplete={signup ? "new-password" : "current-password"} minLength={signup ? 12 : undefined} required />
       {signup && <p>Use at least 12 characters.</p>}
       <button className="button primary" disabled={pending}>{pending ? "Please wait…" : signup ? "Create account" : "Sign in"}</button>
     </form>}
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
-    <div className="auth-actions"><button className="button ghost" type="button" disabled={pending || !email.includes("@")} onClick={resend}>Resend verification email</button>
-    <Link href={`${signup || checkEmail ? "/sign-in" : "/sign-up"}${suffix}`}>{signup || checkEmail ? "Back to sign in" : "Create an account"}</Link></div>
+    <div className="auth-actions auth-confirmation-actions">{(canResend || needsConfirmation) && <button className="button ghost" type="button" disabled={pending || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)} onClick={resend}>{canResend ? "Resend confirmation" : "Send confirmation email"}</button>}
+    <Link className="auth-account-link" href={`${signup || checkEmail ? "/sign-in" : "/sign-up"}${suffix}`}>{signup || checkEmail ? "Back to sign in" : "Create an account"}</Link></div>
   </section></main>;
 }
 export function EmployeeMenu({ navigation = true }: { navigation?: boolean }) {

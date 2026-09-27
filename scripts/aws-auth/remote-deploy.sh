@@ -32,7 +32,9 @@ grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fs
 chown -R agentcloud:agentcloud "$RELEASE"
 cd "$RELEASE"
 runuser -u agentcloud -- env NODE_OPTIONS=--max-old-space-size=1536 NEXT_TELEMETRY_DISABLED=1 /usr/bin/npm-22 ci --no-audit --no-fund
-runuser -u agentcloud -- env NODE_OPTIONS=--max-old-space-size=1536 NEXT_TELEMETRY_DISABLED=1 /usr/bin/npm-22 run build
+# Version skew protection: a tab still running an older build hard-reloads on its next
+# navigation instead of posting with stale client code (NEXT_DEPLOYMENT_ID = the revision).
+runuser -u agentcloud -- env NODE_OPTIONS=--max-old-space-size=1536 NEXT_TELEMETRY_DISABLED=1 NEXT_DEPLOYMENT_ID="$REVISION" /usr/bin/npm-22 run build
 runuser -u agentcloud -- /usr/bin/npm-22 prune --omit=dev --no-audit --no-fund
 
 install -d -m 0755 /usr/local/lib/agentcloud

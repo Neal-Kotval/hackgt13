@@ -46,6 +46,9 @@ export type EnvironmentJob = {
   max_duration_minutes: number;
   stop_requested_at: string | null;
   force_stop_requested_at?: string | null;
+  // Fast stop: when AWS accepted termination; and why an AWS job is waiting (e.g. for the previous machine).
+  termination_requested_at?: string | null;
+  waitReason?: string | null;
   created_at: string;
   outcome?: "approved" | "denied";
   decision_reason?: string;

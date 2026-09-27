@@ -81,3 +81,23 @@ are not logged or stored in activity. Callback-port conflicts and unavailable
 desktop/SSH connections are actionable failures; there is no device-code fallback
 in the environment UI. Legacy CLI token records and authenticated transport APIs
 remain compatible, but new managed Codex identities have no connection token.
+
+## Command and file-change history
+
+Desktop and web environment chat display structured Codex execution evidence:
+commands, working directories, exit codes, durations, output, and per-file paths,
+operations and textual diffs. Details update on the existing item ID while work
+runs and remain in the saved session snapshot. Completed output lines stream;
+an unfinished line waits until the next newline or command completion so secrets
+split across notifications can be redacted together.
+
+The backend retains at most 300 events per session, 100 files per execution item,
+and 32,768 characters across an item's text fields. The viewer labels truncation,
+missing output and empty output separately. Recognized credentials and private
+keys are redacted before persistence; redaction cannot identify every arbitrary,
+unlabeled secret. Avoid asking an agent to print credentials.
+
+Older releases discarded command and file details. Reconnecting can recover
+items that Codex still returns from its saved thread; history absent there cannot
+be reconstructed. These diffs describe reported agent edits, not a live Git diff
+or an integration/merge result.

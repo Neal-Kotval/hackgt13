@@ -2408,3 +2408,7 @@ select {
     align-items: stretch;
   }
 }
+
+.auth-confirmation-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.auth-confirmation-actions .auth-account-link { grid-column: 2; }
+.auth-confirmation-actions .button { justify-self: start; min-width: 0; padding-inline: 0; white-space: normal; text-align: left; }

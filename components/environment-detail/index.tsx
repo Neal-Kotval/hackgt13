@@ -36,6 +36,7 @@ import {
   memoryExplanation,
   memoryStatus,
   noPermissions,
+  progressInfo,
   providerLabel,
   readableDate,
   shortId,
@@ -309,9 +310,9 @@ function Overview({
       <section className="environment-detail-section" aria-labelledby="environment-overview-state">
         <h2 id="environment-overview-state">State</h2>
         <p className="environment-detail-note">
-          {job.force_stop_requested_at && job.state !== "stopped"
+          {progressInfo(job)?.detail ?? (job.force_stop_requested_at && job.state !== "stopped"
             ? "Termination requested. The worker must confirm the provider released this environment."
-            : state.detail}
+            : state.detail)}
         </p>
         {failure && (
           <p className="environment-detail-failure" role="status">

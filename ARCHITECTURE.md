@@ -271,3 +271,13 @@ to this screen from chat. Creation uses the existing authenticated `createProjec
 action and server organization-admin authorization; errors keep entered values.
 Success selects the returned project. Saving metadata does not clone a repository,
 connect to SSH, provision compute, or start an agent.
+
+## Detailed session execution evidence
+
+`lib/codex-execution-details.mjs` sanitizes and bounds command and file-change
+fields before `lib/codex-sessions.mjs` stores them as optional JSON details on
+session events. A shared `components/codex-evidence.tsx` renderer exposes these
+in web environment chat and desktop chat, including output and per-file diffs.
+This is recorded execution evidence, separate from the planned project-wide Git
+review and merge workflow. See [LOCAL_CODEX.md](LOCAL_CODEX.md#command-and-file-change-history)
+for retention, streaming, redaction and recovery limits.

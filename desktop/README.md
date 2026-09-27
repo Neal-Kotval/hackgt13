@@ -145,8 +145,7 @@ action and server organization-admin authorization; errors keep entered values.
 Success selects the returned project. Saving metadata does not clone a repository,
 connect to SSH, provision compute, or start an agent.
 
-The Environments tab hides stopped environments by default. Use **Hide stopped
-environments** to include them again; the preference stays on this device across
+The Environments tab hides stopped environments by default. Use the **Hide stopped** switch beside the project selector to include them again; the preference stays on this device across
 visits. Failed, stopping, and unknown environments remain visible. When every
 environment is stopped, the empty state offers **Show stopped environments**.
 
@@ -156,6 +155,7 @@ The desktop uses Motion's animation engine and the shared design tokens to fade
 and slide between sections, projects, environments, and conversations. Navigation
 surfaces stay mounted; animation keys do not reconnect terminals or reset chat
 drafts. Streamed responses and polling updates do not replay entrance animations.
+Filtering environments also animates the results in place, with a visible result count.
 The operating system's reduced-motion preference disables navigation motion and
 cancels an in-progress transition when changed.
 

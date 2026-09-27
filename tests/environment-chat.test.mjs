@@ -121,3 +121,10 @@ test("markdown renders a safe subset as data", () => {
   // A fence still streaming renders as code up to the end.
   assert.deepEqual(parseMarkdown("```\npartial"), [{ type: "code", language: null, text: "partial" }]);
 });
+
+test("preserves structured command output and rejects malformed evidence", () => {
+  const details = { type: "commandExecution", status: "completed", command: "printf hello", cwd: "/workspace", output: "hello", exitCode: 0, durationMs: 42 };
+  assert.deepEqual(parseChatEvents([{ ...ev("cmd", "command", "Completed"), details }])[0].details, details);
+  assert.equal(parseChatEvents([{ ...ev("cmd", "command", "legacy"), details: { type: "unknown", status: "completed" } }])[0].details, undefined);
+  assert.deepEqual(parseChatEvents([{ ...ev("file", "command", "Changed files"), details: { type: "fileChange", status: "completed", changes: [{ path: "a.ts", kind: "update", diff: "-old\n+new" }, null, { path: 7 }] } }])[0].details.changes, [{ path: "a.ts", kind: "update", diff: "-old\n+new" }]);
+});

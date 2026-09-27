@@ -124,14 +124,37 @@ try {
   await expect(page.getByRole('button', { name: 'Send as a new turn' })).toHaveCount(0);
   expect(await page.evaluate(() => window.__test.sends.at(-1).text)).toBe(originalText);
   await expect(input).toHaveValue('Unrelated unsent draft');
+  // Explored through headless Playwright MCP before recording this regression.
+  await page.evaluate(() => window.__test.events.s1.push({
+    id: 'detailed-command', kind: 'command', text: 'Command completed · exit 0.', updatedAt: new Date().toISOString(),
+    details: { type: 'commandExecution', status: 'completed', command: 'npm test -- --runInBand', cwd: '/workspace/project', exitCode: 0, durationMs: 1234, output: 'PASS regression.test.ts\n2 tests passed' },
+  }, {
+    id: 'detailed-files', kind: 'command', text: 'File changes completed.', updatedAt: new Date().toISOString(),
+    details: { type: 'fileChange', status: 'completed', changes: [{ path: 'src/long-path/'.repeat(12) + 'main.ts', kind: 'update', diff: '--- a/main.ts\n+++ b/main.ts\n@@ -1,2 +1,2 @@\n-old\n+new\n kept' }] },
+  }));
+  const commandEvidence = page.locator('.codex-evidence').filter({ hasText: 'npm test -- --runInBand' });
+  await commandEvidence.locator('summary').first().click();
+  await expect(commandEvidence).toContainText('/workspace/project');
+  await expect(commandEvidence).toContainText('2 tests passed');
+  await commandEvidence.getByRole('button', { name: 'Copy command', exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npm test -- --runInBand');
+  const fileEvidence = page.locator('.codex-evidence').filter({ hasText: '1 file change' });
+  await fileEvidence.locator('summary').first().click();
+  await expect(fileEvidence.locator('.evidence-diff-line[data-kind="addition"]')).toContainText('+new');
+  await expect(fileEvidence.locator('.evidence-diff-line[data-kind="deletion"]')).toContainText('-old');
+  await layout('execution-evidence');
+  await commandEvidence.locator('summary').first().focus();
+  await page.keyboard.press('Enter');
+  await expect(commandEvidence).not.toHaveAttribute('open');
+  await page.evaluate(() => window.__test.events.s1.splice(-2));
   // State alone never invents command results, a GPU, or an SSH connection.
   await page.evaluate(() => { window.__test.sessions.find(session => session.id === 's1').status = 'running'; window.__test.events.s1.push({ id: 'command', kind: 'command', text: 'Command running. Output is not saved.', updatedAt: new Date().toISOString() }); });
   await expect(page.getByText('Responding…', { exact: true })).toBeVisible();
   await expect(page.locator('.codex-streaming-cursor')).toHaveCount(1);
   await expect(input).toHaveValue('Unrelated unsent draft');
   await layout('streaming');
-  await page.locator('.codex-command:not(.codex-connection-history) summary').click();
-  await expect(page.locator('.codex-command:not(.codex-connection-history)')).toHaveAttribute('open', '');
+  await page.locator('.codex-evidence summary').click();
+  await expect(page.locator('.codex-evidence')).toHaveAttribute('open', '');
   await page.getByRole('button', { name: 'Stop response' }).click();
   await expect(page.getByText('Turn interrupted', { exact: true })).toBeVisible();
   await expect(input).toHaveValue('Unrelated unsent draft');

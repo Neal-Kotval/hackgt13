@@ -19,6 +19,8 @@ if [[ -n "${SMTP_HOST:-}" ]]; then export AGENTCLOUD_MAIL_MODE=smtp; else export
 export NODE_ENV=production
 export NEXT_TELEMETRY_DISABLED=1
 cd /opt/agentcloud/current
+# Must match the build's deployment ID (remote-deploy.sh): the release directory is the revision.
+export NEXT_DEPLOYMENT_ID="$(basename "$(readlink -f /opt/agentcloud/current)")"
 
 if [[ "$MODE" == setup ]]; then
   exec /usr/bin/npm-22 run auth:setup

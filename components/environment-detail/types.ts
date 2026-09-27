@@ -42,6 +42,9 @@ export type RunBoxJob = {
   max_duration_minutes: number;
   stop_requested_at: string | null;
   force_stop_requested_at?: string | null;
+  // Fast stop: when AWS accepted termination; and why an AWS job is waiting (e.g. for the previous machine).
+  termination_requested_at?: string | null;
+  waitReason?: string | null;
   created_at: string;
   updated_at?: string;
   failure_reason?: string | null;
@@ -92,6 +95,19 @@ export const stateLabels: Record<RunBoxJobState, { label: string; detail: string
 
 export function stateInfo(state: RunBoxJobState) {
   return stateLabels[state] ?? stateLabels.failed;
+}
+
+type TeardownJob = { state: string; stop_requested_at?: string | null; termination_requested_at?: string | null; waitReason?: string | null };
+
+/** Plain-language progress for stopping and waiting jobs, or null to use the state's default copy. */
+export function progressInfo(job: TeardownJob): { phase: string; detail: string } | null {
+  if (job.state !== "stopped" && job.termination_requested_at)
+    return { phase: "Shutting down", detail: "AWS is terminating the machine and compute billing has stopped. It shows as stopped once AWS confirms the machine and its disk are gone, usually within 1–5 minutes. You can start another environment now." };
+  if (job.state === "stopping" || (job.stop_requested_at && job.state !== "stopped"))
+    return { phase: "Stopping", detail: "Stop requested. Signing Codex out, removing credentials, and asking AWS to terminate the machine." };
+  if ((job.state === "queued" || job.state === "allocating") && job.waitReason)
+    return { phase: "Waiting", detail: job.waitReason };
+  return null;
 }
 
 const profileNames: Record<string, string> = {
