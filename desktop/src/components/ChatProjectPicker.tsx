@@ -44,19 +44,7 @@ export function ChatProjectPicker(props: Props) {
       </span>
       <span className="context-chip context-agent">
         <Robot aria-hidden="true" />
-        <Select
-          aria-label="Agent"
-          value={props.sessionId}
-          disabled={props.disabled || !props.agents.length}
-          onChange={(e) => props.onAgent(e.target.value)}
-        >
-          <option value="">Choose agent</option>
-          {props.agents.map((item) => (
-            <option value={item.value} key={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </Select>
+        <span className="context-agent-label">Codex</span>
       </span>
       <span
         className="context-chip context-environment"

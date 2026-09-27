@@ -408,7 +408,7 @@ export function EnvironmentsPanel({
                         aria-describedby={!codexBlocked ? undefined : codexBlocked === blocked ? `blocked-${job.id}` : `codex-blocked-${job.id}`}
                         onClick={() => onOpenCodex?.(job.projectId || projectId || "", job.id)}
                       >
-                        Open Codex
+                        Open chat
                       </button>
                       {blocked ? (
                         <span className="detail-secondary" id={`blocked-${job.id}`}>
