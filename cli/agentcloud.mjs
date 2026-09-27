@@ -13,7 +13,7 @@ for (let i = 0; i < args.length; i += 2) {
   options[args[i].slice(2)] = args[i + 1];
 }
 const usage =
-  'Usage: node cli/agentcloud.mjs <connect|context|service|task|handoff|peer|peer-status> <projectId> --agent <agentId> [options]\nSet AGENTCLOUD_TOKEN. Optional AGENTCLOUD_URL (default http://127.0.0.1:3000).\nservice: --name NAME --url URL\ntask: --task ID --status "in progress"\nhandoff: --to ID --title TITLE --summary TEXT --files path1,path2 --next TEXT\npeer: --from-session ID --to-session ID --text MESSAGE [--request-id ID]\npeer-status: --from-session ID --message ID\nconnect: --once true for a single heartbeat; otherwise remains connected.';
+  'Usage: node cli/agentcloud.mjs <connect|context|service|task|handoff|peer|peer-status> <projectId> --agent <agentId> [options]\nSet AGENTCLOUD_TOKEN. Optional AGENTCLOUD_URL (default http://127.0.0.1:3000).\nservice: --name NAME --url URL\ntask: --task ID --status "in progress"\nhandoff: --to ID --title TITLE --summary TEXT --files path1,path2 --next TEXT\npeer: --from-session ID --to-session ID --text MESSAGE [--request-id ID]\npeer broadcast: --from-session ID --all true --text MESSAGE [--request-id ID]\npeer-status: --from-session ID --message ID\nconnect: --once true for a single heartbeat; otherwise remains connected.';
 if (
   !["connect", "context", "service", "task", "handoff", "peer", "peer-status"].includes(command) ||
   !projectId ||
@@ -54,10 +54,11 @@ async function send(type) {
       next: options.next,
     });
   if (type === "peer") {
-    if (!options['from-session'] || !options['to-session'] || !options.text) throw Error(usage);
+    const broadcast = options.all === 'true';
+    if (!options['from-session'] || !options.text || (broadcast ? options['to-session'] : !options['to-session'])) throw Error(usage);
     Object.assign(payload, {
       fromSessionId: options['from-session'],
-      toSessionId: options['to-session'],
+      ...(broadcast ? { broadcast: true } : { toSessionId: options['to-session'] }),
       text: options.text,
       requestId: options['request-id'] || randomUUID(),
     });

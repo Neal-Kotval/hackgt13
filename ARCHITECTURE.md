@@ -1,5 +1,20 @@
 # AgentCloud architecture
 
+## Bundled terminal helper
+
+The macOS desktop distribution includes `alto ssh <environment-id>`. The helper
+uses the app's bundled Electron runtime and connects to the running desktop
+through a local Unix socket. The desktop owns employee authentication, device-key
+registration, network-access refresh, and SSH host-key verification. Session
+cookies and private SSH keys stay inside the desktop process; the helper carries
+terminal input, output, and resize events only. Signing out or quitting closes
+these connections. This is trusted shell access under the same project access
+rules as the desktop terminal, not a command or filesystem sandbox.
+
+The socket is limited to the local OS user. Other processes running as that user
+share this trust boundary. The helper requires the desktop app to be running and
+signed in. See `desktop/README.md` for DMG packaging and command installation.
+
 ## Current executable boundary
 
 AgentCloud is a React / Next.js App Router application with Node.js route handlers, a durable JSON store, an SSE event stream, and a Node CLI. It is a **local organization-aware demo intended to bind to loopback**. Human dashboard/API access requires a Better Auth cookie session and project membership. Do not deploy this build as a public multi-user service.
@@ -174,6 +189,9 @@ Project members can queue a peer message from one Codex session to another with
 `POST /api/codex-sessions/:id/peer-messages`; an agent bearer token can use
 `POST /api/agent-peer-messages` only for its own source identity. Both sessions
 must belong to different agents in the same project and ready run box. The
+same POST accepts `broadcast:true` with a UUID request ID to queue one message
+for each other agent identity on that box. SQLite stores the recipient-session
+snapshot with the request ID so retries cannot notify newly joined agents.
 backend sends the oldest queued message to the recipient's app-server when its
 thread is ready, then advances after that turn completes. Queued messages survive
 server restart. `delivered` records a delivery attempt, `acknowledged` records
