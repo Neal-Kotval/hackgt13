@@ -93,7 +93,7 @@ The **Tasks** panel loads live projects via `getState` (project picker). Empty s
 
 ## Task authoring (HAC-33 / HAC-34 / HAC-64)
 
-On **Tasks**, pick a project, then use **Create task** (title, instructions, agent, optional environment). Submit calls main-process `postAction` → `POST /api/state`:
+On **Tasks**, pick a project, then use **Create task** (title, instructions, agent, optional environment). The environment menu lists ready run-box jobs from `GET /api/run-boxes` and verified catalog resources separately. Submit calls main-process `postAction` → `POST /api/state`:
 
 ```json
 {
@@ -102,11 +102,11 @@ On **Tasks**, pick a project, then use **Create task** (title, instructions, age
   "title": "…",
   "owner": "<agentId>",
   "instructions": "…",
-  "environmentId": "<verified resource id, optional>"
+  "runBoxId": "<ready run-box job id, optional>"
 }
 ```
 
-`instructions` and `environmentId` round-trip in `GET /api/state`. Binding `environmentId` requires a project resource with status `verified`; unknown or unverified ids are rejected.
+Use either `runBoxId` or `environmentId`, not both. `instructions` and the selected binding round-trip in `GET /api/state`. Binding `runBoxId` requires a ready, same-project run box; binding `environmentId` requires a verified project resource. The server rejects stale or foreign ids.
 
 ### Start agent (HAC-35)
 
@@ -120,7 +120,9 @@ Desktop registers the `agentcloud://` URL scheme (dev + packaged). Open Tasks wi
 agentcloud://open?projectId=<id>&environmentId=<verified-resource-id>
 ```
 
-`environmentId` is optional. On cold start or a second-instance handoff, the existing window is focused (no duplicate shell). Valid IDs switch to **Tasks** and preselect the project/environment. Missing projects, unknown resources, or unverified environments show an honest error — desktop never invents a ready box. Website “Open in desktop” UI is a separate ticket.
+`environmentId` is optional. A ready run box opens Tasks and preselects that job with `agentcloud://open?projectId=<id>&taskRunBoxId=<job-id>&serverUrl=<encoded-web-origin>`. The terminal link uses `runBoxId`; the Codex view uses `codexSessionId`. The optional `serverUrl` identifies the website that created any of these links. It must be an HTTPS origin or HTTP loopback origin. If desktop is signed into a different server, it shows the mismatch and asks the employee to sign out, set `AGENTCLOUD_URL`, and sign in again. It never sends cookies or requests to the URL in the link. On cold start or a second-instance handoff, the existing window is focused (no duplicate shell). Unknown or unavailable ids show an error.
+
+For local protocol testing on macOS, start desktop with `just desktop`, then run `open 'agentcloud://open?projectId=<real-project-id>&taskRunBoxId=<ready-job-id>&serverUrl=http%3A%2F%2F127.0.0.1%3A3000'` in another terminal. Use ids from your running server; the app does not seed them.
 
 ## Environments and in-app SSH terminal (HAC-90)
 

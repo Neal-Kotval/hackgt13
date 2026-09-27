@@ -9,6 +9,7 @@ import { ProjectPicker } from "./components/ProjectPicker";
 import { EnvironmentsPanel } from "./components/EnvironmentsPanel";
 import { ThreadList } from "./components/ThreadList";
 import { desktopApi } from "./lib/desktop-api";
+import { deepLinkServerError } from "./lib/deep-link";
 import type {
   AuthStatus,
   ChatThread,
@@ -70,7 +71,22 @@ export default function App() {
   }, []);
 
   // runBoxId links open Environments (HAC-90); other links keep the Tasks flow.
-  const routeDeepLink = useCallback((result: DeepLinkParseResult) => {
+  const routeDeepLink = useCallback(async (result: DeepLinkParseResult) => {
+    if (result.ok) {
+      try {
+        const status = await desktopApi().authStatus();
+        const mismatch = deepLinkServerError(result.target, status.baseUrl);
+        if (mismatch) {
+          setSection("tasks");
+          setDeepLink({ ok: false, error: mismatch });
+          return;
+        }
+      } catch {
+        setSection("tasks");
+        setDeepLink({ ok: false, error: "Could not check the AgentCloud server for this link. Retry after desktop connects." });
+        return;
+      }
+    }
     if (result.ok && result.target.codexSessionId) {
       setSection("codex"); setCodexMounted(true); setCodexLink(result); return;
     }
@@ -101,12 +117,12 @@ export default function App() {
       void (async () => {
         try {
           const pending = await api.takePendingDeepLink();
-          if (!cancelled && pending) routeDeepLink(pending);
+          if (!cancelled && pending) void routeDeepLink(pending);
         } catch {
           // Ignore bridge races during boot.
         }
       })();
-      stop = api.onDeepLink(routeDeepLink);
+      stop = api.onDeepLink((result) => { void routeDeepLink(result); });
     } catch {
       // Non-Electron preview.
     }
