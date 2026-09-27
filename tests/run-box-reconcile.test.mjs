@@ -3,12 +3,21 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import { claimRunBoxJob, migrateRunBoxJobs, recordRunBoxAllocation, recordRunBoxRevision, saveRunBoxDecision, requestRunBoxStop, transitionRunBoxJob } from "../lib/run-box-jobs.mjs";
 import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
+import { setAwsApproval } from "../lib/aws-organization-approval.mjs";
+
+function approve(db) {
+  db.exec("CREATE TABLE organization (id TEXT PRIMARY KEY)");
+  db.prepare("INSERT INTO organization VALUES ('organization-1')").run();
+  setAwsApproval(db, { organizationId: "organization-1", approved: true,
+    maxRunMinutes: 120, monthlyMinutes: 1200, actorId: "platform-admin" });
+}
 
 function setup() {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   migrateRunBoxJobs(db);
   migrateRunBoxCleanup(db);
+  approve(db);
   const { job } = saveRunBoxDecision(db, {
     idempotencyKey: "request-1", resourceRequestId: "resource-1", projectId: "project-1",
     employeeId: "employee-1", organizationId: "organization-1", projectRole: "owner",
@@ -57,6 +66,7 @@ function failedBeforeAllocation(reason) {
   db.pragma("foreign_keys = ON");
   migrateRunBoxJobs(db);
   migrateRunBoxCleanup(db);
+  approve(db);
   const { job } = saveRunBoxDecision(db, {
     idempotencyKey: "preallocation-1", resourceRequestId: "resource-preallocation-1", projectId: "project-1",
     employeeId: "employee-1", organizationId: "organization-1", projectRole: "owner",
