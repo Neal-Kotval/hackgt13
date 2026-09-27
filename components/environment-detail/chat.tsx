@@ -1,5 +1,7 @@
 "use client";
 
+import { CodexEvidence } from "../codex-evidence";
+
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { ArrowClockwise, ChatCircleText, Desktop, PaperPlaneRight, Plus, Robot, Stop } from "@phosphor-icons/react";
@@ -286,6 +288,7 @@ export function EnvironmentChat({ projectId, job }: { projectId: string; job: Ch
               <div className="env-chat-author"><Robot aria-hidden="true" /><span>Codex</span></div>
               {item.text ? <ChatMarkdown text={item.text} /> : null}
             </article>
+            : item.kind === "command" ? <CodexEvidence key={item.id} text={item.text} details={item.details} />
             : <p className="env-chat-event" data-kind={item.kind} key={item.id} role={item.kind === "error" ? "alert" : undefined}>
               {item.kind === "error" ? "Error: " : ""}{item.text}
             </p>)}
