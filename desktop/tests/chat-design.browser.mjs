@@ -94,6 +94,17 @@ try {
   await page.getByRole('button', { name: 'Copy code', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('// bounded results\nconst message = "ready";');
   await layout('active');
+  await page.evaluate(()=>{window.__test.sessions.find(s=>s.id==='s1').status='stopped';});
+  await page.setViewportSize({width:375,height:900});
+  await page.getByRole('button',{name:'Reconnect',exact:true}).waitFor();
+  for(const name of ['New project','Reconnect']) {
+    const bounds=await page.getByRole('button',{name,exact:true}).boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x+bounds.width).toBeLessThanOrEqual(375);
+  }
+  await page.evaluate(()=>{window.__test.sessions.find(s=>s.id==='s1').status='ready';});
+  await expect(page.getByRole('button',{name:'Reconnect',exact:true})).toHaveCount(0);
+  await page.setViewportSize({width:1440,height:900});
   // A lost Retry response must retain its idempotency key, and never consume an unrelated draft.
   await input.fill('Unrelated unsent draft');
   await page.evaluate(() => { window.__test.loseResponse = true; });
@@ -181,10 +192,56 @@ try {
   await expect(page.getByText('This legacy link names a catalog resource. Select its environment from the list below.', { exact: true })).toBeVisible();
   await page.evaluate(() => window.__test.deepLink({ ok: true, target: { projectId: 'p1', serverUrl: 'https://other.example.invalid' } }));
   await expect(page.getByText(/This link came from a different alto server/)).toBeVisible();
+  await page.evaluate(()=>window.__test.deepLink({ok:true,target:{projectId:'missing-project'}}));
+  await expect(page.getByRole('alert')).toContainText('linked project is not available');
   await page.goto(`${base}/?no-projects`);
-  await expect(page.getByText('Choose a project to get started.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
-  await expect(page.getByRole('link', { name: 'Project settings' }).last()).toBeVisible();
+  await expect(page.getByRole('heading', {name:'Create a project'})).toBeVisible();
+  await expect(page.getByRole('link', {name:'Open website'})).toHaveCount(0);
+  const create = page.getByRole('button', {name:'Create project',exact:true});
+  await create.click();
+  expect(await page.evaluate(()=>window.__test.projectRequests)).toBeUndefined();
+  await page.getByLabel('Project name', {exact:true}).fill('Native project');
+  await page.getByLabel('Git repository', {exact:true}).fill('http://github.com/example/repo');
+  await create.click();
+  expect(await page.evaluate(()=>window.__test.projectRequests)).toBeUndefined();
+  await page.getByLabel('Git repository', {exact:true}).fill('https://github.com/example/repo');
+  await page.getByRole('combobox',{name:'Template',exact:true}).click();
+  await page.getByRole('option',{name:'Empty workspace',exact:true}).click();
+  await page.getByRole('radio', {name:'SSH machine'}).check();
+  await create.click();
+  expect(await page.evaluate(()=>window.__test.projectRequests)).toBeUndefined();
+  await page.getByLabel('SSH host', {exact:true}).fill('dev@example.com');
+  for (const width of [375,768,1440]) {
+    await page.setViewportSize({width,height:900});
+    await create.scrollIntoViewIfNeeded();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    const bounds=await create.boundingBox();
+    expect(bounds.y+bounds.height).toBeLessThanOrEqual(900);
+    await create.focus();
+    await expect(create).toBeFocused();
+    await page.screenshot({path:path.join(artifacts,`create-project-${width}.png`)});
+  }
+  await page.evaluate(()=>{window.__test.projectFailure=true;});
+  await create.click();
+  await expect(page.getByRole('alert')).toContainText('Organization admin access required');
+  await expect(page.getByLabel('Project name',{exact:true})).toHaveValue('Native project');
+  await expect(page.getByLabel('SSH host',{exact:true})).toHaveValue('dev@example.com');
+  await page.evaluate(()=>{window.__test.projectFailure=false;});
+  await create.click();
+  await expect(page.getByRole('combobox',{name:'Project',exact:true})).toHaveText('Native project');
+  expect(await page.evaluate(()=>window.__test.projectRequests.at(-1))).toEqual({type:'createProject',name:'Native project',repo:'https://github.com/example/repo',template:'Empty workspace',compute:'SSH machine',host:'dev@example.com'});
+  expect(await page.evaluate(()=>window.__test.created)).toBeUndefined();
+  await page.getByRole('button',{name:'New project',exact:true}).click();
+  await expect(page.getByRole('combobox',{name:'Existing project',exact:true})).toBeVisible();
+  await page.getByRole('combobox',{name:'Existing project',exact:true}).click();
+  await page.getByRole('option',{name:'Native project',exact:true}).click();
+  await expect(page.getByRole('combobox',{name:'Project',exact:true})).toHaveText('Native project');
+  await page.goto(`${base}/?no-projects`);
+  await page.getByLabel('Project name',{exact:true}).fill('Hosted project');
+  await page.getByLabel('Git repository',{exact:true}).fill('https://github.com/example/hosted');
+  await create.click();
+  await expect(page.getByRole('combobox',{name:'Project',exact:true})).toHaveText('Hosted project');
+  expect(await page.evaluate(()=>window.__test.projectRequests.at(-1))).toEqual({type:'createProject',name:'Hosted project',repo:'https://github.com/example/hosted',template:'Next.js + Node API',compute:'Hosted Linux'});
   await page.goto(`${base}/?new-environment`);
   await expect(page.getByText('Choose an environment to access its chats.', { exact: true })).toBeVisible();
   await selectEnvironment();

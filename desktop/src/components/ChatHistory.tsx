@@ -9,7 +9,7 @@ type ChatHistoryProps = {
   busy: boolean;
   onSelect: (id: string) => void;
   onCreate: () => void;
-  setupUrl: string;
+  setupUrl?: string;
   loading: boolean;
 };
 
@@ -70,7 +70,7 @@ export function ChatHistory({ threads, selectedId, busy, onSelect, onCreate, set
       ) : (
         <div className="sidebar-empty" role="status">
           {loading ? "Loading chats…" : query ? `No chats match “${query}”` : "No chats yet"}
-          {!loading && !query && <a className="chat-history-setup" href={setupUrl} target="_blank" rel="noreferrer">Project settings</a>}
+          {!loading && !query && setupUrl && <a className="chat-history-setup" href={setupUrl} target="_blank" rel="noreferrer">Project settings</a>}
         </div>
       )}
     </aside>

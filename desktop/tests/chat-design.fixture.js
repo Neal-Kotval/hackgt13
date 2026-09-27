@@ -21,6 +21,13 @@
     signOut:async()=>({signedIn:false,baseUrl:'http://127.0.0.1:3000',secureStorage:true}),
     onDeepLink:cb=>{test.deepLink=cb;return ()=>{}},takePendingDeepLink:async()=>null,
     getState:async()=>structuredClone(state),
+    postAction:async body=>{
+      if(body.type!=='createProject')throw Error('Unexpected action');
+      test.projectRequests=(test.projectRequests||[]);test.projectRequests.push(body);
+      if(test.projectFailure)throw Error('Organization admin access required to create a project.');
+      const project={id:'created-project',name:body.name,repo:body.repo,agents:[],tasks:[],resources:[],resourceRequests:[]};
+      state.projects.push(project);return {state:structuredClone(state),raw:{id:project.id}};
+    },
     listRunBoxes:async projectId=>[{id:'box-1',projectId,provider:'docker-local',profileId:'cpu-workspace',state:'ready',rawState:'ready',ssh:{host:'127.0.0.1',port:2222,username:'test'},stopRequested:false,codex:{state:'ready',reason:null}},{id:'box-2',projectId,provider:'docker-local',profileId:'second-workspace',state:'ready',rawState:'ready',ssh:{host:'127.0.0.1',port:2223,username:'test'},stopRequested:false,codex:{state:'ready',reason:null}},{id:'box-failed',projectId,profileId:'failed-box',state:'failed',ssh:null}],
     openChatGptSignIn:async url=>{test.openedUrl=url;},
     onChatGptSignInEvent:()=>()=>{},
