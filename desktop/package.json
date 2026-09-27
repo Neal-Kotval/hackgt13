@@ -11,7 +11,8 @@
     "start": "electron .",
     "check": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
-    "test:chat:browser": "node tests/chat-design.browser.mjs"
+    "test:chat:browser": "node tests/chat-design.browser.mjs",
+    "install:macos": "npm run build && node scripts/install-macos-dev.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

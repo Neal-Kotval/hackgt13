@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Skeleton, SkeletonRegion, SkeletonRows } from "@/components/ui/skeleton";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -299,7 +300,7 @@ function RunDetail({ runId, closeHref }: { runId: string; closeHref: string }) {
         <div className={styles.detailTitle}>
           <p className={styles.eyebrow}>Run detail</p>
           <h3 id="run-detail-heading" ref={heading} tabIndex={-1}>
-            {run ? `${agentLabel(run.agent)} run` : "Loading run…"}
+            {run ? `${agentLabel(run.agent)} run` : <><span className="visually-hidden">Loading run</span><Skeleton variant="title" width="50" /></>}
           </h3>
         </div>
         <Link className={styles.close} href={closeHref} scroll={false} aria-label="Close run detail">
@@ -307,6 +308,7 @@ function RunDetail({ runId, closeHref }: { runId: string; closeHref: string }) {
         </Link>
       </div>
       {error && <p className={styles.error} role="alert">{error}</p>}
+      {!run && !error && <SkeletonRegion label="Loading run details"><Skeleton width="40" /><Skeleton variant="block" /><SkeletonRows count={2} icon={false} /></SkeletonRegion>}
       {run && (
         <>
           <p className={styles.prompt}>{run.prompt}</p>
@@ -379,12 +381,13 @@ export function AgentRuns({ project }: { project: Project }) {
           <p className={styles.eyebrow}>Live · refreshes every few seconds</p>
           <h2 id="agent-runs-heading">Reported runs</h2>
         </div>
+        {runs === null && !error && <Skeleton variant="chip" />}
         {runs && <span className={styles.count}>{runs.length} {runs.length === 1 ? "run" : "runs"}</span>}
       </div>
       {error && <p className={styles.error} role="alert">{error}</p>}
       <div className={`${styles.layout} ${selected ? styles.withDetail : ""}`}>
         <div className={styles.listColumn}>
-          {runs === null && !error && <p className={styles.note}>Loading agent runs…</p>}
+          {runs === null && !error && <SkeletonRegion label="Loading agent runs"><SkeletonRows count={3} /></SkeletonRegion>}
           {runs && runs.length === 0 && (
             <div className={styles.empty}>
               <TerminalWindow aria-hidden="true" />

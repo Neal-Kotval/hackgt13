@@ -1,4 +1,5 @@
 "use client";
+import { SkeletonRegion, SkeletonRows } from "@/components/ui/skeleton";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -47,6 +48,7 @@ export type EnvironmentJob = {
   provider_resource_id: string | null;
   max_duration_minutes: number;
   stop_requested_at: string | null;
+  force_stop_requested_at?: string | null;
   created_at: string;
   outcome?: "approved" | "denied";
   decision_reason?: string;
@@ -197,6 +199,8 @@ export function Environments({ project }: { project: Project }) {
   const [actionError, setActionError] = useState("");
   const [confirmingStop, setConfirmingStop] = useState("");
   const [stopBusy, setStopBusy] = useState("");
+  const [confirmingForce, setConfirmingForce] = useState("");
+  const [forceBusy, setForceBusy] = useState("");
   const [serverUrl, setServerUrl] = useState("");
   const formHeading = useRef<HTMLHeadingElement>(null);
   const focusedEnvironment = useRef(false);
@@ -301,6 +305,40 @@ export function Environments({ project }: { project: Project }) {
       setActionError(caught instanceof Error ? caught.message : "Could not request a stop.");
     } finally {
       setStopBusy("");
+    }
+  }
+
+  // HAC-168: closes a job at once only if no machine was ever launched; otherwise the
+  // server requests termination and the job keeps blocking until release is confirmed.
+  async function forceStop(job: EnvironmentJob) {
+    setForceBusy(job.id);
+    setActionError("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/run-boxes/${encodeURIComponent(job.id)}/force-stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id }),
+      });
+      const data = (await response.json()) as {
+        job?: EnvironmentJob;
+        outcome?: "stopped" | "termination-requested";
+        error?: string;
+      };
+      if (!response.ok || !data.job) throw new Error(data.error || "Force stop was not saved.");
+      setJobs((current) =>
+        (current ?? []).map((item) => (item.id === job.id ? { ...item, ...data.job! } : item)),
+      );
+      setConfirmingForce("");
+      setNotice(
+        data.outcome === "stopped"
+          ? "Stopped. No machine was ever launched for this environment, so it was closed immediately."
+          : "Termination requested. This environment keeps blocking new ones until the worker confirms the provider released it.",
+      );
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Could not force stop.");
+    } finally {
+      setForceBusy("");
     }
   }
 
@@ -465,7 +503,7 @@ export function Environments({ project }: { project: Project }) {
         </form>
       )}
 
-      {jobs === null && !loadError && <p className="resource-note">Loading environments…</p>}
+      {jobs === null && !loadError && <SkeletonRegion label="Loading environments"><SkeletonRows count={2} /></SkeletonRegion>}
 
       {jobs && jobs.length > 0 && (
         <section className="environment-list-section" aria-labelledby="environment-list-title">
@@ -486,6 +524,11 @@ export function Environments({ project }: { project: Project }) {
                 onConfirm={() => setConfirmingStop(job.id)}
                 onCancel={() => setConfirmingStop("")}
                 onStop={() => void stop(job)}
+                forceConfirming={confirmingForce === job.id}
+                forceBusy={forceBusy === job.id}
+                onForceConfirm={() => setConfirmingForce(job.id)}
+                onForceCancel={() => setConfirmingForce("")}
+                onForceStop={() => void forceStop(job)}
                 onCopy={(text, message) => void copy(text, message)}
               />
             ))}
@@ -507,6 +550,11 @@ function EnvironmentCard({
   onConfirm,
   onCancel,
   onStop,
+  forceConfirming,
+  forceBusy,
+  onForceConfirm,
+  onForceCancel,
+  onForceStop,
   onCopy,
 }: {
   job: EnvironmentJob;
@@ -519,6 +567,11 @@ function EnvironmentCard({
   onConfirm: () => void;
   onCancel: () => void;
   onStop: () => void;
+  forceConfirming: boolean;
+  forceBusy: boolean;
+  onForceConfirm: () => void;
+  onForceCancel: () => void;
+  onForceStop: () => void;
   onCopy: (text: string, message?: string) => void;
 }) {
   const copy = stateCopy[job.state] ?? stateCopy.failed;
@@ -530,12 +583,24 @@ function EnvironmentCard({
     else if (wasConfirming.current) stopButton.current?.focus();
     wasConfirming.current = confirming;
   }, [confirming]);
+  const forceConfirmButton = useRef<HTMLButtonElement>(null);
+  const forceButton = useRef<HTMLButtonElement>(null);
+  const wasForceConfirming = useRef(false);
+  useEffect(() => {
+    if (forceConfirming) forceConfirmButton.current?.focus();
+    else if (wasForceConfirming.current) forceButton.current?.focus();
+    wasForceConfirming.current = forceConfirming;
+  }, [forceConfirming]);
   const titleId = `environment-${job.id}-title`;
   const failure = job.failureReason ?? job.failure_reason;
   const expiresAt = Date.parse(job.created_at) + job.max_duration_minutes * 60_000;
   const command = job.ssh ? sshCommand(job.ssh) : "";
   const canStop = role === "owner" && job.state !== "stopped" && !job.stop_requested_at;
   const ready = job.state === "ready" && !job.stop_requested_at;
+  // A failed or stuck-stopping job still holds the provider's single active slot.
+  const canForceStop = role === "owner" && job.state !== "stopped" && !job.force_stop_requested_at &&
+    (Boolean(job.stop_requested_at) || job.state === "failed" || job.state === "stopping");
+  const terminationRequested = Boolean(job.force_stop_requested_at) && job.state !== "stopped";
   const chatUrl = ready && serverUrl
     ? `agentcloud://open?${new URLSearchParams({ projectId, runBoxId: job.id, panel: "codex", serverUrl })}`
     : "";
@@ -543,14 +608,17 @@ function EnvironmentCard({
   const stopDetail =
     stopped && !job.provider_resource_id
       ? "Stopped before a machine was allocated."
-      : copy.detail;
+      : terminationRequested
+        ? "Termination requested. The worker must confirm the provider released this environment before it stops blocking new ones."
+        : copy.detail;
+  const phase = terminationRequested ? "Termination requested" : copy.phase;
 
   return (
     <li id={`rb-${job.id}`} className="resource-request-card resource-panel environment-card" aria-labelledby={titleId}>
       <div className="resource-detail-title">
         <div className="environment-title">
           <h4 id={titleId}>{profileLabel(job, templates)}</h4>
-          {copy.phase !== copy.label && <span className="environment-phase">{copy.phase}</span>}
+          {phase !== copy.label && <span className="environment-phase">{phase}</span>}
         </div>
         <span className={`resource-badge resource-badge--${job.state}`}>{copy.label}</span>
       </div>
@@ -610,6 +678,12 @@ function EnvironmentCard({
             <dd>{readableDate(job.stop_requested_at)}</dd>
           </div>
         )}
+        {job.force_stop_requested_at && (
+          <div>
+            <dt>Force stop requested</dt>
+            <dd>{readableDate(job.force_stop_requested_at)}</dd>
+          </div>
+        )}
       </dl>
 
       <div className="environment-access">
@@ -655,6 +729,17 @@ function EnvironmentCard({
             <Stop aria-hidden="true" /> Stop
           </button>
         )}
+        {canForceStop && !forceConfirming && (
+          <button
+            ref={forceButton}
+            className="button danger"
+            type="button"
+            onClick={onForceConfirm}
+            aria-controls={`environment-${job.id}-force-stop`}
+          >
+            <Warning aria-hidden="true" /> Force stop
+          </button>
+        )}
       </div>
       {ready && (
         <details className="resource-note">
@@ -689,6 +774,38 @@ function EnvironmentCard({
             </button>
             <button className="button" type="button" disabled={stopBusy} onClick={onCancel}>
               Keep running
+            </button>
+          </div>
+        </div>
+      )}
+      {canForceStop && forceConfirming && (
+        <div
+          id={`environment-${job.id}-force-stop`}
+          className="environment-confirm"
+          role="group"
+          aria-label="Confirm force stop"
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && !forceBusy) onForceCancel();
+          }}
+        >
+          <p>
+            Force stop this environment? If no machine was ever launched, it closes now.
+            Otherwise AgentCloud requests termination from the provider, and this
+            environment keeps blocking new ones until the release is confirmed.
+            Anything not pushed from it is lost.
+          </p>
+          <div className="environment-actions">
+            <button
+              ref={forceConfirmButton}
+              className="button danger"
+              type="button"
+              disabled={forceBusy}
+              onClick={onForceStop}
+            >
+              {forceBusy ? "Requesting force stop…" : "Confirm force stop"}
+            </button>
+            <button className="button" type="button" disabled={forceBusy} onClick={onForceCancel}>
+              Cancel
             </button>
           </div>
         </div>

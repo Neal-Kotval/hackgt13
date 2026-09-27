@@ -76,7 +76,9 @@ app.on("second-instance", (_event, argv) => {
 });
 
 if (process.defaultApp) {
-  if (process.argv.length >= 2) {
+  // macOS ignores argv when opening a URL handler. Keep the dedicated dev
+  // bundle registered instead of stealing links for generic Electron.app.
+  if (process.platform !== "darwin" && process.argv.length >= 2) {
     app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [
       path.resolve(process.argv[1]),
     ]);
