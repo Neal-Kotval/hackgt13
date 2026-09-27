@@ -47,7 +47,7 @@ Follows [docs/sandbox-mvp-contract.md](../docs/sandbox-mvp-contract.md).
 - **Terminal.** `terminal:open` fetches `GET /api/run-boxes/:id/connection` with the employee session, then connects with `ssh2` using the API's host, port, and username and the device key. The presented host key must equal `hostPublicKey` exactly (only `ssh-ed25519` is negotiated); otherwise the connection fails with “Host key does not match the pinned key for this environment”. A `403 { code: "no_authorized_key" }` explains that the device key was registered after the environment was created. Sessions are owned by the window that opened them and are closed when it reloads, closes, or the app quits. The xterm theme is read from the design tokens at runtime.
 - **Deep link.** `agentcloud://open?projectId=<id>&runBoxId=<jobId>` opens Project chat for that environment; add `panel=terminal` to explicitly request a terminal. Host or port values in the URL are ignored. The legacy `environmentId` form opens Environments with a notice; catalog resource IDs are not run-box IDs.
 - **Access model.** SSH is trusted shell access to the environment. It is not a filesystem or command sandbox.
-- **Limitation.** Keys registered after an environment was allocated are not on that environment; create a new environment.
+- **Key reconciliation.** Workers reconcile registered device keys onto ready environments. A newly registered key can be unavailable until the next worker reconciliation cycle. Reconciliation requires a running provider worker.
 
 `npm test` also runs `tests/codex-login-tunnel.test.ts` (the sign-in tunnel against an in-process ssh2 server: loopback-only listening, byte forwarding, busy port, host key and device key refusal, timeout, window close) and `tests/codex-browser-login.integration.test.ts` (real Docker: a docker-local environment, Codex app-server over SSH, browser login start, and the tunnel forwarding `GET /` from this Mac's port to Codex's callback server; the login is cancelled and never completed). The integration test skips when Docker is unavailable or when port 1455 or 1457 is already in use on this machine.
 
@@ -67,7 +67,7 @@ Set `AGENTCLOUD_URL=http://127.0.0.1:3010` in `desktop/.env` (or the shell) befo
 
 The renderer consumes `app/tokens.css`, shared fonts, and the web Select primitive. The supplied design reference is preserved in `reference/desktop-project-chat/`; its Tasks navigation is intentionally omitted. Search and history live in the shared sidebar, with a focus-managed drawer on narrow windows. Empty conversations use centered context chips; active conversations use an uncluttered reading column, user bubbles, unboxed assistant turns, and a context toolbar in the composer. Errors and actual execution status remain visible.
 
-This local Docker/SSH client does not prove AWS allocation, GPU execution, or public tenant isolation. Desktop is not notarized or packaged for distribution.
+This local Docker/SSH client does not prove AWS allocation, GPU execution, or public tenant isolation. Desktop has a self-contained development DMG build; it is not Developer ID signed or notarized.
 
 ## macOS website links in development
 
@@ -94,3 +94,44 @@ links take precedence over an outstanding startup link.
 Startup link acknowledgements are scoped to the destination a renderer received.
 An older project-loading request cannot clear a newer environment link while
 authentication and project data are loading concurrently.
+
+## Bundled terminal CLI and macOS DMG
+
+`npm run package:macos --prefix desktop` builds a self-contained `alto.app` and
+writes `artifacts/desktop/alto-<version>-macos-<architecture>.dmg`. Run it on macOS
+after `npm ci` at the repository root and in `desktop/`. It packages the local
+machine architecture. Existing DMGs are preserved; move an older artifact before
+rebuilding the same version. `npm run test:packaging --prefix desktop` checks
+launcher symlinks, argument preservation, and the copied SSH runtime dependency.
+
+The disk image contains the app, an Applications shortcut, and CLI installation
+instructions. Drag the app into Applications, launch it, and sign in to the
+same backend that owns your environments. Then install its bundled helper:
+
+```sh
+/Applications/alto.app/Contents/Resources/bin/alto install
+```
+
+This creates `~/.local/bin/alto`; it refuses to overwrite unrelated files. If that
+directory is not already on your PATH, add `export PATH="$HOME/.local/bin:$PATH"`
+to `~/.zshrc`, then open a new terminal. Run `alto --help` for available commands.
+The helper can also be invoked at its full path without installation. Move the app
+to its final location before installing the helper, and reinstall the link after
+moving the app. No separate Node installation is required for end users.
+
+The CLI uses the running desktop app's authenticated session and device SSH key.
+Desktop must be open and signed in. Credentials remain in desktop's existing
+storage; installing the CLI does not export a private key to the terminal.
+`alto ssh <environment-id>` connects to the selected environment with its pinned
+host key. This grants trusted shell access; it does not sandbox remote commands.
+Device-key authorization can wait for the environment worker to reconcile keys.
+
+The package contains built renderer/main/preload outputs, CLI files, Electron,
+and ssh2's JavaScript runtime dependencies and licenses. Optional native SSH
+acceleration is omitted to avoid Node/Electron ABI differences. The app contains
+no symlink to a source checkout and copies no `.env`, account state, SSH keys, or
+Doppler secrets. Backend settings use the existing desktop configuration and
+sign-in flow. This is an ad-hoc-signed development DMG, **not Developer ID signed
+or notarized**; macOS distribution trust and notarization remain release work.
+The packaging command verifies the bundle signature, loads ssh2 using bundled
+Electron, and runs the bundled CLI's help command before creating the image.

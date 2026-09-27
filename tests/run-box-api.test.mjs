@@ -16,7 +16,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"])
+for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory", "run-box-metadata", "run-box-access"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
 const db = fixture.getDatabase();
@@ -27,7 +27,8 @@ async function route(sourcePath, outputName, depth) {
   const code = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replaceAll(prefix, "./").replace(/from ["']\.\/([\w-]+)["']/g, (match, name) =>
-    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"].includes(name) ? ".mjs" : ".js"}'`);
+    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory", "run-box-metadata", "run-box-access"].includes(name) ? ".mjs" : ".js"}'`)
+    .replace(/from ["']\.\.\/route["']/g, "from './boxes-route.js'");
   await writeFile(path.join(directory, outputName), code);
   return import(path.join(directory, outputName));
 }
@@ -116,7 +117,9 @@ test("approval API binds a saved request to verified owner and rejects cross-pro
   assert.equal((await boxes.POST(request("/api/run-boxes", { projectId, resourceRequestId: nextRequest.id, idempotencyKey: "approval-test-2" }, owner.cookie))).status, 409);
   assert.equal((await boxes.GET(request(`/api/run-boxes?projectId=wrong-project`, null, owner.cookie))).status, 403);
   assert.equal((await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, member.cookie))).status, 200);
-  assert.equal((await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, member.cookie))).json()).jobs[0].id, job.id);
+  // New jobs are private: the creator lists it, another member does not.
+  assert.equal((await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, owner.cookie))).json()).jobs[0].id, job.id);
+  assert.ok(!(await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, member.cookie))).json()).jobs.some((item) => item.id === job.id));
 });
 
 test("member decision denies allocation and stop is owner-scoped and durable", async () => {
@@ -126,7 +129,8 @@ test("member decision denies allocation and stop is owner-scoped and durable", a
   assert.equal(denied.status, 200);
   assert.equal((await denied.json()).job, null);
   const job = db.prepare("SELECT * FROM run_box_job LIMIT 1").get();
-  assert.equal((await stop.POST(request(`/api/run-boxes/${job.id}/stop`, { projectId }, member.cookie), { params: Promise.resolve({ id: job.id }) })).status, 403);
+  // A private job does not exist for another member.
+  assert.equal((await stop.POST(request(`/api/run-boxes/${job.id}/stop`, { projectId }, member.cookie), { params: Promise.resolve({ id: job.id }) })).status, 404);
   const stopped = await stop.POST(request(`/api/run-boxes/${job.id}/stop`, { projectId }, owner.cookie), { params: Promise.resolve({ id: job.id }) });
   assert.equal(stopped.status, 200);
   assert.equal((await stopped.json()).job.state, "stopping");
@@ -211,6 +215,7 @@ test("one-step member path records a denied decision without a job, once under c
 });
 
 const { migrateRunBoxJobs } = await import(path.join(directory, "run-box-jobs.mjs"));
+const metadataLib = await import(path.join(directory, "run-box-metadata.mjs"));
 migrateRunBoxJobs(db);
 const dockerSupported = (() => {
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'run_box_job'").get();
@@ -337,6 +342,9 @@ test("shared memory stays off until the project owner enables that environment",
   const job = db.prepare("SELECT id FROM run_box_job WHERE project_id = ? AND provider = 'docker-local'").get(projectId);
   assert.ok(job);
   const context = { params: Promise.resolve({ id: job.id }) };
+  // Private to its creator: 404 for another member until it is made public.
+  assert.equal((await memory.POST(request(`/api/run-boxes/${job.id}/memory`, { projectId, enabled: true }, member.cookie), context)).status, 404);
+  metadataLib.updateRunBoxMetadata(db, job.id, owner.id, { visibility: "public" });
   const listed = await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, member.cookie))).json();
   assert.equal(listed.jobs.find((item) => item.id === job.id).memory.enabled, false);
   assert.equal((await memory.POST(request(`/api/run-boxes/${job.id}/memory`, { projectId, enabled: true }, member.cookie), context)).status, 403);
@@ -379,7 +387,7 @@ test("HAC-168: the active-box conflict names only a visible blocker, and its own
     { params: Promise.resolve({ id }) });
   assert.equal((await forceStop.POST(request(`/api/run-boxes/${job.id}/force-stop`, { projectId: hidden.id }), { params: Promise.resolve({ id: job.id }) })).status, 401);
   assert.equal((await call(member, hidden.id)).status, 403);
-  assert.equal((await call(member, projectId)).status, 403);
+  assert.equal((await call(member, projectId)).status, 404);
   assert.equal((await call(owner, projectId)).status, 404);
   const forced = await call(owner, hidden.id);
   assert.equal(forced.status, 200);
@@ -401,7 +409,7 @@ test("HAC-166: desktop registers its IPv4 for a ready aws-cpu environment", asyn
       headers: { ...(cookie ? { cookie } : {}), ...(viewer ? { "cloudfront-viewer-address": viewer } : {}), ...headers },
     }), { params: Promise.resolve({ id: jobId }) });
   try {
-    const created = await boxes.POST(request("/api/run-boxes", { projectId, profileId: "aws-cpu", durationHours: 1, idempotencyKey: "hac-166-desktop" }, owner.cookie));
+    const created = await boxes.POST(request("/api/run-boxes", { projectId, profileId: "aws-cpu", durationHours: 1, idempotencyKey: "hac-166-desktop", visibility: "public" }, owner.cookie));
     assert.equal(created.status, 201);
     const job = (await created.json()).job;
     const setJob = (fields) => db.prepare(`UPDATE run_box_job SET ${Object.keys(fields).map((key) => `${key} = @${key}`).join(", ")} WHERE id = @id`).run({ ...fields, id: job.id });
@@ -461,5 +469,86 @@ test("HAC-166: desktop registers its IPv4 for a ready aws-cpu environment", asyn
     setJob({ state: "stopped" });
   } finally {
     delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
+  }
+});
+
+test("sized AWS environments: every catalog machine is allowed, disk is validated, and jobs carry machine and diskGb", async () => {
+  const { machines } = await import(path.join(directory, "machine-catalog.mjs"));
+  const create = (body, cookie = owner.cookie) => boxes.POST(request("/api/run-boxes", { projectId, durationHours: 1, ...body }, cookie));
+  const stopAws = () => db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
+  stopAws();
+
+  // Disk validation happens before anything is recorded.
+  const before = await requestCount();
+  for (const [body, pattern] of [
+    [{ profileId: "aws-gpu-t4", diskGb: 20, idempotencyKey: "sized-bad-1" }, /Disk must be one of 100 GiB for T4/],
+    [{ profileId: "aws-gpu-l4", diskGb: 50, idempotencyKey: "sized-bad-2" }, /Disk must be one of 100 GiB/],
+    [{ profileId: "aws-cpu-large", diskGb: 30, idempotencyKey: "sized-bad-3" }, /Disk must be one of 20, 50, 100 GiB for Large/],
+    [{ profileId: "aws-cpu", diskGb: 200, idempotencyKey: "sized-bad-4" }, /Disk must be one of/],
+    [{ profileId: "aws-cpu", diskGb: "50", idempotencyKey: "sized-bad-5" }, /Disk must be one of/],
+    [{ profileId: "local-docker-sandbox", diskGb: 50, idempotencyKey: "sized-bad-6" }, /only be chosen for AWS machines/],
+    [{ profileId: "runpod-rtx-4090", diskGb: 50, idempotencyKey: "sized-bad-7" }, /only be chosen for AWS machines/],
+  ]) {
+    const response = await create(body);
+    assert.equal(response.status, 400, JSON.stringify(body));
+    assert.match((await response.json()).error, pattern);
+  }
+  assert.equal(await requestCount(), before);
+
+  // Every catalog machine queues one approved aws-ec2 job with its profile ID and disk.
+  for (const machine of machines) {
+    const diskGb = machine.kind === "gpu" ? 100 : 50;
+    const response = await create({ profileId: machine.id, diskGb, idempotencyKey: `sized-${machine.id}` });
+    assert.equal(response.status, 201, machine.id);
+    const { job } = await response.json();
+    assert.equal(job.provider, "aws-ec2");
+    assert.equal(job.profile_id, machine.id);
+    assert.equal(job.diskGb, diskGb);
+    assert.equal(job.machine.id, machine.id);
+    assert.equal(job.machine.instanceType, machine.instanceType);
+    assert.equal(job.machine.kind, machine.kind);
+    // The single-active AWS rule applies to every size.
+    const blocked = await create({ profileId: "aws-cpu", idempotencyKey: `sized-blocked-${machine.id}` });
+    assert.equal(blocked.status, 409);
+    assert.match((await blocked.json()).error, /An AWS run box is already active/);
+    // A retry with the same key returns the same job; a different disk is a different decision.
+    const retry = await create({ profileId: machine.id, diskGb, idempotencyKey: `sized-${machine.id}` });
+    assert.equal((await retry.json()).job.id, job.id);
+    const changed = await create({ profileId: machine.id, diskGb: machine.kind === "gpu" ? undefined : 100, idempotencyKey: `sized-${machine.id}` });
+    assert.equal(changed.status, machine.kind === "gpu" ? 201 : 409, machine.id);
+    stopAws();
+  }
+
+  // Omitting diskGb takes the machine's minimum; GET lists machine and diskGb.
+  const small = await (await create({ profileId: "aws-cpu", idempotencyKey: "sized-default-cpu" })).json();
+  assert.equal(small.job.diskGb, 20);
+  const listed = (await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, owner.cookie))).json()).jobs;
+  const row = listed.find((item) => item.id === small.job.id);
+  assert.deepEqual(row.machine, { id: "aws-cpu", kind: "cpu", size: "Small", instanceType: "t3.medium", vcpu: 2, memoryGib: 4, gpu: null });
+  assert.equal(row.diskGb, 20);
+  const gpuRow = listed.find((item) => item.profile_id === "aws-gpu-a10g");
+  assert.equal(gpuRow.machine.gpu.model, "NVIDIA A10G");
+  assert.equal(gpuRow.diskGb, 100);
+  const nonCatalog = listed.find((item) => item.profile_id === "runpod-rtx-4090");
+  if (nonCatalog) { assert.equal(nonCatalog.machine, null); assert.equal(nonCatalog.diskGb, null); }
+  stopAws();
+
+  // A member is denied for every size, exactly as for aws-cpu.
+  const denied = await create({ profileId: "aws-gpu-t4", idempotencyKey: "sized-member" }, member.cookie);
+  assert.equal(denied.status, 200);
+  const deniedBody = await denied.json();
+  assert.equal(deniedBody.decision.outcome, "denied");
+  assert.equal(deniedBody.job, null);
+
+  // An unapproved organization is refused for every size.
+  approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved: false,
+    maxRunMinutes: 120, monthlyMinutes: 1200, actorId: owner.id });
+  try {
+    const refused = await (await create({ profileId: "aws-cpu-medium", idempotencyKey: "sized-unapproved" })).json();
+    assert.equal(refused.decision.outcome, "denied");
+    assert.equal(refused.job, null);
+  } finally {
+    approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved: true,
+      maxRunMinutes: 120, monthlyMinutes: 1200, actorId: owner.id });
   }
 });

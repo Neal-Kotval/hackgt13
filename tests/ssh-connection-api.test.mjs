@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import ts from "typescript";
 import { prepareAuth } from "./auth-fixture.mjs";
+import { copyRunBoxAccess } from './run-box-access-fixture.mjs';
 
 const directory = await mkdtemp(path.join(os.tmpdir(), "agentcloud-ssh-connection-api-"));
 process.env.AGENTCLOUD_DATA_DIR = path.join(directory, "data");
@@ -17,10 +18,11 @@ for (const name of ["store", "http", "resource-profiles"]) {
   const source = await readFile(new URL(`../lib/${name}.ts`, import.meta.url), "utf8");
   await writeFile(path.join(directory, `${name}.js`), transpile(source).replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"];
+const mjs = ["auth", "machine-catalog", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory", "run-box-access", "run-box-metadata"];
 for (const name of ["run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
+await copyRunBoxAccess(directory);
 const db = fixture.getDatabase();
 const store = await import(path.join(directory, "store.js"));
 const jobs = await import(path.join(directory, "run-box-jobs.mjs"));
@@ -144,7 +146,7 @@ test("connection API enforces auth, membership, readiness, and injected device k
   assert.deepEqual(await ok.json(), {
     runBoxId: job.id, projectId, provider: "runpod", profileId: "runpod-rtx-4090", state: "ready",
     host: "203.0.113.10", port: 30222, username: "agentcloud", hostPublicKey,
-    knownHostsLine: `[203.0.113.10]:30222 ${hostPublicKey}`, access: "trusted-shell", authorized: true,
+    knownHostsLine: `[203.0.113.10]:30222 ${hostPublicKey}`, access: "trusted-shell", networkAccess: null, authorized: true,
   });
 
   // Revoking the device key removes access even though it was injected at allocation.
@@ -164,6 +166,9 @@ test("connection API enforces auth, membership, readiness, and injected device k
   assert.deepEqual(listed[0].ssh, { host: "203.0.113.10", port: 30222, username: "agentcloud" });
   assert.equal(listed[0].desktopUrl, `agentcloud://open?projectId=${projectId}&runBoxId=${job.id}`);
   assert.equal(listed[0].access, "trusted-shell");
+  // Sized AWS environments: a Runpod job has no catalog machine or disk.
+  assert.equal(listed[0].machine, null);
+  assert.equal(listed[0].diskGb, null);
   // HAC-121: agent readiness is pending until a worker records `codex --version`; no workspace yet.
   assert.equal(listed[0].workspacePath, null);
   assert.deepEqual(listed[0].agent, { codex: { state: "pending", version: null, reason: null } });
@@ -186,4 +191,35 @@ test("connection API enforces auth, membership, readiness, and injected device k
   assert.equal(stopping.ssh, null);
   assert.equal(stopping.workspacePath, null);
   assert.equal((await get(owner.cookie)).status, 409);
+});
+
+test("sized AWS machines: the connection API asks the desktop to register its IPv4, and listings carry the machine", async () => {
+  const approvals = await import(path.join(directory, "aws-organization-approval.mjs"));
+  approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved: true,
+    maxRunMinutes: 120, monthlyMinutes: 1200, actorId: owner.id });
+  const projectId = (await store.action({ type: "createProject", name: "GPU SSH", repo: "https://example.com/repo", compute: "Hosted Linux", template: "blank" })).id;
+  fixture.grantMembership(owner.id, projectId, "owner");
+  jobs.migrateRunBoxJobs(db);
+  // The single-active AWS guard spans projects; close any earlier AWS job from this file.
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
+  const { job } = jobs.saveRunBoxDecision(db, {
+    idempotencyKey: "ssh-connection-gpu", resourceRequestId: "request-ssh-gpu", projectId,
+    employeeId: owner.id, organizationId: fixture.organization.id, projectRole: "owner",
+    provider: "aws-ec2", profileId: "aws-gpu-t4", maxDurationMinutes: 60, repoUrl: "https://example.com/repo",
+  });
+  assert.equal(job.profile_id, "aws-gpu-t4");
+  assert.equal(job.disk_gb, 100, "a GPU machine defaults to the catalog minimum");
+  const ownerKey = ed25519PublicKey();
+  await register(owner.cookie, ownerKey);
+  db.prepare("UPDATE run_box_job SET state = 'ready' WHERE id = ?").run(job.id);
+  endpoints.recordRunBoxSshEndpoint(db, job.id, { host: "203.0.113.20", port: 22, username: "agentcloud", hostPublicKey: ed25519PublicKey(),
+    authorizedFingerprints: [sshKeys.sshFingerprint(ownerKey)] });
+  const body = await (await connection.GET(call(`/api/run-boxes/${job.id}/connection`, { cookie: owner.cookie }), params(job.id))).json();
+  assert.equal(body.profileId, "aws-gpu-t4");
+  assert.equal(body.networkAccess, "requester-ipv4");
+  const [listed] = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs;
+  assert.deepEqual(listed.machine, { id: "aws-gpu-t4", kind: "gpu", size: "T4", instanceType: "g4dn.xlarge", vcpu: 4, memoryGib: 16,
+    gpu: { model: "NVIDIA T4", count: 1, memoryGib: 16 } });
+  assert.equal(listed.diskGb, 100);
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE id = ?").run(job.id);
 });

@@ -1,8 +1,8 @@
 import { getDatabase } from "../../../../../lib/auth.mjs";
-import { requireEmployee, requireMembership } from "../../../../../lib/employee";
+import { requireEmployee } from "../../../../../lib/employee";
 import { body, failure, sameOrigin } from "../../../../../lib/http";
 import { InputError } from "../../../../../lib/store";
-import { getRunBoxJob, migrateRunBoxJobs } from "../../../../../lib/run-box-jobs.mjs";
+import { resolveJobAccess } from "../../../../../lib/run-box-access.mjs";
 import { defaultBackboardFile, projectMemoryStatus, setEnvironmentMemory } from "../../../../../lib/backboard-memory.mjs";
 
 export const runtime = "nodejs";
@@ -16,13 +16,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const projectId = input.projectId;
     if (typeof projectId !== "string" || !projectId.trim()) throw new InputError("Invalid project ID");
     if (typeof input.enabled !== "boolean") throw new InputError("Shared memory must be on or off");
-    const membership = requireMembership(employee, projectId);
-    if (membership.role !== "owner") throw new InputError("Project owner required to change shared memory", 403);
     const { id } = await context.params;
-    const db = getDatabase();
-    migrateRunBoxJobs(db);
-    const job = getRunBoxJob(db, id);
-    if (!job || job.project_id !== projectId) throw new InputError("Run-box job not found", 404);
+    // Environment model: the creator, or a project owner for a public job; a private
+    // job is 404 to everyone else.
+    const { permissions } = resolveJobAccess(getDatabase(), employee, projectId, id);
+    if (!permissions.manage)
+      throw new InputError("Only the environment's creator or a project owner can change shared memory", 403);
     const memory = setEnvironmentMemory(defaultBackboardFile(), id, input.enabled);
     return Response.json({ memory: { ...memory, available: projectMemoryStatus().enabled } });
   } catch (error) {

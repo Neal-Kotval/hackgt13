@@ -139,7 +139,7 @@ export function ShellNav({
       <header className="shell-mobile-header">
         <div className="brand">
           alto
-          <span className="brand-cursor" aria-hidden="true" />
+          <span className="brand-dot" aria-hidden="true">.</span>
         </div>
         <button
           ref={toggle}
@@ -170,7 +170,7 @@ export function ShellNav({
         <div className="shell-brand">
           <div className="brand">
             alto
-            <span className="brand-cursor" aria-hidden="true" />
+            <span className="brand-dot" aria-hidden="true">.</span>
           </div>
         </div>
         <button

@@ -41,7 +41,7 @@ export function SignInScreen({
       <section className="auth-panel" aria-labelledby="desktop-sign-in-title">
         <p className="eyebrow auth-brand">
           alto
-          <span className="brand-cursor" aria-hidden="true" />
+          <span className="brand-dot" aria-hidden="true">.</span>
         </p>
         <h1 id="desktop-sign-in-title">Sign in</h1>
         <p>

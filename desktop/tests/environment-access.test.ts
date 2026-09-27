@@ -169,10 +169,12 @@ describe("ensureEnvironmentAccess", () => {
 
 describe("terminal sessions and environment access", () => {
   const hostPublicKey = encodeOpenSshPublicKey(Buffer.alloc(32, 3));
-  function sessions(profileId: string | null, ensure: (runBoxId: string, onPending: () => void) => Promise<unknown>) {
+  function sessions(profileId: string | null, ensure: (runBoxId: string, onPending: () => void) => Promise<unknown>,
+    networkAccess?: string | null) {
     const order: string[] = [];
     const terminal = new TerminalSessions({
-      request: async () => json(200, { host: "198.51.100.7", port: 22, username: "agentcloud", hostPublicKey, profileId }),
+      request: async () => json(200, { host: "198.51.100.7", port: 22, username: "agentcloud", hostPublicKey, profileId,
+        ...(networkAccess !== undefined ? { networkAccess } : {}) }),
       privateKey: () => "PRIVATE",
       ensureAccess: async (runBoxId, onPending) => {
         order.push(`access:${runBoxId}`);
@@ -200,6 +202,14 @@ describe("terminal sessions and environment access", () => {
     });
     await assert.rejects(terminal.open(1, () => {}, "session-0102", "job1", { cols: 80, rows: 24 }), /public IPv4/);
     assert.deepEqual(order, ["access:job1"]);
+  });
+
+  it("admits this network for any sized AWS machine the server marks requester-ipv4", async () => {
+    for (const [index, profileId] of ["aws-cpu-large", "aws-gpu-t4"].entries()) {
+      const { terminal, order } = sessions(profileId, async () => {}, "requester-ipv4");
+      await terminal.open(1, () => {}, `session-030${index}`, "job1", { cols: 80, rows: 24 });
+      assert.deepEqual(order, ["access:job1", "ssh"]);
+    }
   });
 
   it("leaves other environments unchanged", async () => {

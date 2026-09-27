@@ -6,7 +6,7 @@ import { createCodexSshRuntime } from './codex-ssh.mjs';
 import { createRunBoxTargets } from './codex-targets.mjs';
 import { AgentInboxError } from './agent-inbox.mjs';
 import { onRunBoxStopRequested } from './run-box-jobs.mjs';
-import { failure } from './http';
+import { exposedError, failure } from './http';
 import { InputError } from './store';
 
 // AGENTCLOUD_CODEX_ENABLED=1 gates local Docker Codex boxes only. Remote sessions
@@ -39,6 +39,6 @@ export function codexFailure(error: unknown) {
   if (error instanceof CodexSessionError) return Response.json({error:error.message,code:error.code},{status:error.status});
   if (error instanceof AgentInboxError) return Response.json({error:error.message,code:error.code},{status:error.status});
   // Protocol/Docker/SSH errors can contain provider text. Do not expose or log raw errors.
-  if (error instanceof InputError) return failure(error);
+  if (error instanceof InputError || exposedError(error)) return failure(error);
   return Response.json({error:'Codex operation failed. Reconnect and try again.'},{status:502});
 }
