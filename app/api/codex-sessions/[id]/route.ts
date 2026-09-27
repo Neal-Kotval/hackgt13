@@ -27,7 +27,9 @@ export async function POST(request:Request,context:Context) {
     const input = await body(request);
     const memberReconnect=input.action==='resume' && session.target.kind==='runBox' && session.isSetupSession===false;
     if(!['message','interrupt'].includes(String(input.action)) && !memberReconnect && membership.role!=='owner')throw new InputError('Project owner required for Codex setup and lifecycle controls.',403);
-    return Response.json(await service.action(id,{...input,actor:{id:employee.id,name:employee.name}}));
+    // Reconnect runs in the background (clients poll the session) so the request never
+    // outlasts the 30 s CloudFront origin timeout while SSH and app-server start.
+    return Response.json(await service.action(id,{...input,background:input.action==='resume',actor:{id:employee.id,name:employee.name}}));
   } catch(error) {return codexFailure(error);}
 }
 

@@ -32,6 +32,7 @@ import {
   type EnvironmentJob,
   type JobState,
 } from "./machines";
+import { readJson } from "@/lib/read-json";
 
 export type { EnvironmentJob } from "./machines";
 
@@ -212,7 +213,7 @@ export function Environments({ project }: { project: Project }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: project.id, enabled }),
       });
-      const data = (await response.json()) as { error?: string; memory?: EnvironmentJob["memory"] };
+      const data = (await readJson(response)) as { error?: string; memory?: EnvironmentJob["memory"] };
       if (!response.ok || !data.memory) throw new Error(data.error || "Could not update shared memory.");
       setJobs((current) => current?.map((item) => item.id === job.id ? { ...item, memory: data.memory } : item) ?? current);
     } catch (caught) {
@@ -233,7 +234,7 @@ export function Environments({ project }: { project: Project }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: project.id, ...pickerRequest(picker), idempotencyKey }),
       });
-      const data = (await response.json()) as {
+      const data = (await readJson(response)) as {
         job?: EnvironmentJob | null;
         decision?: { outcome: "approved" | "denied"; reason: string; resource_request_id: string };
         error?: string;
@@ -267,7 +268,7 @@ export function Environments({ project }: { project: Project }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: project.id }),
       });
-      const data = (await response.json()) as { job?: EnvironmentJob; error?: string };
+      const data = (await readJson(response)) as { job?: EnvironmentJob; error?: string };
       if (!response.ok || !data.job) throw new Error(data.error || "Stop request was not saved.");
       setJobs((current) =>
         (current ?? []).map((item) => (item.id === job.id ? { ...item, ...data.job! } : item)),
@@ -293,7 +294,7 @@ export function Environments({ project }: { project: Project }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: project.id }),
       });
-      const data = (await response.json()) as {
+      const data = (await readJson(response)) as {
         job?: EnvironmentJob;
         outcome?: "stopped" | "termination-requested";
         error?: string;

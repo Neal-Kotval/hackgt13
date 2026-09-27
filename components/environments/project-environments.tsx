@@ -15,6 +15,7 @@ import {
   timeLeft,
   type EnvironmentJob,
 } from "./machines";
+import { readJson } from "@/lib/read-json";
 
 type Listing = { jobs: EnvironmentJob[] | null; error: boolean; now: number };
 
@@ -26,7 +27,7 @@ export function useProjectEnvironments(projectId: string, intervalMs = 10_000): 
       try {
         const response = await fetch(`/api/run-boxes?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" });
         if (!response.ok) throw new Error("unavailable");
-        const data = (await response.json()) as { jobs?: EnvironmentJob[] };
+        const data = (await readJson(response)) as { jobs?: EnvironmentJob[] };
         if (active) setListing({ jobs: Array.isArray(data.jobs) ? data.jobs : [], error: false, now: Date.now() });
       } catch {
         if (active) setListing((current) => ({ ...current, error: current.jobs === null, now: Date.now() }));

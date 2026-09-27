@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle, Desktop } from "@phosphor-icons/react";
+import { readJson } from "@/lib/read-json";
 
 type Session = {
   id: string;
@@ -13,7 +14,7 @@ type Session = {
 };
 async function request<T>(url: string, body?: object): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...(body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
-  const data = await response.json();
+  const data = await readJson<{ error?: string }>(response);
   if (!response.ok) throw new Error(data.error || "Could not connect Codex to this environment.");
   return data as T;
 }
