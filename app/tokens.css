@@ -119,8 +119,21 @@
   --palette-marketing-soft: #f6f7f9;
   --palette-marketing-line: #d8dce3;
   --palette-marketing-blue: #285cae;
+  --palette-app-raised: #eef1f5;
+  --palette-app-muted: #48515f;
+  --palette-app-subtle: #5b6675;
+  --palette-app-secondary: #344155;
+  --palette-app-blue-soft: #e9f1ff;
+  --palette-app-steel: #4e6586;
+  --palette-app-steel-soft: #edf2f8;
+  --palette-app-green: #236b4d;
+  --palette-app-green-soft: #e8f4ec;
+  --palette-app-amber: #875a16;
+  --palette-app-amber-soft: #fff4df;
+  --palette-app-red: #a43e39;
+  --palette-app-red-soft: #fff0ee;
 
-  /* Semantic colors: component CSS references these, never primitives. */
+  /* Shared defaults retain the native desktop renderer's dark theme. */
   --color-bg: var(--palette-ink);
   --color-surface: var(--palette-panel);
   --color-selected: var(--palette-selected);
@@ -153,7 +166,7 @@
   --color-transparent: var(--palette-transparent);
   --color-overlay: rgb(0 0 0 / 65%);
   --color-dot-grid: color-mix(in srgb, var(--palette-paper) 8%, transparent);
-  /* Public sales surface: light editorial canvas beside the dark product UI. */
+  /* Public sales surface and application share the same light palette. */
   --color-marketing-canvas: var(--palette-marketing-white);
   --color-marketing-surface: var(--palette-marketing-soft);
   --color-marketing-text: var(--palette-ink);
@@ -161,7 +174,7 @@
   --color-marketing-line: var(--palette-marketing-line);
   --color-marketing-accent: var(--palette-marketing-blue);
 
-  /* Quiet glass navigation: dark translucent fill, restrained edge highlights. */
+  /* Native desktop navigation retains its dark glass surface. */
   --color-glass: rgb(18 21 27 / 90%);
   --color-glass-hover: rgb(230 233 239 / 6%);
   --color-glass-selected: rgb(119 167 255 / 12%);
@@ -298,6 +311,62 @@
   --z-modal: 100;
   --z-popover: 150;
   --z-toast: 200;
+}
+
+/* The web app and public site share a light palette; desktop keeps :root defaults. */
+.alto-web {
+  --color-bg: var(--palette-marketing-soft);
+  --color-surface: var(--palette-marketing-white);
+  --color-selected: var(--palette-app-blue-soft);
+  --color-surface-raised: var(--palette-app-raised);
+  --color-text: var(--palette-ink);
+  --color-muted: var(--palette-app-muted);
+  --color-subtle: var(--palette-app-subtle);
+  --color-secondary: var(--palette-app-secondary);
+  --color-border: var(--palette-marketing-line);
+  --color-border-subtle: var(--palette-paper);
+  --color-border-strong: var(--palette-gray-500);
+  --color-accent: var(--palette-marketing-blue);
+  --color-accent-text: var(--palette-marketing-white);
+  --color-accent-hover: var(--palette-action-blue-dark);
+  --color-accent-soft: var(--palette-app-blue-soft);
+  --color-agent-secondary: var(--palette-app-steel);
+  --color-agent-secondary-soft: var(--palette-app-steel-soft);
+  --color-pink: var(--palette-app-steel);
+  --color-pink-soft: var(--palette-app-steel-soft);
+  --color-info: var(--palette-marketing-blue);
+  --color-info-soft: var(--palette-app-blue-soft);
+  --color-success: var(--palette-app-green);
+  --color-success-soft: var(--palette-app-green-soft);
+  --color-warning: var(--palette-app-amber);
+  --color-warning-soft: var(--palette-app-amber-soft);
+  --color-danger: var(--palette-app-red);
+  --color-danger-soft: var(--palette-app-red-soft);
+  --color-status-action-text: var(--palette-marketing-white);
+  --color-overlay: rgb(9 11 15 / 48%);
+  --color-dot-grid: color-mix(in srgb, var(--palette-ink) 8%, transparent);
+  --color-glass: rgb(255 255 255 / 94%);
+  --color-glass-hover: var(--palette-marketing-soft);
+  --color-glass-selected: var(--palette-app-blue-soft);
+  --color-glass-edge: var(--palette-marketing-line);
+  --shadow-glass: none;
+  --shadow-lg: 0 16px 40px rgb(9 11 15 / 12%);
+  --shadow-focus: 0 0 0 3px var(--palette-app-blue-soft);
+}
+
+/* The public technical illustration remains a deliberately dark inset. */
+.marketing-showcase,
+.marketing-roadmap {
+  --color-bg: var(--palette-ink);
+  --color-surface: var(--palette-panel);
+  --color-selected: var(--palette-selected);
+  --color-text: var(--palette-paper);
+  --color-muted: var(--palette-gray-600);
+  --color-border-subtle: color-mix(in srgb, var(--palette-paper) 8%, transparent);
+  --color-border-strong: color-mix(in srgb, var(--palette-paper) 20%, transparent);
+  --color-accent: var(--palette-action-blue);
+  --color-accent-soft: var(--palette-action-blue-dark);
+  --color-dot-grid: color-mix(in srgb, var(--palette-paper) 8%, transparent);
 }
 
 @media (max-width: 768px) {

@@ -2,13 +2,13 @@
   box-sizing: border-box;
 }
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 body {
   margin: 0;
   background: var(--color-bg);
   color: var(--color-text);
-  font-family: var(--font-body);
+  font-family: var(--font-heading);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
 }
@@ -318,7 +318,7 @@ h1 {
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   white-space: nowrap;
 }
 .button:hover {
@@ -2116,11 +2116,17 @@ dialog::backdrop {
 .auth-panel {
   padding: var(--space-8);
 }
-.auth-panel > .eyebrow {
-  color: var(--color-accent);
-}
 .auth-brand {
-  text-transform: none;
+  display: inline-block;
+  margin-bottom: var(--space-4);
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+.auth-brand span {
+  color: var(--color-accent);
 }
 @media (max-width: 1440px) {
   .dashboard-grid,
