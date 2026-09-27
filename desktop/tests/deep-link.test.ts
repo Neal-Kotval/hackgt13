@@ -47,7 +47,7 @@ describe("parseAgentCloudDeepLink", () => {
     const parsed = parseAgentCloudDeepLink("agentcloud://open?projectId=p1&serverUrl=https%3A%2F%2Fapp.example.com%2F");
     assert.equal(parsed.ok, true);
     if (parsed.ok) {
-      assert.match(deepLinkServerError(parsed.target, "https://other.example.com") || "", /different AgentCloud server/);
+      assert.match(deepLinkServerError(parsed.target, "https://other.example.com") || "", /different alto server/);
       assert.equal(deepLinkServerError(parsed.target, "https://app.example.com"), null);
     }
   });

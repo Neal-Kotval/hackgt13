@@ -163,7 +163,7 @@ export function CloudApp() {
       <main className="loading">
         <TerminalWindow {...iconProps} />
         <h1>
-          agentcloud<span className="cyan-text">_</span>
+          alto<span className="cyan-text">_</span>
         </h1>
         <p>{error || "Opening your workspace…"}</p>
         {error && (
@@ -477,7 +477,7 @@ export function CloudApp() {
         <footer>
           <span>
             <TerminalWindow />
-            agentcloud <span className="muted">/ HackGT build</span>
+            alto <span className="muted">/ HackGT build</span>
             <Link href="/design-system">
               Design system <ArrowUpRight />
             </Link>
@@ -857,7 +857,7 @@ function ActivityFeed({
         <Tag tone="green">live</Tag>
       </div>
       <div className="terminal-command">
-        <span>$</span> agentcloud logs --follow
+        <span>alto</span> activity stream
       </div>
       <div className="timeline">
         {events.length ? (
@@ -1513,7 +1513,7 @@ function DesktopPage({
           Shared project.
         </h2>
         <p className="section-description">
-          The CLI connects a client identity to AgentCloud and keeps your team’s
+          The CLI connects a client identity to alto and keeps your team’s
           context within reach.
         </p>
         <ol className="cli-steps">

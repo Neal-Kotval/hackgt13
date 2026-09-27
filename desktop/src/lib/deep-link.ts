@@ -6,7 +6,7 @@ export type DeepLinkTarget = {
   runBoxId?: string;
   /** With runBoxId: `codex` targets Project chat at that environment; `terminal` (default) attaches SSH. */
   panel?: DeepLinkPanel;
-  /** Run-box job to preselect in Tasks; distinct from a catalog resource. */
+  /** Legacy task run-box link; opens its SSH terminal now that Tasks is removed. */
   taskRunBoxId?: string;
   /** Source server identity only. Never used as a request destination. */
   serverUrl?: string;
@@ -127,7 +127,7 @@ export function deepLinkServerError(target: DeepLinkTarget, configuredBaseUrl: s
   } catch {
     // Display the configured value so the employee can correct it.
   }
-  return `This link came from a different AgentCloud server (${target.serverUrl}). Desktop is connected to ${configuredBaseUrl}. Sign out, set AGENTCLOUD_URL to the link's server, then sign in and open the link again.`;
+  return `This link came from a different alto server (${target.serverUrl}). Desktop is connected to ${configuredBaseUrl}. Sign out, set AGENTCLOUD_URL to the link's server, then sign in and open the link again.`;
 }
 
 export function findDeepLinkUrl(argv: string[]): string | null {
