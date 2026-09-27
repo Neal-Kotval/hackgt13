@@ -2,9 +2,10 @@ import { getDatabase } from "../../../lib/auth.mjs";
 import { requireEmployee, requireMembership, type Employee } from "../../../lib/employee";
 import { body, failure, sameOrigin } from "../../../lib/http";
 import { InputError, getState, resourceAction } from "../../../lib/store";
-import { demoGpuProfile, findRunpodProfile, localDockerSandboxProfile, runpodBudgetGpuProfile, runpodGpuProfile } from "../../../lib/resource-profiles";
+import { awsCpuProfile, demoGpuProfile, findRunpodProfile, localDockerSandboxProfile, runpodBudgetGpuProfile, runpodGpuProfile } from "../../../lib/resource-profiles";
 import { listRunBoxJobs, migrateRunBoxJobs, saveRunBoxDecision } from "../../../lib/run-box-jobs.mjs";
 import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../../../lib/run-box-ssh.mjs";
+import { getAgentCheck, getWorkspacePath, migrateAgentCheck } from "../../../lib/agent-check.mjs";
 import { getContainerTemplate, listContainerTemplates, templateIdFromProfile } from "../../../lib/container-templates.mjs";
 
 export const runtime = "nodejs";
@@ -23,6 +24,7 @@ const environmentProfiles = {
   [runpodGpuProfile.id]: { provider: runpodGpuProfile.provider, kind: "gpu", label: runpodGpuProfile.label },
   [runpodBudgetGpuProfile.id]: { provider: runpodBudgetGpuProfile.provider, kind: "gpu", label: runpodBudgetGpuProfile.label },
   [demoGpuProfile.id]: { provider: demoGpuProfile.provider, kind: "gpu", label: `AWS EC2 · ${demoGpuProfile.label}` },
+  [awsCpuProfile.id]: { provider: awsCpuProfile.provider, kind: "run-box", label: awsCpuProfile.label },
 } as const;
 type EnvironmentProfileId = keyof typeof environmentProfiles;
 type DecisionRow = {
@@ -198,10 +200,12 @@ export async function GET(request: Request) {
     const db = getDatabase();
     migrateRunBoxJobs(db);
     migrateRunBoxSsh(db);
+    migrateAgentCheck(db);
     const jobs = (listRunBoxJobs(db, projectId) as { id: string; state: string; profile_id: string | null; stop_requested_at: string | null }[])
       .map((job) => {
         const ready = job.state === "ready" && !job.stop_requested_at;
         const endpoint = ready ? getRunBoxSshEndpoint(db, job.id) : null;
+        const codex = getAgentCheck(db, job.id, "codex");
         return {
           ...job,
           profileId: job.profile_id,
@@ -210,6 +214,9 @@ export async function GET(request: Request) {
             ? `agentcloud://open?${new URLSearchParams({ projectId, runBoxId: job.id })}`
             : null,
           access: "trusted-shell",
+          // HAC-121: repo checkout path (null until ready) and agent readiness, separate from `state`.
+          workspacePath: ready ? getWorkspacePath(db, job.id) : null,
+          agent: { codex: { state: codex.state, version: codex.version, reason: codex.reason } },
         };
       });
     return Response.json({ jobs, templates: listContainerTemplates(db).map((item: {

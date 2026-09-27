@@ -19,6 +19,16 @@ chmod 600 /home/agentcloud/.ssh/authorized_keys
 chown agentcloud:agentcloud /home/agentcloud/.ssh/authorized_keys
 install -d -m 755 -o agentcloud -g agentcloud /home/agentcloud/workspace
 
+# Codex keeps its sign-in in ~/.codex/auth.json (never a keyring) so teardown
+# cleanup removes it. Kept identical to codexConfigScript() in lib/agent-check.mjs.
+codex_config="/home/agentcloud/.codex/config.toml"
+install -d -m 700 -o agentcloud -g agentcloud "/home/agentcloud/.codex"
+[ -e "$codex_config" ] || : > "$codex_config"
+{ printf 'cli_auth_credentials_store = "file"\n'; grep -v -E '^[[:space:]]*cli_auth_credentials_store[[:space:]]*=' "$codex_config" || true; } > "$codex_config.agentcloud-next"
+mv "$codex_config.agentcloud-next" "$codex_config"
+chown agentcloud:agentcloud "$codex_config"
+chmod 600 "$codex_config"
+
 /usr/sbin/sshd -t
 # Drop the key material from sshd's environment before it serves sessions.
 exec env -u AGENTCLOUD_HOST_KEY -u AGENTCLOUD_AUTHORIZED_KEYS /usr/sbin/sshd -D -e

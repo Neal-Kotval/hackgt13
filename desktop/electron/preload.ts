@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { createCodexBridge } from "./codex-preload.ts";
 import type {
   AgentCloudStateSummary,
   AssistantStreamEvent,
@@ -126,5 +127,6 @@ const api: DesktopApi = {
 };
 
 contextBridge.exposeInMainWorld("agentcloudDesktop", api);
+contextBridge.exposeInMainWorld("agentcloudCodex", createCodexBridge(ipcRenderer));
 
 export type { DesktopApi, MessageRole, MessageStatus };

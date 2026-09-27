@@ -5,9 +5,13 @@ resource "aws_iam_role" "worker" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect    = "Allow"
-      Principal = { AWS = "arn:aws:iam::${var.account_id}:role/agentcloud-auth-staging" }
-      Action    = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { AWS = [
+        "arn:aws:iam::${var.account_id}:role/agentcloud-auth-staging",
+        # Owner operator for supervised local worker runs (HAC-125); see team-iam.tf.
+        aws_iam_user.operator.arn,
+      ] }
+      Action = "sts:AssumeRole"
     }]
   })
   tags = { Project = "AgentCloudDemo" }

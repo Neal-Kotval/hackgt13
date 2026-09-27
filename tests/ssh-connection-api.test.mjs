@@ -17,8 +17,8 @@ for (const name of ["store", "http", "resource-profiles"]) {
   const source = await readFile(new URL(`../lib/${name}.ts`, import.meta.url), "utf8");
   await writeFile(path.join(directory, `${name}.js`), transpile(source).replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh", "container-templates", "aws-organization-approval"];
-for (const name of ["run-box-jobs", "ssh-keys", "run-box-ssh", "container-templates", "aws-organization-approval"])
+const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval"];
+for (const name of ["run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
 const db = fixture.getDatabase();
@@ -26,6 +26,7 @@ const store = await import(path.join(directory, "store.js"));
 const jobs = await import(path.join(directory, "run-box-jobs.mjs"));
 const endpoints = await import(path.join(directory, "run-box-ssh.mjs"));
 const sshKeys = await import(path.join(directory, "ssh-keys.mjs"));
+const agentCheck = await import(path.join(directory, "agent-check.mjs"));
 async function route(sourcePath, outputName, depth) {
   const source = await readFile(new URL(sourcePath, import.meta.url), "utf8");
   const code = transpile(source).replaceAll("../".repeat(depth) + "lib/", "./")
@@ -160,6 +161,18 @@ test("connection API enforces auth, membership, readiness, and injected device k
   assert.deepEqual(listed[0].ssh, { host: "203.0.113.10", port: 30222, username: "agentcloud" });
   assert.equal(listed[0].desktopUrl, `agentcloud://open?projectId=${projectId}&runBoxId=${job.id}`);
   assert.equal(listed[0].access, "trusted-shell");
+  // HAC-121: agent readiness is pending until a worker records `codex --version`; no workspace yet.
+  assert.equal(listed[0].workspacePath, null);
+  assert.deepEqual(listed[0].agent, { codex: { state: "pending", version: null, reason: null } });
+  agentCheck.recordAgentCheck(db, job.id, { agent: "codex", ok: true, version: "0.157.1" });
+  agentCheck.recordWorkspacePath(db, job.id, `/home/agentcloud/agentcloud/${job.id}/repo`);
+  const checked = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
+  assert.equal(checked.workspacePath, `/home/agentcloud/agentcloud/${job.id}/repo`);
+  assert.deepEqual(checked.agent, { codex: { state: "ready", version: "0.157.1", reason: null } });
+  agentCheck.recordAgentCheck(db, job.id, { agent: "codex", ok: false, version: "0.150.0", reason: "Codex 0.150.0 is installed; 0.157.1 is required" });
+  const mismatch = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
+  assert.deepEqual(mismatch.agent.codex, { state: "failed", version: "0.150.0", reason: "Codex 0.150.0 is installed; 0.157.1 is required" });
+  assert.equal(mismatch.state, "ready", "SSH readiness is unchanged by a failed agent check");
   db.prepare("UPDATE run_box_job SET stop_requested_at = ? WHERE id = ?").run(new Date().toISOString(), job.id);
   const stopRequested = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
   assert.equal(stopRequested.desktopUrl, null);
@@ -168,5 +181,6 @@ test("connection API enforces auth, membership, readiness, and injected device k
   const stopping = (await (await boxes.GET(call(`/api/run-boxes?projectId=${projectId}`, { cookie: owner.cookie }))).json()).jobs[0];
   assert.equal(stopping.desktopUrl, null);
   assert.equal(stopping.ssh, null);
+  assert.equal(stopping.workspacePath, null);
   assert.equal((await get(owner.cookie)).status, 409);
 });

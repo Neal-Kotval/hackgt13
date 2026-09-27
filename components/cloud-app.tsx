@@ -263,7 +263,12 @@ export function CloudApp() {
             {page === "environments" ? (
               <div className="project-sections">
                 <Environments project={project} />
-                <ResourceRequests project={project} onAction={resourceAction} />
+                {/* The Environments flow above is the primary path. Saved requests and
+                    manual approvals stay available here for existing flows. */}
+                <details className="project-disclosure">
+                  <summary>Request history &amp; advanced requests</summary>
+                  <ResourceRequests project={project} onAction={resourceAction} />
+                </details>
                 <details className="project-disclosure">
                   <summary>Machines &amp; resource catalog</summary>
                   <p className="section-description">Save the machines and resources your project may use. Registration alone does not connect or verify a machine.</p>

@@ -121,6 +121,31 @@ template-list:
 worker-docker:
     node --env-file-if-exists=.env.local scripts/run-box-worker.mjs --loop docker-local
 
+# Supervised local Runpod test (RUNPOD_SETUP.md). RUNPOD_API_KEY comes from Doppler
+# project hackgt, config dev. Doppler access is scoped per directory: run `doppler setup`
+# here, or point AGENTCLOUD_DOPPLER_SCOPE at a directory that already has access.
+doppler_scope := env("AGENTCLOUD_DOPPLER_SCOPE", justfile_directory())
+runpod_doppler := "doppler run --scope '" + doppler_scope + "' --project hackgt --config dev --"
+# Operator SSH key for local Runpod tests; kept outside the repository.
+runpod_local_dir := env("AGENTCLOUD_RUNPOD_LOCAL_DIR", home_directory() / ".agentcloud-runpod-local")
+
+# Read-only: confirm Doppler supplies the Runpod key by counting Pods. Creates nothing.
+runpod-local-check:
+    {{runpod_doppler}} node --env-file-if-exists=.env.local scripts/runpod-local-watchdog.mjs --check
+
+# Local cleanup guard: terminates managed Pods after `minutes` (default 15, max 120).
+runpod-watchdog minutes="15":
+    AGENTCLOUD_RUNPOD_LOCAL_MAX_MINUTES={{minutes}} {{runpod_doppler}} node --env-file-if-exists=.env.local scripts/runpod-local-watchdog.mjs
+
+# Create the local operator SSH key if absent. Prints only the public key path.
+runpod-local-key:
+    @mkdir -p "{{runpod_local_dir}}" && chmod 700 "{{runpod_local_dir}}"
+    @if [ ! -f "{{runpod_local_dir}}/id_ed25519" ]; then ssh-keygen -q -t ed25519 -N "" -C agentcloud-runpod-local -f "{{runpod_local_dir}}/id_ed25519" && echo "Created operator key. Add {{runpod_local_dir}}/id_ed25519.pub to Runpod."; fi
+
+# Runpod worker in local mode. Allocates only while `just runpod-watchdog` is running.
+worker-runpod-local: runpod-local-key
+    AGENTCLOUD_RUNPOD_LOCAL=1 AGENTCLOUD_RUNPOD_SSH_KEY_FILE="{{runpod_local_dir}}/id_ed25519" AGENTCLOUD_RUNPOD_SSH_PUBLIC_KEY="$(cat "{{runpod_local_dir}}/id_ed25519.pub")" AGENTCLOUD_RUNPOD_KNOWN_HOSTS_FILE="{{runpod_local_dir}}/known_hosts" {{runpod_doppler}} node --env-file-if-exists=.env.local scripts/run-box-worker.mjs --loop runpod
+
 # Validate Terraform without connecting to a remote state backend or applying.
 terraform-validate:
     terraform -chdir=infra/local init -backend=false

@@ -43,3 +43,58 @@ The configuration is pinned to account `662660921850` and Region `us-east-1`. It
 4. Verify the non-root account, workspace, repository revision, GPU device, and CPU-versus-CUDA workload. Record command evidence and final EC2 and EBS cleanup state.
 
 The GPU quota is 4 vCPU and the worker and scoped role exist, but the Free plan blocks `g6.xlarge`. No AWS GPU workload or real EC2 cleanup has been verified. The live demonstration is moving to another GPU provider; do not claim an EC2 launch.
+
+## CPU environment (`aws-cpu`, HAC-125)
+
+Status: **planned, not applied, never launched.** Terraform in [infra/aws/cpu.tf](infra/aws/cpu.tf) plans 3 additions and no changes. The worker, provider, and smoke script are unit-tested with a fake AWS CLI only.
+
+| Item | Decision |
+| --- | --- |
+| Profile | `aws-cpu` on provider `aws-ec2`. It shares the single-active AWS box guard, EC2 reconciliation, the expiry Lambda, and the HAC-115 budget deny on the worker role. GPU `aws-ec2` jobs stay profile-less and are claimed only by the GPU worker. |
+| Box | One On-Demand `t3.medium` (2 vCPU, 4 GiB, no GPU), standard CPU credits, Amazon Linux 2023 x86_64 `ami-0fef201115eefe936` (resolved 2026-09-26 from the public SSM parameter; re-verify before apply), encrypted 20 GiB gp3 root deleted on termination, IMDSv2 required, existing `agentcloud-demo-instance` SSM role. |
+| Bootstrap | Worker-supplied user data installs `git`, `tmux`, Node `22.23.3` (official tarball, SHA-256 pinned), and `@openai/codex@0.157.1`; creates non-root `agentcloud`; writes `~/.codex/config.toml` with `cli_auth_credentials_store = "file"` (0600) so sign-in lands in `~/.codex/auth.json`; logs progress to `/var/log/agentcloud-bootstrap.log`; writes `/var/lib/agentcloud/bootstrap.done` or `bootstrap.failed`. |
+| Self-destruct | User data schedules `shutdown -P +N` (N ≤ the approved deadline, 20 minutes for the smoke test). The template sets instance-initiated shutdown to **terminate**, so the box and its volume are removed even if the worker and Lambda both fail. The deadline tag also drives the five-minute expiry Lambda. |
+| Workspace | `/home/agentcloud/agentcloud/<jobId>/repo` (approved repository checkout). |
+| Quoted cost | `t3.medium` $0.0416/h (AWS Price List, 2026-09-26) + public IPv4 $0.005/h + 20 GiB gp3 about $0.0022/h ≈ **$0.049/h**; about $0.10 for a two-hour environment and $0.02 for the 20-minute smoke test, before data transfer and tax. The worker refuses a compute price above $0.10/h. |
+
+### Desktop SSH path decision
+
+The desktop app connects with ssh2 to `host:port` from `/api/run-boxes/:id/connection`, pins the recorded host key, and authenticates with its device key. It never holds AWS credentials. The product runs locally first, so the worker and the desktop app usually share one public address.
+
+| Option | Cost | Security | Complexity with the current desktop | Decision |
+| --- | --- | --- | --- | --- |
+| EC2 Instance Connect Endpoint | No hourly charge; no public IPv4 | No inbound internet exposure | The desktop would need AWS credentials and a SigV4 WebSocket tunnel (`aws ec2-instance-connect open-tunnel`) in front of ssh2; connections are limited to one hour. | Rejected for now |
+| SSM port forwarding | No charge; no public IPv4 | No inbound ports | Also needs AWS credentials plus the Session Manager plugin on each employee device. | Rejected for now; still used by the worker for host-key readback |
+| **Security group: tcp/22 from the requester's /32** | $0.005/h public IPv4 | One public address may reach port 22; key-only auth; per-job host key pinned; no passwords, no root login, EC2 Instance Connect key injection disabled | Works with the existing ssh2 + pinned-host-key flow unchanged | **Chosen** |
+
+How it works:
+
+1. Terraform creates `agentcloud-demo-cpu-ssh` with **no** ingress rules. The worker adds one rule per job, `tcp/22` from the requester's public `/32`, tagged `AgentCloudJobId`, and revokes it before termination. Preflight revokes leftover rules; it also requires no other demo instance to be running.
+2. The requester address is `AGENTCLOUD_AWS_CPU_SSH_CIDR`: an explicit public `/32`, or `auto` to discover the worker host's address from `https://checkip.amazonaws.com/` at allocation time. Private, loopback, link-local, and wider ranges are rejected.
+3. The ed25519 host key is generated **on the box** during bootstrap. The worker reads its public half back over Systems Manager (an authenticated AWS channel, not trust on first use) and requires `ssh-keyscan 127.0.0.1` on the box to return the same key. The private key never leaves the instance and is not in user data or logs.
+4. The worker then SSHes to the public IPv4 as `agentcloud` with its operator key and the pinned `known_hosts`, waits for `bootstrap.done`, and checks `codex --version` (0.157.1), `tmux -V`, `git`, Node 22, and the repository checkout. Only then does it record `run_box_ssh_endpoint` and mark the job `ready`, so the existing desktop terminal works without changes.
+
+Limitations and caveats:
+
+- **User data is not secret.** Any on-box process can read it through IMDS, and account principals with `ec2:DescribeInstanceAttribute` can read it through the API. It therefore carries only public keys, pinned versions, and a checksum; the host key is generated on the box instead.
+- Device keys are read at allocation. Keys registered later are not on the box (the existing MVP limitation).
+- If the requester's public address changes (network switch, VPN), SSH stops working until a new environment is requested. Behind carrier-grade NAT, other users of the same address can reach port 22, though only authorized keys can log in.
+- Worker verification needs SSH reachability from the worker host, so the worker must run on the requester's network (the local-first case). A worker on the private staging instance cannot verify an environment opened to a different address.
+- The worker must run as the scoped `agentcloud-demo-worker` role, as for GPU. **The AWS root user cannot assume roles**, and the role's trust policy admits only the private staging instance role. A run from an operator workstation needs a separate owner-approved trust change for a non-root operator principal; that change is not part of this plan.
+- Teardown terminates the instance and deletes its EBS volume; the Stage 2 `codex logout` cleanup step belongs to HAC-121 and is not run by this worker yet.
+
+### Worker configuration
+
+`node scripts/run-box-worker.mjs --once aws-ec2` (or `--loop`) also processes one `aws-cpu` job per cycle when these are set: `AGENTCLOUD_AWS_CPU_SSH_CIDR` (`auto` or `<ip>/32`), `AGENTCLOUD_AWS_CPU_SSH_KEY_FILE` (operator ed25519 private key path), and `AGENTCLOUD_AWS_CPU_SSH_PUBLIC_KEY` (its public key line). Evidence lands in table `aws_cpu_environment` (instance, public IP, SSH rule, pinned host key, bootstrap step, tool versions, workspace, output digest). The owner-only one-step `POST /api/run-boxes` accepts `profileId: "aws-cpu"`; the web Environments picker does not list it yet.
+
+### Supervised smoke test
+
+`scripts/aws-cpu-smoke.mjs` runs the real worker and EC2 adapter against a throwaway SQLite database, never the app database. Without `--launch` it runs only the read-only preflight. With `--launch` it allocates one box, waits for `ready`, SSHes in with the supplied key against the pinned host key, prints `whoami`, `codex --version`, `tmux -V`, and a sanitized `codex login status`, then revokes the SSH rule, terminates the instance, and confirms EBS deletion. It aborts after 18 minutes; the box's own timer and deadline tag are 20 minutes; cleanup also runs on SIGINT/SIGTERM. It targets only its own job's instance.
+
+```sh
+ssh-keygen -t ed25519 -N '' -f ~/.ssh/agentcloud_smoke_ed25519
+node scripts/aws-cpu-smoke.mjs --key ~/.ssh/agentcloud_smoke_ed25519            # preflight only
+node scripts/aws-cpu-smoke.mjs --key ~/.ssh/agentcloud_smoke_ed25519 --launch   # billable, about $0.02
+```
+
+The credentials must be the `agentcloud-demo-worker` role session, or the private staging instance role that may assume it.

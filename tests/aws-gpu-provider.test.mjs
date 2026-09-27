@@ -46,9 +46,9 @@ test("Paid plan still requires credits and a sufficient runtime window", () => {
     accountPlanRemainingCredits: { unit: "USD", amount: 5 }, accountPlanExpirationDate: "2026-09-26T04:00:00Z" };
   assert.doesNotThrow(() => assertPaidGpuPlan(plan, new Date("2026-09-26T00:00:00Z")));
   assert.throws(() => assertPaidGpuPlan({ ...plan, accountPlanRemainingCredits: { unit: "USD", amount: 0 } }, new Date("2026-09-26T00:00:00Z")),
-    /credits or runtime window unavailable/);
+    /credits unavailable/);
   assert.throws(() => assertPaidGpuPlan({ ...plan, accountPlanExpirationDate: "2026-09-26T02:00:00Z" }, new Date("2026-09-26T00:00:00Z")),
-    /credits or runtime window unavailable/);
+    /runtime window unavailable/);
 });
 
 test("AWS CLI errors preserve only operation, code, and known Free Tier rejection", async () => {

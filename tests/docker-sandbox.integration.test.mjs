@@ -11,6 +11,7 @@ import { getRunBoxSshEndpoint, knownHostsLine, migrateRunBoxSsh } from "../lib/r
 import { createDockerSandboxProvider, sandboxInstallId } from "../lib/docker-sandbox-provider.mjs";
 import { inspectContainerImage, registerContainerTemplate } from "../lib/container-templates.mjs";
 import { reconcileDockerSandboxes, runSandboxSsh, workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
+import { getAgentCheck, getWorkspacePath, listCleanupSteps } from "../lib/agent-check.mjs";
 
 // Real Docker end to end: image build, container, sshd, key injection, stop.
 function dockerAvailable() {
@@ -68,6 +69,11 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
 
     const result = await workOneDockerSandboxJob(db, provider, { workerId: "it-worker" });
     assert.equal(result.state, "ready");
+    // HAC-121: the worker saw the pinned Codex over SSH as agentcloud; no repo, so the workspace root.
+    const agent = getAgentCheck(db, job.id);
+    assert.equal(agent.state, "ready", agent.reason || "");
+    assert.equal(agent.version, "0.157.1");
+    assert.equal(getWorkspacePath(db, job.id), "/home/agentcloud/workspace");
     const endpoint = getRunBoxSshEndpoint(db, job.id);
     assert.equal(endpoint.host, "127.0.0.1");
     assert.equal(endpoint.username, "agentcloud");
@@ -86,11 +92,24 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     assert.deepEqual(lines.slice(3, -1), [device.publicKey]);
     assert.equal(lines.at(-1), "no-gpu");
 
+    // Codex, Node 22, and tmux resolve for a non-interactive device SSH command.
     const tools = await runSandboxSsh({ ...connection, keyFile: device.keyFile },
+      "codex --version; node --version; tmux -V >/dev/null && echo tmux-ok; ls -A ~/.codex 2>/dev/null | grep -c auth.json || true\n");
+    assert.equal(tools.code, 0, tools.stderr);
+    const [codexVersion, nodeVersion, tmuxOk, authFiles] = tools.stdout.trim().split("\n");
+    assert.equal(codexVersion, "codex-cli 0.157.1");
+    assert.match(nodeVersion, /^v22\./);
+    assert.equal(tmuxOk, "tmux-ok");
+    assert.equal(authFiles, "0", "the image ships no Codex credential");
+    const config = await runSandboxSsh({ ...connection, keyFile: device.keyFile },
+      "stat -c '%U %a' ~/.codex/config.toml; cat ~/.codex/config.toml\n");
+    assert.equal(config.code, 0, config.stderr);
+    assert.equal(config.stdout, 'agentcloud 600\ncli_auth_credentials_store = "file"\n');
+    const toolchain = await runSandboxSsh({ ...connection, keyFile: device.keyFile },
       "node --version; npm --version; git --version; codex --version; " +
       "command -v python3; command -v rg; command -v jq\n");
-    assert.equal(tools.code, 0, tools.stderr);
-    const versions = tools.stdout.trim().split("\n");
+    assert.equal(toolchain.code, 0, toolchain.stderr);
+    const versions = toolchain.stdout.trim().split("\n");
     assert.match(versions[0], /^v22\./);
     assert.match(versions[1], /^\d+\./);
     assert.match(versions[2], /^git version /);
@@ -133,9 +152,24 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     assert.match(revokedLogin.stderr, /Permission denied/);
     assert.deepEqual(getRunBoxSshEndpoint(db, job.id).authorizedFingerprints, []);
 
+    // Seed a (fake) Codex credential and AgentCloud scratch as the agentcloud user.
+    const containerId = (await provider.find(job.id)).id;
+    execFileSync("docker", ["exec", "--user", "agentcloud", containerId, "bash", "-c",
+      "mkdir -p ~/.codex ~/.cache/agentcloud /tmp/agentcloud-run && umask 077 && echo '{\"placeholder\":true}' > ~/.codex/auth.json"]);
+    // Observe the container right before removal: cleanup must already have run.
+    let beforeRemoval = null;
+    const observed = { ...provider, async remove(id) {
+      if (!beforeRemoval) beforeRemoval = execFileSync("docker", ["exec", "--user", "agentcloud", containerId, "bash", "-c",
+        "for p in ~/.codex/auth.json ~/.cache/agentcloud /tmp/agentcloud-run; do test -e $p && echo present || echo absent; done"],
+      { encoding: "utf8" }).trim().split("\n");
+      return provider.remove(id);
+    } };
     requestRunBoxStop(db, job.id, "owner-1");
-    const stopped = await workOneDockerSandboxJob(db, provider, { workerId: "it-worker-3" });
+    const stopped = await workOneDockerSandboxJob(db, observed, { workerId: "it-worker-3" });
     assert.equal(stopped.state, "stopped");
+    assert.deepEqual(beforeRemoval, ["absent", "absent", "absent"]);
+    assert.deepEqual(listCleanupSteps(db, job.id).map(({ step, ok }) => [step, ok]), [["cleanup-exec", true],
+      ["codex-logout", true], ["remove-codex-auth", true], ["remove-scratch", true], ["verify-auth-absent", true]]);
     assert.equal(await provider.find(job.id), null);
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
 
