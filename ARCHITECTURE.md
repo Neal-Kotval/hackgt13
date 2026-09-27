@@ -141,9 +141,9 @@ The separate `docker-local` run-box worker creates a CPU-only SSH container per 
 
 ## Legacy local Codex prototype (HAC-116)
 
-The standalone app-server test implementation and its persisted Docker volumes
-are retained for compatibility. It is no longer initialized from Settings or used
-by Project chat. The supported test path uses a standard Docker SSH environment;
+Standalone local Docker sessions and their persisted volumes are retained for
+legacy compatibility and are absent from Settings and Project chat. Environment
+sessions use the shared app-server API through backend-owned SSH. The supported test path uses a standard Docker SSH environment;
 see [LOCAL_CODEX.md](LOCAL_CODEX.md).
 
 ## Remote Codex sessions (HAC-153)
@@ -161,8 +161,8 @@ session. See [docs/stage3-contract.md](docs/stage3-contract.md).
 
 The current desktop navigation is Project chat and Environments; Tasks and desktop
 task authoring are removed. Backend task records and APIs remain available. Chat selects a ready project environment and runs Codex there over SSH.
-Conversation and draft state are retained during navigation; recorded runs remain
-on the server. The environment terminal is an explicit action on the same box. Server redaction remains unchanged, and optional file/handoff
+Conversation history is saved by the backend session service; drafts are retained
+during navigation. Reconnect resumes the saved environment thread. The environment terminal is an explicit action on the same box. Server redaction remains unchanged, and optional file/handoff
 cards require actual backend data. The visible brand is lowercase `alto`; existing
 technical identifiers and the `agentcloud://` protocol remain compatible.
 

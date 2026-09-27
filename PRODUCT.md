@@ -35,7 +35,7 @@ This repository is the web application and a local coordination foundation. New 
 | SSH / hosted compute | Local Docker sandbox and Runpod providers bring an environment to `ready` only after SSH verification against a per-environment pinned host key. Employees reach it with a per-device ed25519 key through the desktop terminal. AWS EC2 CPU environments are in progress (HAC-125); other remote VM execution remains separate work |
 | Run boxes and artifact homes | The Environments page records a request and owner decision in one step and queues a run-box job for a server-owned profile or an imported local container template; a separate worker must allocate and verify it before it is shown as ready. Artifact homes remain planned |
 | Repository import / worktrees | Repository and branch metadata in the app; an isolated local Git provider exists but is not connected to project actions, so no project clone or Git isolation is claimed |
-| Codex / Claude execution | Environments install pinned Codex CLI 0.157.1 and record a per-environment agent check (`agent.codex.state`). Signed-in Codex state is removed at teardown. Agent runs and their events are recorded through `/api/agent-runs` and shown on the Runs page. Desktop Project chat runs Codex over the selected environment’s SSH connection. Local Docker testing uses the same environment path ([LOCAL_CODEX.md](LOCAL_CODEX.md)). Claude remains planned |
+| Codex / Claude execution | Environments install pinned Codex CLI 0.157.1 and record a per-environment agent check (`agent.codex.state`). Signed-in Codex state is removed at teardown. Legacy agent runs remain on the Runs page. Project chat persists conversation events through `/api/codex-sessions`; the backend runs Codex app-server over the selected environment’s SSH connection. Local Docker testing uses the same environment path ([LOCAL_CODEX.md](LOCAL_CODEX.md)). Claude remains planned |
 | Merge / test execution | Planned operations; no live diff, merge, or test execution |
 | Access control | Scope checks on agent API operations. SSH to an environment is **trusted shell access** for the project's current member device keys; a key that was never injected, or was revoked and reconciled by the docker-local or Runpod worker, is denied by sshd. There is no filesystem or command sandbox claim |
 
@@ -120,17 +120,17 @@ The normal project navigation is Overview, Environments, Runs, and Settings. Ove
 
 ## Legacy local Codex prototype (HAC-116)
 
-The standalone app-server test implementation and its persisted Docker volumes
-are retained for compatibility. It is no longer initialized from Settings or used
-by Project chat. The supported test path uses a standard Docker SSH environment;
+Standalone local Docker sessions and their persisted volumes are retained for
+legacy compatibility and are absent from Settings and Project chat. Environment
+sessions use the shared app-server API through backend-owned SSH. The supported test path uses a standard Docker SSH environment;
 see [LOCAL_CODEX.md](LOCAL_CODEX.md).
 
 ## Desktop chat redesign (HAC-154)
 
 The current desktop navigation is Project chat and Environments; Tasks and desktop
 task authoring are removed. Backend task records and APIs remain available. Chat selects a ready project environment and runs Codex there over SSH.
-Conversation and draft state are retained during navigation; recorded runs remain
-on the server. The environment terminal is an explicit action on the same box. Server redaction remains unchanged, and optional file/handoff
+Conversation history is saved by the backend session service; drafts are retained
+during navigation. Reconnect resumes the saved environment thread. The environment terminal is an explicit action on the same box. Server redaction remains unchanged, and optional file/handoff
 cards require actual backend data. The visible brand is lowercase `alto`; existing
 technical identifiers and the `agentcloud://` protocol remain compatible.
 

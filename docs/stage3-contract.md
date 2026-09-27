@@ -41,7 +41,7 @@ POST /api/codex-sessions { projectId, agentId, runBoxId? }  -> 202 { session }
 
 ## Desktop (Project chat)
 
-- **Target picker:** "Local Codex box" plus each ready environment of the project whose `agent.codex.state` is `ready`. Choosing one opens or creates that target's session.
+- **Target picker:** project environments whose `agent.codex.state` is `ready`. Choosing one opens or creates that environment's session. Standalone local sessions are retained only for legacy compatibility and are absent from product navigation. Docker testing uses a normal `docker-local` environment.
 - **Sign-in:** if the target's Codex is signed out, Project chat shows **Sign in with ChatGPT**. It calls the existing login route, shows `userCode` large with a copy button, and opens `verificationUrl` (only `https://auth.openai.com/…`) in the system browser. It then waits for `account/login/completed`.
 - **Deep links:** `agentcloud://open?projectId&runBoxId&panel=codex` opens Project chat targeting that environment. The Environments "Open Codex" action does the same.
 - **One Codex UI:** the Stage 2 Codex panel (HAC-122) is removed from the Environments view in favor of Project chat. Its main-process code is no longer reachable from the UI; delete it if unused.

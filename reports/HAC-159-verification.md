@@ -1,45 +1,49 @@
 # HAC-159: environment-based Codex chat
 
-## Website
+## Final integration
 
-Removed the standalone local Codex creation/sign-in panel from Settings. Website
-Environments is the setup/lifecycle surface; Continue in desktop points to the
-project/run-box chat. Removed the duplicate terminal deep-link action; a terminal
-remains available explicitly on the selected environment in desktop.
+Preserves HAC-153's backend-owned SSH/app-server protocol, persistent session
+history and ChatGPT device sign-in. Project chat only offers standard environments;
+legacy local Docker sessions are filtered from selection and history. Settings no
+longer renders the standalone local Codex creation panel. Website handoffs include
+`runBoxId` and `panel=codex`; Docker remains labeled as a local test provider.
 
-Live headless Playwright checks against port3001 with the existing account passed
-at375/768/1440: Settings has no standalone panel, the real Docker job appears in
-the standard environment list, and the handoff identifies the correct project,
-run-box and server. No horizontal overflow at those sizes.
+The first implementation used the older direct desktop SSH bridge, with a real
+successful turn recorded as `c4bf1a88-43ff-456a-89d5-249d7186b354`. HAC-153 landed
+while this work was in progress, so that bridge was replaced by the current main
+architecture rather than reintroduced after its removal.
 
-## Standard Docker test environment
+## UI verification
 
-Created through authenticated POST /api/run-boxes, not direct database insertion:
-`ddb19d94-b78e-458b-bc22-40780487fe33` (docker-local, two-hour limit).
-The normal worker built the sandbox image, cloned the configured repository,
-verified pinned SSH access as the non-root environment user, and recorded
-Codex0.157.1 readiness. The existing ChatGPT test sign-in was streamed privately
-between container credential files and verified without exposing its contents.
-The old persistent volume/history is retained; it is not silently imported into
-the SSH conversation path. No AWS provision/deploy action was performed.
+Headless website and desktop checks passed at 375, 768, and 1440 pixels. Website
+Settings has no standalone panel, the real Docker job uses the standard environment
+list, and the desktop link identifies the project, environment and server.
 
-## Desktop
+The reported composer regression was reproduced: grid-only centering no longer
+worked inside a flex wrapper. The final shared composer has auto inline margins
+and cross-axis centering, and retains the existing width token. Browser geometry
+assertions compare composer center with the content pane and both edges with
+conversation content at every viewport, for empty, active and streaming chats.
+The final implementation uses main's original grid layout; the obsolete flex
+wrapper and direct-SSH Codex panel are gone.
 
-The updated native app selected that standard environment and completed a real
-ChatGPT-authenticated Codex turn through SSH. The server recorded run
-`c4bf1a88-43ff-456a-89d5-249d7186b354` as succeeded for the run-box above.
-The old standalone app-server container was then stopped, preserving its volume.
+Browser regression checks cover persistent remote replies, ChatGPT device sign-in,
+request-ID recovery, retry, drafts, attachment handling, search, and hiding legacy
+local sessions. Remote session creation includes an actual selected runBoxId.
+Type checking, token checks, and production builds passed. Current desktop unit
+checks pass; the predecessor implementation also passed all 116 tests including
+Docker SSH integration, but those removed tests do not verify the new transport.
 
-Headless browser checks passed at 375, 768, and 1440 pixels: environment selection,
-sign-in/cancel/re-sign-in, streamed replies, early IPC events, attachments, drafts,
-failed sends, Stop, legacy links, server-origin guards, Environments-to-chat
-navigation, and stale readiness. A user-reported composer alignment regression
-was reproduced: grid-only centering stopped working inside the new flex wrapper.
-Auto inline margins now center the composer; the transcript fills remaining height.
-Geometry assertions verify that composer and assistant message edges and widths
-match at each viewport. Native measurement also confirms identical 736px widths
-and left edges, without reloading the user's conversation.
+## Local environment
 
-Existing transport limitation: each prompt uses `codex exec` with bounded prior
-context. Chats and drafts survive navigation within the app, not app relaunch;
-recorded execution runs remain on the server.
+A new standard environment was allocated through the authenticated owner API with
+the current worker, installing its backend runner key and verifying pinned SSH,
+repository clone, and Codex readiness:
+`d0e41648-0251-45be-ad7b-282696fa065d` (docker-local, two-hour limit).
+The obsolete direct-SSH test environment was stopped through its normal API.
+The standalone legacy container is stopped and its persistent volume retained.
+No AWS provisioning or deployment was performed.
+
+Backend session `4af537a8-514c-4663-9547-358445cc88d6` initialized over SSH and reached
+ChatGPT device sign-in. The copied old credentials had expired, so fresh sign-in
+was requested rather than reporting a successful live turn on the new protocol.
