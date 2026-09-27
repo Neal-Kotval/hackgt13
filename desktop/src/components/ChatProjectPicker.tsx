@@ -22,7 +22,7 @@ type Props = {
   onEnvironment: (id: string) => void;
 };
 
-/** Context controls describe the selected session; run boxes open a separate SSH terminal. */
+/** Project and environment controls select the verified run box used by chat. */
 export function ChatProjectPicker(props: Props) {
   return (
     <div className={`chat-context chat-context-${props.variant}`}>

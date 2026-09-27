@@ -57,7 +57,7 @@ export function ChatHistory({ threads, selectedId, busy, onSelect, onCreate, set
               <ul>
                 {group.threads.map((thread) => (
                   <li key={thread.id}>
-                    <button type="button" className="chat-history-item" data-selected={thread.id === selectedId} aria-current={thread.id === selectedId ? "true" : undefined} onClick={() => onSelect(thread.id)} title={thread.title}>
+                    <button type="button" className="chat-history-item" data-selected={thread.id === selectedId} aria-current={thread.id === selectedId ? "true" : undefined} disabled={busy} onClick={() => onSelect(thread.id)} title={thread.title}>
                       <span className="thread-title">{thread.title}</span>
                       {thread.status === "running" && <span className="chat-history-responding" title="Responding"><span className="visually-hidden">Responding</span></span>}
                     </button>
@@ -70,7 +70,7 @@ export function ChatHistory({ threads, selectedId, busy, onSelect, onCreate, set
       ) : (
         <div className="sidebar-empty" role="status">
           {loading ? "Loading chats…" : query ? `No chats match “${query}”` : "No chats yet"}
-          {!loading && !query && <a className="chat-history-setup" href={setupUrl} target="_blank" rel="noreferrer">Set up agent</a>}
+          {!loading && !query && <a className="chat-history-setup" href={setupUrl} target="_blank" rel="noreferrer">Manage environments</a>}
         </div>
       )}
     </aside>

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import "./CodexPanel.css";
+import { Composer, type ChatAttachment } from "./Composer";
+import { CodexConversation, type CodexEvent } from "./CodexConversation";
 import { codexApi } from "../lib/codex-api";
 import {
   applyRunEvent,
@@ -37,7 +39,8 @@ type CodexPanelProps = {
   runBoxId: string;
   projectId: string;
   title: string;
-  onClose?: () => void;
+  chat: { context: ReactNode; ready: boolean; onBusy: (busy: boolean) => void; onTitle: (title: string) => void };
+
 };
 
 function statusLine(run: Run | null): string {
@@ -52,30 +55,26 @@ function statusLine(run: Run | null): string {
   return `Failed${run.exitCode === null ? "" : ` · exit ${run.exitCode}`}`;
 }
 
-function exitTone(exitCode: number | null, running: boolean): string {
-  if (running) return "running";
-  return exitCode === 0 ? "ok" : "failed";
-}
-
 /**
  * Codex in the environment (HAC-122). Sign-in, prompt, streamed transcript,
  * Stop and Export. SSH, tokens and the Codex auth file stay in the main
  * process; this panel only sees statuses and run events.
  */
-export function CodexPanel({ runBoxId, projectId, title, onClose }: CodexPanelProps) {
+export function CodexPanel({ runBoxId, projectId, title, chat }: CodexPanelProps) {
   const [signIn, setSignIn] = useState<SignIn>({ kind: "checking" });
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [run, setRun] = useState<Run | null>(null);
   const [prompt, setPrompt] = useState("");
   const [notice, setNotice] = useState<{ tone: "error" | "info"; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [copied, setCopied] = useState(false);
   const history = useRef<PriorTurn[]>([]);
   const replyRef = useRef("");
   const pendingPrompt = useRef("");
   const sessionRef = useRef<string | null>(null);
   const loginRef = useRef<string | null>(null);
-  const transcriptRef = useRef<HTMLOListElement | null>(null);
 
   const refreshStatus = useCallback(async () => {
     setSignIn({ kind: "checking" });
@@ -168,12 +167,8 @@ export function CodexPanel({ runBoxId, projectId, title, onClose }: CodexPanelPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const list = transcriptRef.current;
-    if (list) list.scrollTop = list.scrollHeight;
-  }, [entries]);
-
   const startDeviceLogin = async () => {
+    if (chat && !chat.ready) return;
     setSignIn({ kind: "starting" });
     awaiting.current = true;
     try {
@@ -193,10 +188,17 @@ export function CodexPanel({ runBoxId, projectId, title, onClose }: CodexPanelPr
   const cancelDeviceLogin = async () => {
     const sessionId = loginRef.current;
     if (!sessionId) return;
-    await codexApi().stop(sessionId).catch(() => undefined);
+    try {
+      await codexApi().stop(sessionId);
+      loginRef.current = null;
+      await refreshStatus();
+    } catch (error) {
+      setNotice({ tone: "error", text: ipcErrorMessage(error, "Could not cancel sign-in.") });
+    }
   };
 
   const useLocalLogin = async () => {
+    if (chat && !chat.ready) return;
     setSignIn({ kind: "copying" });
     try {
       const status = await codexApi().useLocalLogin(runBoxId);
@@ -213,9 +215,18 @@ export function CodexPanel({ runBoxId, projectId, title, onClose }: CodexPanelPr
   const running = run?.status === "running";
   const signedIn = signIn.kind === "signed-in";
 
+  const active = submitting || Boolean(running) || ["starting", "code", "copying"].includes(signIn.kind);
+  const busyCallback = useRef(chat?.onBusy);
+  busyCallback.current = chat?.onBusy;
+  useEffect(() => { busyCallback.current?.(active); }, [active]);
   const submit = async () => {
-    const text = prompt.trim();
-    if (!text || running) return;
+    const text = [prompt.trim(), ...attachments.map(file => `Attached context: ${file.name}\n${file.text}`)].filter(Boolean).join("\n\n");
+    if (!text || running || submitting || !signedIn || (chat && !chat.ready)) return;
+    if (text.length > 16000) {
+      setNotice({ tone: "error", text: "Keep the message and attachments within 16,000 characters." });
+      return;
+    }
+    setSubmitting(true);
     setNotice(null);
     const full = buildFollowUpPrompt(history.current, text);
     pendingPrompt.current = text;
@@ -234,16 +245,18 @@ export function CodexPanel({ runBoxId, projectId, title, onClose }: CodexPanelPr
         stopping: false,
       });
       setPrompt("");
+      setAttachments([]);
+      chat?.onTitle(text.split("\n")[0]);
       adoptSession("run", start.sessionId);
     } catch (error) {
       awaiting.current = false;
       early.current = [];
       setNotice({ tone: "error", text: ipcErrorMessage(error, "Could not start Codex.") });
-    }
+    } finally { setSubmitting(false); }
   };
 
   const stopRun = async () => {
-    if (!run || run.status !== "running") return;
+    if (!run || run.status !== "running" || run.stopping) return;
     setRun({ ...run, stopping: true });
     try {
       await codexApi().stop(run.sessionId);
@@ -289,33 +302,20 @@ export function CodexPanel({ runBoxId, projectId, title, onClose }: CodexPanelPr
     (signIn.kind === "signed-out" && signIn.status.localLoginAvailable) ||
     (signIn.kind === "error" && signIn.localLoginAvailable);
 
-  return (
-    <section className="codex-panel" aria-label={`Codex for ${title}`}>
-      <div className="codex-header">
-        <div className="codex-heading">
-          <h2>Codex · {title}</h2>
-          <span className="tag yellow">Trusted shell access</span>
-          <span className={`tag ${signedIn ? "green" : "cyan"}`}>
-            {signIn.kind === "signed-in" ? signIn.detail : signIn.kind === "checking" ? "Checking sign-in" : "Not signed in"}
-          </span>
-        </div>
-        <div className="codex-actions">
-          <button type="button" className="button" onClick={() => void exportChanges()} disabled={exporting}>
-            {exporting ? "Exporting…" : "Export changes"}
-          </button>
-          {onClose ? (
-            <button type="button" className="button ghost" onClick={onClose}>
-              Close Codex
-            </button>
-          ) : null}
-        </div>
-      </div>
-      <p className="codex-lead">
-        Codex runs inside this environment with its sandbox off and approvals automatic. The
-        environment is the boundary; this is not a filesystem or command sandbox.
-      </p>
+  async function attachFiles(files: File[]) {
+    try {
+      if (files.length + attachments.length > 8) throw new Error("Attach up to 8 text files per message.");
+      const added = await Promise.all(files.map(async file => {
+        if (file.size > 16000) throw new Error(`${file.name} exceeds 16 KB.`);
+        const text = await file.text();
+        if (text.includes("\0") || (!file.type.startsWith("text/") && !/\.(md|txt|json|[cm]?js|jsx|tsx?|py|css|html|csv|ya?ml|toml|sh|sql|log)$/i.test(file.name))) throw new Error(`${file.name} is not a supported text file.`);
+        return { id: crypto.randomUUID(), name: file.name, text };
+      }));
+      setAttachments(current => [...current, ...added]);
+    } catch (error) { setNotice({ tone: "error", text: ipcErrorMessage(error, "Could not read attachment.") }); }
+  }
 
-      {!signedIn ? (
+      const signInContent = !signedIn ? (
         <div className="codex-signin" role="group" aria-label="Codex sign-in">
           {signIn.kind === "checking" ? <p role="status">Checking Codex sign-in in the environment…</p> : null}
           {signIn.kind === "starting" ? <p role="status">Starting ChatGPT device sign-in…</p> : null}
@@ -391,157 +391,34 @@ export function CodexPanel({ runBoxId, projectId, title, onClose }: CodexPanelPr
             </>
           ) : null}
         </div>
-      ) : null}
-
-      <ol ref={transcriptRef} className="codex-transcript" role="log" aria-label="Codex transcript">
-        {entries.length === 0 ? (
-          <li className="codex-empty">No prompts yet in this panel.</li>
-        ) : null}
-        {entries.map((entry) => {
-          switch (entry.type) {
-            case "prompt":
-              return (
-                <li key={entry.id} className="codex-entry" data-kind="prompt">
-                  <span className="codex-label">You</span>
-                  <p className="codex-multiline">{entry.text}</p>
-                </li>
-              );
-            case "message":
-              return (
-                <li key={entry.id} className="codex-entry" data-kind="message">
-                  <span className="codex-label">Codex</span>
-                  <p className="codex-multiline">{entry.text}</p>
-                </li>
-              );
-            case "reasoning":
-              return (
-                <li key={entry.id} className="codex-entry" data-kind="reasoning">
-                  <details>
-                    <summary>Reasoning</summary>
-                    <p className="codex-multiline">{entry.text}</p>
-                  </details>
-                </li>
-              );
-            case "command": {
-              const tone = exitTone(entry.exitCode, entry.state === "running");
-              return (
-                <li key={entry.id} className="codex-entry" data-kind="command">
-                  <details open={tone === "failed" || undefined}>
-                    <summary>
-                      <code className="codex-command">$ {entry.command}</code>
-                      <span className="codex-exit" data-tone={tone}>
-                        {entry.state === "running"
-                          ? "running"
-                          : entry.exitCode === null
-                            ? entry.note ?? "no exit code"
-                            : `exit ${entry.exitCode}`}
-                      </span>
-                    </summary>
-                    {entry.output ? (
-                      <pre className="codex-output">
-                        {entry.outputTruncated ? "… earlier output omitted\n" : ""}
-                        {entry.output}
-                      </pre>
-                    ) : (
-                      <p className="codex-muted">No output.</p>
-                    )}
-                  </details>
-                </li>
-              );
-            }
-            case "files":
-              return (
-                <li key={entry.id} className="codex-entry" data-kind="files">
-                  <span className="codex-label">Files changed</span>
-                  <ul className="codex-files">
-                    {entry.changes.map((change) => (
-                      <li key={`${change.kind}:${change.path}`}>
-                        <span className="codex-file-kind">{change.kind}</span> <code>{change.path}</code>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              );
-            case "error":
-              return (
-                <li key={entry.id} className="codex-entry" data-kind="error">
-                  <p className="codex-multiline">{entry.text}</p>
-                </li>
-              );
-            case "status":
-              return (
-                <li key={entry.id} className="codex-entry" data-kind="status">
-                  <p className="codex-multiline">{entry.text}</p>
-                </li>
-              );
-            default:
-              return null;
-          }
-        })}
-      </ol>
-
-      <div className="codex-statusbar">
-        <p className="codex-status" role="status" aria-live="polite" data-tone={run?.status ?? "idle"}>
-          {statusLine(run)}
-        </p>
-        {run && !run.recorded && run.recordNote ? (
-          <span className="codex-muted">{run.recordNote}</span>
-        ) : null}
-        {run?.runId ? (
-          <button
-            type="button"
-            className="button ghost"
-            onClick={() => void codexApi().openRunOnWeb(projectId, run.runId ?? "")}
-          >
-            View on web
-          </button>
-        ) : null}
-      </div>
-
-      {notice ? (
-        <p className={notice.tone === "error" ? "error-banner" : "brand-meta"} role={notice.tone === "error" ? "alert" : "status"}>
-          {notice.text}
-        </p>
-      ) : null}
-
-      <form
-        className="codex-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <label htmlFor={`codex-prompt-${runBoxId}`} className="visually-hidden">
-          Prompt for Codex
-        </label>
-        <textarea
-          id={`codex-prompt-${runBoxId}`}
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              void submit();
-            }
-          }}
-          placeholder={
-            history.current.length > 0 ? "Follow up… (⌘↵ to run)" : "Ask Codex to change this workspace… (⌘↵ to run)"
-          }
-          disabled={!signedIn}
-          rows={3}
-        />
-        <div className="codex-composer-actions">
-          {running ? (
-            <button type="button" className="button danger" onClick={() => void stopRun()} disabled={run?.stopping}>
-              {run?.stopping ? "Stopping…" : "Stop"}
-            </button>
-          ) : null}
-          <button type="submit" className="button primary" disabled={!signedIn || running || !prompt.trim()}>
-            {history.current.length > 0 ? "Send follow-up" : "Run Codex"}
-          </button>
+      ) : null;
+  {
+    const events: CodexEvent[] = entries.map(entry => {
+      const base = { id: entry.id, updatedAt: "" };
+      switch (entry.type) {
+        case "prompt": return { ...base, kind: "user", text: entry.text };
+        case "message": return { ...base, kind: "assistant", text: entry.text };
+        case "command": return { ...base, kind: "command", text: entry.command, parts: [{ type: "tool", steps: [{ cmd: entry.command, result: entry.output, ...(entry.state === "done" && entry.exitCode !== null ? { ok: entry.exitCode === 0 } : {}) }], status: entry.state === "running" ? "running" : entry.exitCode === 0 ? "done" : "failed", outputTail: entry.note }] };
+        case "files": return { ...base, kind: "assistant", text: "", parts: [{ type: "files", files: entry.changes.map(file => ({ path: file.path })) }] };
+        case "error": return { ...base, kind: "error", text: entry.text };
+        default: return { ...base, kind: "status", text: entry.text };
+      }
+    });
+    return <>
+      <CodexConversation events={events} working={Boolean(running)} agentName="Codex" environmentName={title} emptyContent={<p>Send instructions to Codex in this environment.</p>} />
+      <div className="chat-compose-area">
+        {signInContent}
+        {!chat.ready && <p className="credential-banner" role="status">This environment is not ready. Reconnect it from Environments before sending a message.</p>}
+        <div className="project-chat-recovery">
+          <span role="status">{run ? statusLine(run) : signedIn ? "Ready · Trusted shell access" : "Sign in to this environment to chat"}</span>
+          {run && !run.recorded && run.recordNote && <span>{run.recordNote}</span>}
+          <button type="button" className="button ghost" onClick={() => void exportChanges()} disabled={exporting || active || !chat.ready}>{exporting ? "Exporting…" : "Export changes"}</button>
+          {run?.runId && <button type="button" className="button ghost" onClick={() => void codexApi().openRunOnWeb(projectId, run.runId ?? "")}>View run</button>}
         </div>
-        {!signedIn ? <p className="codex-muted">Sign Codex in to this environment to send prompts.</p> : null}
-      </form>
-    </section>
-  );
+        <Composer value={prompt} disabled={submitting} sendDisabled={!signedIn || !chat.ready} sending={Boolean(running)} error={notice?.tone === "error" ? notice.text : null} context={chat.context} attachments={attachments} onAttach={files => void attachFiles(files)} onRemoveAttachment={id => setAttachments(current => current.filter(file => file.id !== id))} onChange={setPrompt} onSend={() => void submit()} onStop={() => void stopRun()} />
+        {notice?.tone === "info" && <p className="brand-meta" role="status">{notice.text}</p>}
+      </div>
+    </>;
+  }
+
 }

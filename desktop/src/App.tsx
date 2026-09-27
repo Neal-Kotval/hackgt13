@@ -54,20 +54,14 @@ export default function App() {
       setSection("local-chat");
     } else if (result.ok && result.target.runBoxId) {
       setCodexLink(result);
-      setChatRunBox({
-        projectId: result.target.projectId,
-        runBoxId: result.target.runBoxId,
-      });
+      setChatRunBox(null);
       setSection("local-chat");
     } else if (result.target.taskRunBoxId) {
       setCodexLink({
         ok: true,
-        target: { projectId: result.target.projectId },
+        target: { projectId: result.target.projectId, runBoxId: result.target.taskRunBoxId },
       });
-      setChatRunBox({
-        projectId: result.target.projectId,
-        runBoxId: result.target.taskRunBoxId,
-      });
+      setChatRunBox(null);
       setSection("local-chat");
     } else if (result.target.environmentId) {
       setError(
@@ -216,6 +210,11 @@ export default function App() {
           {environmentsMounted && (
             <div className="section-host" hidden={section !== "environments"}>
               <EnvironmentsPanel
+                onOpenChat={(projectId, runBoxId) => {
+                  setChatRunBox(null);
+                  setCodexLink({ ok: true, target: { projectId, runBoxId } });
+                  setSection("local-chat");
+                }}
                 webBaseUrl={auth.baseUrl}
                 deepLink={environmentLink}
                 onDeepLinkHandled={clearEnvironmentLink}

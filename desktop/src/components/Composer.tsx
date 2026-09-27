@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { ArrowUp, FileCode, Paperclip, Square, X } from "@phosphor-icons/react";
 
 export type ChatAttachment = { id: string; name: string; text: string };
@@ -33,6 +33,8 @@ export function Composer({
   onSend,
   onStop,
 }: ComposerProps) {
+  const inputId = useId();
+  const shortcutId = useId();
   const fileInput = useRef<HTMLInputElement>(null);
   const canSend =
     !disabled &&
@@ -47,10 +49,10 @@ export function Composer({
         if (canSend) onSend();
       }}
     >
-      <label className="visually-hidden" htmlFor="composer-input">
+      <label className="visually-hidden" htmlFor={inputId}>
         Message
       </label>
-      <span id="composer-shortcut" className="visually-hidden">
+      <span id={shortcutId} className="visually-hidden">
         Enter sends. Shift+Enter inserts a newline. Attached text files are sent
         as message context.
       </span>
@@ -74,11 +76,11 @@ export function Composer({
           </ul>
         )}
         <textarea
-          id="composer-input"
+          id={inputId}
           value={value}
           disabled={disabled}
           placeholder={placeholder}
-          aria-describedby="composer-shortcut"
+          aria-describedby={shortcutId}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
             if (
