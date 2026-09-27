@@ -227,6 +227,30 @@ test("one-step local Docker sandbox path queues a CPU-only run box", {
   assert.equal(saved.computePreference.provider, "docker-local");
 });
 
+test("active Docker sandbox returns actionable conflict without recording another request", async () => {
+  const before = await requestCount();
+  const input = environment({ profileId: "local-docker-sandbox", durationHours: 1, idempotencyKey: "env-docker-1" });
+  const retry = await boxes.POST(request("/api/run-boxes", input, owner.cookie));
+  assert.equal(retry.status, 201);
+  const existing = (await retry.json()).job;
+  registerContainerTemplate(db, { id: "conflict-template", label: "Conflict template", imageRef: "example/codex:1",
+    imageId: `sha256:${"c".repeat(64)}`, source: "registry" });
+  for (const state of ["queued", "ready", "failed", "stopping"]) {
+    db.prepare("UPDATE run_box_job SET state = ? WHERE id = ?").run(state, existing.id);
+    for (const profileId of ["local-docker-sandbox", "local-template:conflict-template"]) {
+      const response = await boxes.POST(request("/api/run-boxes", { ...input, profileId,
+        idempotencyKey: `conflict-${state}-${profileId}` }, owner.cookie));
+      assert.equal(response.status, 409);
+      assert.match((await response.json()).error, /already active.*Use the existing environment or stop it/i);
+      assert.equal(await requestCount(), before);
+    }
+  }
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE id = ?").run(existing.id);
+  const replacement = await boxes.POST(request("/api/run-boxes", { ...input, idempotencyKey: "docker-after-stop" }, owner.cookie));
+  assert.equal(replacement.status, 201);
+  assert.notEqual((await replacement.json()).job.id, existing.id);
+});
+
 test("imported container template is listed and selectable for a local environment", async () => {
   registerContainerTemplate(db, { id: "codex-custom", label: "Custom Codex", imageRef: "example/codex:1",
     imageId: `sha256:${"b".repeat(64)}`, source: "registry" });

@@ -37,6 +37,8 @@ type Database = ReturnType<typeof getDatabase>;
 function decisionError(error: unknown): never {
   if (error instanceof Error && error.message === "Invalid repository URL")
     throw new InputError("Project repository URL is not eligible for a run box", 409);
+  if (error instanceof Error && error.message === "A local Docker sandbox is already active for this project")
+    throw new InputError("A local Docker sandbox is already active for this project. Use the existing environment or stop it before creating another.", 409);
   if (error instanceof Error && /Idempotency key reused|already has a run-box decision|run box is already active/.test(error.message))
     throw new InputError(error.message, 409);
   throw error;
@@ -107,6 +109,10 @@ async function createEnvironment(employee: Employee, input: Record<string, unkno
   if (membership.role === "owner" && ["aws-ec2", "runpod"].includes(profile.provider) &&
       db.prepare("SELECT id FROM run_box_job WHERE provider = ? AND state != 'stopped' LIMIT 1").get(profile.provider))
     throw new InputError(profile.provider === "aws-ec2" ? "An AWS run box is already active" : "A Runpod run box is already active", 409);
+
+  if (membership.role === "owner" && profile.provider === "docker-local" &&
+      db.prepare("SELECT id FROM run_box_job WHERE provider = 'docker-local' AND project_id = ? AND state != 'stopped' LIMIT 1").get(projectId))
+    decisionError(new Error("A local Docker sandbox is already active for this project"));
 
   const { request: resourceRequest } = await resourceAction({
     type: "requestResource",
