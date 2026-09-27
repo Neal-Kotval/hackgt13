@@ -6,11 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
-import { migrateSshKeys, normalizePublicKey, registerSshKey } from "../lib/ssh-keys.mjs";
+import { migrateSshKeys, normalizePublicKey, registerSshKey, revokeSshKey } from "../lib/ssh-keys.mjs";
 import { getRunBoxSshEndpoint, knownHostsLine, migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
 import { createDockerSandboxProvider, sandboxInstallId } from "../lib/docker-sandbox-provider.mjs";
 import { inspectContainerImage, registerContainerTemplate } from "../lib/container-templates.mjs";
-import { runSandboxSsh, workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
+import { reconcileDockerSandboxes, runSandboxSsh, workOneDockerSandboxJob } from "../lib/docker-sandbox-worker.mjs";
 
 // Real Docker end to end: image build, container, sshd, key injection, stop.
 function dockerAvailable() {
@@ -50,7 +50,7 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     db.prepare("INSERT INTO project_membership VALUES ('member-1', 'project-1', 'member')").run();
     const device = keypair(directory, "device");
     const outsider = keypair(directory, "outsider");
-    registerSshKey(db, "member-1", { label: "Member laptop", publicKey: device.publicKey });
+    const registered = registerSshKey(db, "member-1", { label: "Member laptop", publicKey: device.publicKey });
 
     await provider.ensureImage();
     const cliDataDir = path.join(directory, "template-cli-data");
@@ -126,6 +126,13 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     assert.equal(reuse.reused, true);
     assert.equal((await provider.listManaged()).filter((item) => item.jobId === job.id).length, 1);
 
+    revokeSshKey(db, "member-1", registered.key.id);
+    assert.equal((await reconcileDockerSandboxes(db, provider)).find((item) => item.jobId === job.id)?.status, "access-updated");
+    const revokedLogin = await runSandboxSsh({ ...connection, keyFile: device.keyFile }, "whoami\n");
+    assert.equal(revokedLogin.code, 255);
+    assert.match(revokedLogin.stderr, /Permission denied/);
+    assert.deepEqual(getRunBoxSshEndpoint(db, job.id).authorizedFingerprints, []);
+
     requestRunBoxStop(db, job.id, "owner-1");
     const stopped = await workOneDockerSandboxJob(db, provider, { workerId: "it-worker-3" });
     assert.equal(stopped.state, "stopped");
@@ -134,6 +141,7 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
 
     // An imported template uses its immutable image ID through the same worker
     // and must pass the same pinned SSH and stop lifecycle.
+    registerSshKey(db, "member-1", { label: "Member laptop re-enrolled", publicKey: device.publicKey });
     const imageId = await inspectContainerImage(image);
     registerContainerTemplate(db, { id: "codex-template", label: "Codex template",
       imageRef: image, imageId, source: "registry" });

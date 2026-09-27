@@ -188,7 +188,10 @@ export function Environments({ project }: { project: Project }) {
   const [actionError, setActionError] = useState("");
   const [confirmingStop, setConfirmingStop] = useState("");
   const [stopBusy, setStopBusy] = useState("");
+  const [serverUrl, setServerUrl] = useState("");
   const formHeading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => setServerUrl(window.location.origin), []);
 
   useEffect(() => {
     let active = true;
@@ -458,6 +461,8 @@ export function Environments({ project }: { project: Project }) {
                 key={job.id}
                 job={job}
                 templates={templates}
+                projectId={project.id}
+                serverUrl={serverUrl}
                 role={role}
                 confirming={confirmingStop === job.id}
                 stopBusy={stopBusy === job.id}
@@ -477,6 +482,8 @@ export function Environments({ project }: { project: Project }) {
 function EnvironmentCard({
   job,
   templates,
+  projectId,
+  serverUrl,
   role,
   confirming,
   stopBusy,
@@ -487,6 +494,8 @@ function EnvironmentCard({
 }: {
   job: EnvironmentJob;
   templates: ContainerTemplate[];
+  projectId: string;
+  serverUrl: string;
   role: Role;
   confirming: boolean;
   stopBusy: boolean;
@@ -509,6 +518,13 @@ function EnvironmentCard({
   const expiresAt = Date.parse(job.created_at) + job.max_duration_minutes * 60_000;
   const command = job.ssh ? sshCommand(job.ssh) : "";
   const canStop = role === "owner" && job.state !== "stopped" && !job.stop_requested_at;
+  const ready = job.state === "ready" && !job.stop_requested_at;
+  const taskUrl = ready && serverUrl
+    ? `agentcloud://open?${new URLSearchParams({ projectId, taskRunBoxId: job.id, serverUrl })}`
+    : "";
+  const terminalUrl = ready && serverUrl && job.ssh && job.desktopUrl
+    ? `${job.desktopUrl}&${new URLSearchParams({ serverUrl })}`
+    : "";
   const stopped = job.state === "stopped";
   const stopDetail =
     stopped && !job.provider_resource_id
@@ -592,9 +608,14 @@ function EnvironmentCard({
       </div>
 
       <div className="environment-actions">
-        {job.desktopUrl && job.state === "ready" && (
-          <a className="button primary" href={job.desktopUrl}>
-            <Desktop aria-hidden="true" /> Open in desktop
+        {taskUrl && (
+          <a className="button primary" href={taskUrl}>
+            <Desktop aria-hidden="true" /> Continue in desktop
+          </a>
+        )}
+        {terminalUrl && (
+          <a className="button secondary" href={terminalUrl}>
+            <Desktop aria-hidden="true" /> Open terminal in desktop
           </a>
         )}
         {job.ssh && (
@@ -614,6 +635,13 @@ function EnvironmentCard({
           </button>
         )}
       </div>
+      {ready && (
+        <details className="resource-note">
+          <summary>Desktop didn’t open?</summary>
+          <p>Start the desktop app with <code>just desktop</code>, then select this project and environment.</p>
+          <p>Project ID: <code>{projectId}</code><br />Environment ID: <code>{job.id}</code></p>
+        </details>
+      )}
       {canStop && confirming && (
         <div
           id={`environment-${job.id}-stop`}

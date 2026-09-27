@@ -6,12 +6,12 @@ import { generateKeyPairSync } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { migrateSshKeys, registerSshKey, sshFingerprint } from "../lib/ssh-keys.mjs";
-import { getRunBoxSshEndpoint } from "../lib/run-box-ssh.mjs";
+import { migrateSshKeys, registerSshKey, revokeSshKey, sshFingerprint } from "../lib/ssh-keys.mjs";
+import { getRunBoxSshEndpoint, migrateRunBoxSsh, recordRunBoxSshEndpoint } from "../lib/run-box-ssh.mjs";
 import { migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
 import { migrateRunpodCleanup } from "../lib/runpod-reconcile.mjs";
-import { preflightRunpod, RUNPOD_SSH_USER, validateRunpodSshConfig, workOneRunpodJob } from "../lib/runpod-worker.mjs";
+import { preflightRunpod, reconcileRunpodSshAccess, RUNPOD_SSH_USER, validateRunpodSshConfig, workOneRunpodJob } from "../lib/runpod-worker.mjs";
 import { runpodPodName } from "../lib/runpod-provider.mjs";
 
 function setup() {
@@ -57,6 +57,52 @@ function proof(jobId) {
     workload_value: 4, correct: true, cpu_ms: 1.5, gpu_ms: .8, elapsed_ms: 2000,
     outputSha256: "b".repeat(64), evidenceRef: `ssh:${jobId}:${"b".repeat(64)}` };
 }
+
+test("Runpod reconciliation removes revoked device keys on the host", async () => {
+  const { db, job } = setup();
+  migrateSshKeys(db);
+  migrateRunBoxSsh(db);
+  const operatorKey = ed25519PublicKey();
+  const memberKey = ed25519PublicKey();
+  const registered = registerSshKey(db, "employee-1", { label: "laptop", publicKey: memberKey });
+  db.prepare("UPDATE run_box_job SET state = 'ready', provider_resource_id = 'pod123' WHERE id = ?").run(job.id);
+  recordRunBoxSshEndpoint(db, job.id, { host: "203.0.113.10", port: 30222, username: "agentcloud",
+    hostPublicKey: ed25519PublicKey(), authorizedFingerprints: [sshFingerprint(memberKey)] });
+  revokeSshKey(db, "employee-1", registered.key.id);
+  let installed = memberKey;
+  const service = provider(job);
+  const result = await reconcileRunpodSshAccess(db, service, { keyFile: "/private/key", publicKey: operatorKey }, {
+    run: async (_connection, account, script) => {
+      assert.equal(account, "root");
+      const encoded = script.match(/printf '%s' '([^']*)' \| base64 -d/)[1];
+      installed = Buffer.from(encoded, "base64").toString();
+      return encoded + "\n";
+    },
+  });
+  assert.equal(installed, "");
+  assert.equal(result[0].status, "access-updated");
+  assert.deepEqual(getRunBoxSshEndpoint(db, job.id).authorizedFingerprints, []);
+  db.close();
+});
+
+test("Runpod access reconciliation failure requests a stop and never records revoked keys as removed", async () => {
+  const { db, job } = setup();
+  migrateSshKeys(db);
+  migrateRunBoxSsh(db);
+  const memberKey = ed25519PublicKey();
+  const registered = registerSshKey(db, "employee-1", { label: "laptop", publicKey: memberKey });
+  db.prepare("UPDATE run_box_job SET state = 'ready', provider_resource_id = 'pod123' WHERE id = ?").run(job.id);
+  recordRunBoxSshEndpoint(db, job.id, { host: "203.0.113.10", port: 30222, username: "agentcloud",
+    hostPublicKey: ed25519PublicKey(), authorizedFingerprints: [sshFingerprint(memberKey)] });
+  revokeSshKey(db, "employee-1", registered.key.id);
+  const outcomes = await reconcileRunpodSshAccess(db, provider(job), { keyFile: "/private/key", publicKey: ed25519PublicKey() }, {
+    run: async () => { throw new Error("host offline"); },
+  });
+  assert.equal(outcomes[0].status, "access-update-failed");
+  assert.ok(db.prepare("SELECT stop_requested_at FROM run_box_job WHERE id = ?").get(job.id).stop_requested_at);
+  assert.deepEqual(getRunBoxSshEndpoint(db, job.id).authorizedFingerprints, [sshFingerprint(memberKey)]);
+  db.close();
+});
 
 test("Runpod preflight requires catalog price, availability, and no other managed Pod", async () => {
   const { db, job } = setup();
