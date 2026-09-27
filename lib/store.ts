@@ -17,6 +17,7 @@ import {
   localDockerSandboxProfile,
   findRunpodProfile,
 } from "./resource-profiles";
+import { MACHINE_QUOTED_AT, findMachine } from "./machine-catalog.mjs";
 interface Credential {
   hash: string;
   projectId: string;
@@ -497,13 +498,15 @@ export async function resourceAction(
           (typeof input.gpuProfileId === "string" && /^local-template:[a-z][a-z0-9-]{1,47}$/.test(input.gpuProfileId));
         // The AWS CPU environment (HAC-125) is also a run box, not GPU capacity.
         const isAwsCpu = input.gpuProfileId === awsCpuProfile.id;
+        // Sized AWS environments: a catalog CPU size is a run box; a GPU size is GPU capacity.
+        const machine = isAwsCpu ? null : findMachine(input.gpuProfileId);
         if (
           hasGpuPreference &&
           (resourceId ||
-            kind !== (isLocalSandbox || isAwsCpu ? "run-box" : "gpu") ||
+            kind !== (isLocalSandbox || isAwsCpu || machine?.kind === "cpu" ? "run-box" : "gpu") ||
             (input.gpuProfileId !== demoGpuProfile.id &&
               !findRunpodProfile(input.gpuProfileId) &&
-              !isLocalSandbox && !isAwsCpu) ||
+              !isLocalSandbox && !isAwsCpu && !machine) ||
             typeof input.durationHours !== "number" ||
             !demoGpuDurations.some((hours) => hours === input.durationHours))
         )
@@ -542,6 +545,16 @@ export async function resourceAction(
                     (awsCpuProfile.hourlyComputeUsd * (input.durationHours as number)).toFixed(4),
                   ),
                   quotedAt: awsCpuProfile.quotedAt,
+                } : machine ? {
+                  provider: "aws-ec2",
+                  profileId: machine.id,
+                  region: "us-east-1",
+                  instanceType: machine.instanceType,
+                  durationHours: input.durationHours as number,
+                  estimatedComputeUsd: Number(
+                    (machine.hourlyComputeUsd * (input.durationHours as number)).toFixed(4),
+                  ),
+                  quotedAt: MACHINE_QUOTED_AT,
                 } : findRunpodProfile(input.gpuProfileId) ? {
                   provider: "runpod",
                   profileId: findRunpodProfile(input.gpuProfileId)!.id,
