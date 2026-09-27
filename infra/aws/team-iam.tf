@@ -23,10 +23,19 @@ resource "aws_iam_user" "teammate" {
   }
 }
 
+# The account owner's non-root operator identity. The root user cannot assume roles,
+# so local worker runs (for example scripts/aws-cpu-smoke.mjs) use this user through
+# `aws login`. Terraform manages no password for it: the owner enables console access
+# (and MFA) in IAM, so no credential is written to Terraform state.
+resource "aws_iam_user" "operator" {
+  name = "NealKotval"
+  tags = { Name = "Neal Kotval", Role = "AgentCloudOperator" }
+}
+
 resource "aws_iam_group_membership" "teammates" {
   name  = "agentcloud-teammate-admins"
   group = aws_iam_group.teammate_admins.name
-  users = [for user in aws_iam_user.teammate : user.name]
+  users = concat([for user in aws_iam_user.teammate : user.name], [aws_iam_user.operator.name])
 }
 
 resource "aws_iam_user_login_profile" "teammate" {
