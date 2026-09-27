@@ -5,6 +5,7 @@ import { InputError, getState, resourceAction } from "../../../lib/store";
 import { demoGpuProfile, findRunpodProfile, localDockerSandboxProfile, runpodBudgetGpuProfile, runpodGpuProfile } from "../../../lib/resource-profiles";
 import { listRunBoxJobs, migrateRunBoxJobs, saveRunBoxDecision } from "../../../lib/run-box-jobs.mjs";
 import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../../../lib/run-box-ssh.mjs";
+import { getAgentCheck, getWorkspacePath, migrateAgentCheck } from "../../../lib/agent-check.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -192,10 +193,12 @@ export async function GET(request: Request) {
     const db = getDatabase();
     migrateRunBoxJobs(db);
     migrateRunBoxSsh(db);
+    migrateAgentCheck(db);
     const jobs = (listRunBoxJobs(db, projectId) as { id: string; state: string; profile_id: string | null }[])
       .map((job) => {
         const ready = job.state === "ready";
         const endpoint = ready ? getRunBoxSshEndpoint(db, job.id) : null;
+        const codex = getAgentCheck(db, job.id, "codex");
         return {
           ...job,
           profileId: job.profile_id,
@@ -204,6 +207,9 @@ export async function GET(request: Request) {
             ? `agentcloud://open?${new URLSearchParams({ projectId, runBoxId: job.id })}`
             : null,
           access: "trusted-shell",
+          // HAC-121: repo checkout path (null until ready) and agent readiness, separate from `state`.
+          workspacePath: ready ? getWorkspacePath(db, job.id) : null,
+          agent: { codex: { state: codex.state, version: codex.version, reason: codex.reason } },
         };
       });
     return Response.json({ jobs });

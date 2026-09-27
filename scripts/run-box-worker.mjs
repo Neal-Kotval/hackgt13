@@ -10,7 +10,7 @@ import { createRunpodProvider } from "../lib/runpod-provider.mjs";
 import { verifyRunpodSsh } from "../lib/runpod-ssh-proof.mjs";
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
 import { migrateRunpodCleanup, reconcileRunpodJobs } from "../lib/runpod-reconcile.mjs";
-import { workOneRunpodJob } from "../lib/runpod-worker.mjs";
+import { checkRunpodAgent, createRunpodAgentCleanup, workOneRunpodJob } from "../lib/runpod-worker.mjs";
 import { migrateSshKeys } from "../lib/ssh-keys.mjs";
 import { migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
 import { createDockerSandboxProvider } from "../lib/docker-sandbox-provider.mjs";
@@ -54,18 +54,18 @@ async function runpodCycle() {
   migrateRunBoxJobs(db);
   migrateRunpodEvidence(db);
   migrateRunpodCleanup(db);
-  const reconciled = await reconcileRunpodJobs(db, provider, { workerId, requestStop: requestRunBoxStop,
-    checkCleanupGuard: runpodGuard });
-  if (reconciled.some((item) => item.status === "retry"))
-    throw new Error("Runpod cleanup remains unconfirmed; refusing another allocation");
   const connection = {
     keyFile: process.env.AGENTCLOUD_RUNPOD_SSH_KEY_FILE,
     publicKey: process.env.AGENTCLOUD_RUNPOD_SSH_PUBLIC_KEY,
     // Optional operator pins written by scripts/runpod-pin-host-key.mjs; they override the injected key.
     knownHostsFile: process.env.AGENTCLOUD_RUNPOD_KNOWN_HOSTS_FILE || "/var/lib/agentcloud/runpod/known_hosts",
   };
+  const reconciled = await reconcileRunpodJobs(db, provider, { workerId, requestStop: requestRunBoxStop,
+    checkCleanupGuard: runpodGuard, cleanupAgent: createRunpodAgentCleanup(db, connection) });
+  if (reconciled.some((item) => item.status === "retry"))
+    throw new Error("Runpod cleanup remains unconfirmed; refusing another allocation");
   const result = await workOneRunpodJob(db, provider, { workerId, connection, verify: verifyRunpodSsh,
-    checkCleanupGuard: runpodGuard });
+    checkCleanupGuard: runpodGuard, checkAgent: checkRunpodAgent });
   if (result) console.log(`Processed Runpod job ${result.jobId}: ${result.state}${result.retry ? " (verification pending)" : ""}`);
   return result;
 }
@@ -74,7 +74,7 @@ let dockerProvider;
 async function dockerLocalCycle() {
   if (!dockerProvider) {
     dockerProvider = createDockerSandboxProvider();
-    // Builds infra/sandbox as agentcloud-sandbox:dev once when the image is absent.
+    // Builds infra/sandbox as agentcloud-sandbox:dev when the image is absent or its build context changed.
     if ((await dockerProvider.ensureImage()).built) console.log("Built sandbox image agentcloud-sandbox:dev");
   }
   const db = getDatabase();
