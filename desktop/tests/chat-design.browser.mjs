@@ -134,10 +134,10 @@ try {
   await expect(page.getByRole('button', { name: 'Remove draft.md' })).toBeVisible();
   await page.evaluate(() => { window.__test.setupRequired = true; });
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toBeVisible();
   await page.evaluate(() => { window.__test.setupRequired = false; });
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toHaveCount(0);
   await expect(input).toHaveValue('');
   expect(await page.evaluate(() => window.__test.created.newChat)).toBe(true);
   expect(await page.evaluate(() => window.__test.created.runBoxId)).toBe('box-1');
@@ -146,7 +146,7 @@ try {
   await expect(page.locator('.message[data-role="user"]')).toHaveCount(1);
   await selectEnvironment('second-workspace');
   await expect(page.locator('.chat-history-item')).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toHaveAttribute('href', /settings#agent-setup/);
+  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'New chat', exact: true })).toBeDisabled();
   await selectEnvironment();
   await expect(page.locator('.chat-history-item').filter({ hasText: 'Independent chat history' })).toBeVisible();
@@ -156,7 +156,7 @@ try {
   await expect(page.locator('.message[data-role="user"]')).toHaveCount(1);
   await expect(input).toHaveValue('');
   await page.evaluate(() => window.__test.deepLink({ ok: true, target: { projectId: 'p1', runBoxId: 'box-2' } }));
-  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toHaveAttribute('href', /settings#agent-setup/);
+  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Environment terminal', exact: true })).toHaveCount(0);
   // Removed Tasks links route truthfully; never connect to an origin from a link.
   await page.evaluate(() => window.__test.deepLink({ ok: true, target: { projectId: 'p1', taskRunBoxId: 'box-1' } }));
@@ -173,15 +173,26 @@ try {
   await page.goto(`${base}/?new-environment`);
   await expect(page.getByText('Choose an environment to access its chats.', { exact: true })).toBeVisible();
   await selectEnvironment();
-  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toHaveAttribute('href', /projects\/p1\/settings#agent-setup/);
-  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.__test.created)).toBeUndefined();
+  await page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true }).click();
+  await expect(page.getByText(/Finish signing in to ChatGPT/)).toBeVisible();
+  expect(await page.evaluate(() => window.__test.created)).toEqual({ projectId: 'p1', runBoxId: 'box-1' });
+  expect(await page.evaluate(() => window.__test.loginCalls.filter((call) => call !== 'tunnel:stop'))).toEqual(['browser', 'tunnel:start']);
+  for (const width of [375, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.getByRole('button', { name: 'Cancel sign-in' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.getByRole('button', { name: 'Cancel sign-in' }).click();
+  await expect(page.getByRole('heading', { name: 'Connect your ChatGPT account' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toBeVisible();
   await page.evaluate(() => {
-    window.__test.sessions.push({ id:'web-ready', projectId:'p1', agentId:'a1', status:'auth_required', error:null, title:'Web setup', target:{kind:'runBox',runBoxId:'box-1',provider:'docker-local',profileId:'cpu-workspace',state:'ready'} });
+    window.__test.sessions.push({ id:'web-ready', projectId:'p1', agentId:'a1', status:'auth_required', error:null, title:'Web setup', isSetupSession:true, target:{kind:'runBox',runBoxId:'box-1',provider:'docker-local',profileId:'cpu-workspace',state:'ready'} });
     window.__test.events['web-ready']=[];
   });
   await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toBeVisible();
   await page.evaluate(() => { window.__test.sessions[0].status = 'ready'; });
   await expect(input).toBeEnabled();
   await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toHaveCount(0);

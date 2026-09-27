@@ -202,6 +202,11 @@ export default function App() {
       deepLink={codexLink}
       onDeepLinkHandled={clearCodexLink}
       onSelectConversation={() => { setChatRunBox(null); setLoginTarget(null); }}
+      onSignIn={(target) => {
+        setChatRunBox(null);
+        setSection("local-chat");
+        setLoginTarget(target);
+      }}
       onOpenTerminal={(projectId, runBoxId) => {
         setChatRunBox({ projectId, runBoxId });
         setSection("local-chat");
