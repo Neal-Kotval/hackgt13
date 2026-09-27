@@ -632,3 +632,27 @@ test("a stale deleted EC2 rule returns an ingress retry instead of a permanent j
   await assert.rejects(provider.authorizeSsh(job({ id: otherJobId, provider_resource_id: otherInstanceId }), "203.0.113.1/32"),
     (error) => error.ingressPending === true);
 });
+
+test("same-job reauthorization does not trust cached tags on a deleted rule", async () => {
+  const rules = [];
+  let cached = null;
+  const raw = fakeAws({ rules, overrides: {
+    "ec2:describe-security-group-rules": () => ({ SecurityGroupRules: cached ? [cached] : rules }),
+  } });
+  const aws = async (service, operation, ...args) => {
+    if (operation === "create-tags" && !rules.length)
+      throw new Error("AWS ec2:create-tags InvalidSecurityGroupRuleId.NotFound");
+    return raw(service, operation, ...args);
+  };
+  const provider = createAwsCpuProvider({ aws, subnetId });
+  await provider.authorizeSsh(job(), "203.0.113.1/32");
+  cached = structuredClone(rules[0]);
+  await provider.revokeSshCidr(job(), "203.0.113.1/32");
+  assert.equal(rules.length, 0);
+  await assert.rejects(provider.authorizeSsh(job(), "203.0.113.1/32"),
+    (error) => error.ingressPending === true);
+  cached = null;
+  await provider.authorizeSsh(job(), "203.0.113.1/32");
+  assert.equal(rules.length, 1);
+  assert.deepEqual(ruleOwners(rules[0]), { [jobId]: instanceId });
+});
