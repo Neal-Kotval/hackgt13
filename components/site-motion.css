@@ -50,7 +50,10 @@ html,
 }
 
 .project-row,
-.button {
+.button,
+.environment-memory-chip,
+.environment-switch,
+.environment-detail-switch {
   transition:
     translate var(--duration-normal) var(--ease-standard),
     background-color var(--duration-normal) var(--ease-standard),
@@ -61,7 +64,10 @@ html,
 
 @media (hover: hover) {
   .project-row:hover,
-  .button:hover:not(:disabled) {
+  .button:hover:not(:disabled),
+  .environment-memory-chip:hover,
+  .environment-switch:hover:not(:disabled),
+  .environment-detail-switch:hover:not(:disabled) {
     translate: 0 var(--motion-hover-distance);
   }
 }
@@ -71,4 +77,22 @@ html,
   .site-sidebar {
     scroll-behavior: auto;
   }
+}
+
+.environment-memory-chip:active,
+.environment-switch:active:not(:disabled),
+.environment-detail-switch:active:not(:disabled) {
+  translate: 0 var(--motion-rest-distance);
+}
+
+.environment-memory-chip:hover,
+.environment-switch:hover:not(:disabled),
+.environment-detail-switch:hover:not(:disabled) {
+  background-color: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.environment-switch:hover:not(:disabled),
+.environment-detail-switch:hover:not(:disabled) {
+  border-color: var(--color-accent);
 }
