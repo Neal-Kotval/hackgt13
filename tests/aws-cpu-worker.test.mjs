@@ -4,7 +4,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { claimRunBoxJob, migrateRunBoxJobs, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
+import { claimRunBoxJob, migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
+import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
 import { setAwsApproval } from "../lib/aws-organization-approval.mjs";
 import { migrateSshKeys, registerSshKey } from "../lib/ssh-keys.mjs";
 import { getRunBoxSshEndpoint } from "../lib/run-box-ssh.mjs";
@@ -133,6 +134,22 @@ test("no device keys means no launch", async () => {
     (error) => error.message === NO_DEVICE_KEYS);
   assert.ok(!provider.calls.some((call) => call[0] === "allocate"));
   assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+});
+
+// HAC-166 live staging scenario: failed pre-launch, then the owner stops it. The worker's
+// claim + deferStop cycle must not keep the job open; the next reconcile closes it.
+test("a pre-launch failure stopped by its owner closes on the next worker cycle", async () => {
+  const { db, job } = setup({ deviceKey: false });
+  migrateRunBoxCleanup(db);
+  const provider = fakeProvider();
+  await assert.rejects(workOneAwsCpuJob(db, provider, { workerId: "worker-1", connection, sshSourceCidr: cidr }));
+  requestRunBoxStop(db, job.id, "employee-1");
+  const deferred = await workOneAwsCpuJob(db, provider, { workerId: "worker-1", connection, sshSourceCidr: cidr });
+  assert.equal(deferred.state, "stopping");
+  const inventory = { async listManagedInstances() { return []; }, async listManagedVolumes() { return []; } };
+  const result = await reconcileAwsRunBoxes(db, inventory, { workerId: "worker-1", requestStop: requestRunBoxStop });
+  assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
+  assert.equal(await workOneAwsCpuJob(db, provider, { workerId: "worker-1", connection, sshSourceCidr: cidr }), null);
 });
 
 test("an invalid SSH source or missing operator key is rejected before any claim", async () => {
