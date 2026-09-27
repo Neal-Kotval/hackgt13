@@ -179,6 +179,8 @@ Terminal sessions share the environment's Unix account and files. This is a
 trusted shared workspace, not a private filesystem per teammate. Removing a
 member blocks their app access and removes their key from new SSH connections
 after the worker reconciles it; an existing SSH connection is not terminated.
+See [Sharing a project environment](docs/resource-sharing.md) for worktree,
+compute, port, credential, Backboard, and peer-message coordination.
 
 ### Send a message between Codex agents
 
