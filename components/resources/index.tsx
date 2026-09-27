@@ -10,6 +10,7 @@ import {
   HardDrives,
   Lightning,
   Plus,
+  Minus,
   ShieldWarning,
   Warning,
 } from "@phosphor-icons/react";
@@ -20,7 +21,7 @@ import type {
   ResourceRequest,
   ResourceStatus,
 } from "@/lib/types";
-import { demoGpuDurations, demoGpuProfile, runpodGpuProfile } from "@/lib/resource-profiles";
+import { demoGpuDurations, demoGpuProfile, localDockerSandboxProfile, runpodGpuProfile } from "@/lib/resource-profiles";
 import "./resources.css";
 
 type ResourceAction = (input: Record<string, unknown>) => Promise<unknown>;
@@ -28,7 +29,7 @@ type ResourceProps = { project: Project; onAction: ResourceAction };
 type RunBoxJob = {
   id: string;
   resource_request_id: string;
-  provider: "aws-ec2" | "runpod";
+  provider: "aws-ec2" | "runpod" | "docker-local";
   state: "queued" | "allocating" | "connecting" | "verifying" | "ready" | "stopping" | "stopped" | "failed";
   provider_resource_id: string | null;
   max_duration_minutes: number;
@@ -180,7 +181,7 @@ export function ResourceCatalog({ project, onAction }: ResourceProps) {
           aria-expanded={showForm}
           aria-controls="resource-register-form"
         >
-          <Plus /> {showForm ? "Close form" : "Register resource"}
+          {showForm ? <Minus aria-hidden="true" /> : <Plus aria-hidden="true" />} {showForm ? "Close form" : "Register resource"}
         </button>
       </div>
       <FormFeedback error={error} success={success} />
@@ -714,8 +715,10 @@ function RequestCard({
       <dl className="resource-facts resource-facts--compact">
         {request.computePreference && (
           <div>
-            <dt>GPU plan</dt>
-            {request.computePreference.provider === "runpod" ? (
+            <dt>{request.computePreference.provider === "docker-local" ? "Environment plan" : "GPU plan"}</dt>
+            {request.computePreference.provider === "docker-local" ? (
+              <dd>{localDockerSandboxProfile.label} · CPU only, no GPU, no provider cost · {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}</dd>
+            ) : request.computePreference.provider === "runpod" ? (
               <dd>{request.computePreference.gpuId} · Runpod Secure Cloud · up to ${request.computePreference.maxHourlyUsd.toFixed(2)}/hour for {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}; live price pending</dd>
             ) : (
               <dd>{request.computePreference.instanceType} · ${request.computePreference.estimatedComputeUsd.toFixed(2)} compute for {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"} (quote {request.computePreference.quotedAt})</dd>
@@ -753,9 +756,9 @@ function RequestCard({
             </span>
           </div>
           <dl className="resource-facts resource-facts--compact">
-            <div><dt>Provider</dt><dd>{job.provider === "runpod" ? "Runpod" : "AWS EC2"}{job.provider_resource_id ? ` · ${job.provider_resource_id}` : " · not allocated"}</dd></div>
+            <div><dt>Provider</dt><dd>{job.provider === "runpod" ? "Runpod" : job.provider === "docker-local" ? "Local Docker" : "AWS EC2"}{job.provider_resource_id ? ` · ${job.provider_resource_id}` : " · not allocated"}</dd></div>
             <div><dt>Approved limit</dt><dd>{job.max_duration_minutes} minutes</dd></div>
-            <div><dt>Cleanup</dt><dd>{job.state === "stopped" ? job.provider_resource_id ? `${job.provider === "runpod" ? "Pod" : "EC2"} release confirmed by worker` : "Cancelled before allocation" : job.stop_requested_at ? "Stop requested; awaiting confirmation" : "Not requested"}</dd></div>
+            <div><dt>Cleanup</dt><dd>{job.state === "stopped" ? job.provider_resource_id ? `${job.provider === "runpod" ? "Pod" : job.provider === "docker-local" ? "Container" : "EC2"} release confirmed by worker` : "Cancelled before allocation" : job.stop_requested_at ? "Stop requested; awaiting confirmation" : "Not requested"}</dd></div>
           </dl>
           {job.provider === "runpod" && job.state === "allocating" && !job.provider_resource_id && (
             <p className="resource-note">Checking Runpod setup, live price, and the independent cleanup guard before creating a Pod.</p>
@@ -764,20 +767,20 @@ function RequestCard({
             <p className="resource-note">SSH identity, workspace, and GPU workload verification are in progress.</p>
           )}
           {projectRole === "owner" && job.state !== "stopped" && !job.stop_requested_at && (
-            <button className="button" type="button" disabled={Boolean(busy)} onClick={() => void onStop(job)}>
+            <button className="button danger" type="button" disabled={Boolean(busy)} onClick={() => void onStop(job)}>
               {busy === job.id ? "Requesting stop…" : "Request stop"}
             </button>
           )}
           {job.state === "failed" && <p className="resource-note">The job failed. Check worker evidence and request cleanup before trying again.</p>}
         </div>
-      ) : request.kind === "gpu" && request.computePreference && projectRole === "owner" ? (
+      ) : request.kind === "gpu" && request.computePreference && request.computePreference.provider !== "docker-local" && projectRole === "owner" ? (
         <div className="resource-job">
           {request.computePreference.provider === "runpod" ? (
             <p className="resource-note">Approving this request queues a Runpod GPU Pod for up to {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}. The worker must confirm availability and a live compute price at or below ${request.computePreference.maxHourlyUsd.toFixed(2)}/hour before launch. Storage and taxes may add cost.</p>
           ) : (
             <p className="resource-note">Approving this request queues an AWS GPU launch for up to {request.computePreference.durationHours} {request.computePreference.durationHours === 1 ? "hour" : "hours"}. Compute is quoted at ${request.computePreference.estimatedComputeUsd.toFixed(2)} before storage, network, and tax. The worker must pass live cost and safety checks before launch.</p>
           )}
-          <button className="button primary" type="button" disabled={Boolean(busy)} onClick={() => void onApprove(request.id)}>
+          <button className="button success" type="button" disabled={Boolean(busy)} onClick={() => void onApprove(request.id)}>
             {busy === request.id ? "Approving…" : "Approve and queue GPU"}
           </button>
         </div>

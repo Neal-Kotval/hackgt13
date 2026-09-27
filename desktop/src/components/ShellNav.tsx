@@ -1,7 +1,7 @@
-import type { ReactNode, SVGProps } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Robot, ChatCircle, HardDrives, List, ListChecks, SignOut, X } from "@phosphor-icons/react";
 
-export type AppSection = "tasks" | "local-chat";
-
+export type AppSection = "tasks" | "environments" | "codex" | "local-chat";
 type ShellNavProps = {
   section: AppSection;
   employeeName: string;
@@ -10,116 +10,78 @@ type ShellNavProps = {
   onSectionChange: (section: AppSection) => void;
   onSignOut: () => void;
   children: ReactNode;
+  renderHistory?: (closeNavigation: () => void) => ReactNode;
 };
+const sections = [
+  { id: "codex", label: "Codex agents", icon: Robot },
+  { id: "tasks", label: "Tasks", icon: ListChecks },
+  { id: "environments", label: "Environments", icon: HardDrives },
+  { id: "local-chat", label: "Project chat", icon: ChatCircle },
+] as const;
 
-function initials(name: string, email: string): string {
-  const source = name.trim() || email.trim();
-  const parts = source.split(/[\s@._-]+/).filter(Boolean);
-  const letters = parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "");
-  return letters.join("") || "•";
-}
-
-function Icon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      className="shell-nav-icon"
-      viewBox="0 0 256 256"
-      aria-hidden="true"
-      {...props}
-    />
-  );
-}
-
-function TasksIcon() {
-  return (
-    <Icon>
-      <path
-        fill="currentColor"
-        d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8Zm-8-56H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Zm0 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"
-      />
-    </Icon>
-  );
-}
-
-function ChatIcon() {
-  return (
-    <Icon>
-      <path
-        fill="currentColor"
-        d="M216 48H40a16 16 0 0 0-16 16v160a8 8 0 0 0 13.66 5.66L80 187.31V224a8 8 0 0 0 13.66 5.66L136 187.31h80a16 16 0 0 0 16-16V64a16 16 0 0 0-16-16Zm0 123.31h-84.69a8 8 0 0 0-5.65 2.34L96 203.31v-24a8 8 0 0 0-8-8H40V64h176Z"
-      />
-    </Icon>
-  );
-}
-
-export function ShellNav({
-  section,
-  employeeName,
-  employeeEmail,
-  busy,
-  onSectionChange,
-  onSignOut,
-  children,
-}: ShellNavProps) {
-  const name = employeeName.trim() || "Signed in";
-  const email = employeeEmail.trim();
-
+export function ShellNav({ section, employeeName, employeeEmail, busy, onSectionChange, onSignOut, children, renderHistory }: ShellNavProps) {
+  const [open, setOpen] = useState(false);
+  const sidebar = useRef<HTMLElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const initials = employeeName.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "U";
+  useEffect(() => {
+    if (!open) return;
+    content.current?.setAttribute("inert", "");
+    sidebar.current?.querySelector<HTMLButtonElement>(".shell-close")?.focus();
+    const keys = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
+      if (event.key !== "Tab") return;
+      const items = Array.from(sidebar.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []).filter(item => item.getClientRects().length);
+      const first = items[0], last = items[items.length - 1];
+      if (!sidebar.current?.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {event.preventDefault(); last?.focus();}
+      else if (!event.shiftKey && document.activeElement === last) {event.preventDefault(); first?.focus();}
+    };
+    const media = matchMedia("(max-width: 768px)");
+    const resize = () => {if (!media.matches) setOpen(false);};
+    document.addEventListener("keydown", keys);
+    media.addEventListener("change", resize);
+    return () => {
+      content.current?.removeAttribute("inert");
+      document.removeEventListener("keydown", keys);
+      media.removeEventListener("change", resize);
+      if (toggle.current?.getClientRects().length) toggle.current.focus();
+      else sidebar.current?.querySelector<HTMLButtonElement>('[aria-current="page"]')?.focus();
+    };
+  }, [open]);
+  // A deleted history row can remove the focused control while the drawer is open.
+  useEffect(() => {
+    if (!open || busy || sidebar.current?.contains(document.activeElement)) return;
+    const next = sidebar.current?.querySelector<HTMLButtonElement>(".thread-item")
+      ?? sidebar.current?.querySelector<HTMLButtonElement>(".shell-close");
+    next?.focus();
+  }, [busy, open, renderHistory]);
   return (
     <div className="shell">
-      <aside className="shell-sidebar" aria-label="Desktop navigation">
-        <div className="shell-brand">
-          <div className="brand">
-            agentcloud
-            <span className="brand-cursor" aria-hidden="true" />
-          </div>
-        </div>
-        <nav className="shell-navigation" aria-label="App sections">
-          <button
-            type="button"
-            className="shell-nav-link"
-            data-active={section === "tasks" ? "true" : "false"}
-            aria-current={section === "tasks" ? "page" : undefined}
-            onClick={() => onSectionChange("tasks")}
-          >
-            <TasksIcon />
-            <span>Tasks</span>
-          </button>
-          <button
-            type="button"
-            className="shell-nav-link"
-            data-active={section === "local-chat" ? "true" : "false"}
-            aria-current={section === "local-chat" ? "page" : undefined}
-            onClick={() => onSectionChange("local-chat")}
-          >
-            <ChatIcon />
-            <span>Project chat</span>
-          </button>
+      <header className="shell-mobile-header">
+        <div className="brand">agentcloud<span className="brand-cursor" aria-hidden="true" /></div>
+        <button ref={toggle} className="button ghost" aria-label="Open navigation" aria-controls="desktop-navigation" aria-expanded={open} onClick={() => setOpen(true)}><List aria-hidden="true" /></button>
+      </header>
+      {open && <button className="shell-backdrop" aria-label="Close navigation" tabIndex={-1} onClick={() => setOpen(false)} />}
+      <aside ref={sidebar} className="shell-nav" id="desktop-navigation" data-open={open} aria-label="Desktop navigation">
+        <div className="shell-brand"><div className="brand">agentcloud<span className="brand-cursor" aria-hidden="true" /></div></div>
+        <button className="button ghost shell-close" aria-label="Close navigation" onClick={() => setOpen(false)}><X aria-hidden="true" /></button>
+        <nav className="control-nav" aria-label="App sections">
+          {sections.map(({ id, label, icon: Icon }) => <button key={id} type="button" className="section-tab" data-active={section === id} aria-current={section === id ? "page" : undefined} onClick={() => {onSectionChange(id); setOpen(false);}}><Icon aria-hidden="true" /><span>{label}</span></button>)}
         </nav>
+        {renderHistory?.(() => setOpen(false))}
         <div className="shell-account">
-          <div className="account-identity">
-            <span className="account-avatar" aria-hidden="true">
-              {initials(name, email)}
-            </span>
-            <div className="account-details">
-              <strong className="local-label">{name}</strong>
-              {email ? (
-                <span className="account-email" title={email}>
-                  {email}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="button ghost"
-            onClick={onSignOut}
-            disabled={busy}
-          >
-            Sign out
-          </button>
+          <div className="account-identity"><span className="account-avatar" aria-hidden="true">{initials}</span><div className="account-details"><strong>{employeeName}</strong><span title={employeeEmail}>{employeeEmail}</span></div></div>
+          <button type="button" className="button ghost" onClick={onSignOut} disabled={busy}><SignOut aria-hidden="true" />Sign out</button>
         </div>
       </aside>
-      <div className="shell-body">{children}</div>
+      <div ref={content} className="shell-body">{children}</div>
     </div>
   );
 }

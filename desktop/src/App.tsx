@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatProjectPicker } from "./components/ChatProjectPicker";
+import { CodexPanel } from "./components/CodexPanel";
 import { Composer } from "./components/Composer";
 import { Conversation } from "./components/Conversation";
 import { ShellNav, type AppSection } from "./components/ShellNav";
 import { SignInScreen } from "./components/SignInScreen";
 import { ProjectPicker } from "./components/ProjectPicker";
+import { EnvironmentsPanel } from "./components/EnvironmentsPanel";
 import { ThreadList } from "./components/ThreadList";
 import { desktopApi } from "./lib/desktop-api";
 import type {
@@ -26,7 +28,7 @@ const LANDING_DRAFT_KEY = "__landing__";
 export default function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [authBootError, setAuthBootError] = useState<string | null>(null);
-  const [section, setSection] = useState<AppSection>("tasks");
+  const [section, setSection] = useState<AppSection>("codex");
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
@@ -39,7 +41,14 @@ export default function App() {
   const [credentials, setCredentials] = useState<CredentialStatus | null>(
     null,
   );
+  const [codexLink, setCodexLink] = useState<DeepLinkParseResult | null>(null);
+  const [codexMounted, setCodexMounted] = useState(true);
+  const clearCodexLink = useCallback(() => setCodexLink(null), []);
   const [deepLink, setDeepLink] = useState<DeepLinkParseResult | null>(null);
+  const [environmentsLink, setEnvironmentsLink] =
+    useState<DeepLinkParseResult | null>(null);
+  // Keep Environments mounted after first visit so open terminals survive tab switches.
+  const [environmentsMounted, setEnvironmentsMounted] = useState(false);
   const selectedIdRef = useRef<string | null>(null);
   const sending =
     activeThread?.messages.some((message) => message.status === "streaming") ??
@@ -56,6 +65,30 @@ export default function App() {
     [],
   );
 
+  const clearEnvironmentsLink = useCallback(() => {
+    setEnvironmentsLink(null);
+  }, []);
+
+  // runBoxId links open Environments (HAC-90); other links keep the Tasks flow.
+  const routeDeepLink = useCallback((result: DeepLinkParseResult) => {
+    if (result.ok && result.target.codexSessionId) {
+      setSection("codex"); setCodexMounted(true); setCodexLink(result); return;
+    }
+    if (result.ok && result.target.runBoxId) {
+      setSection("environments");
+      setEnvironmentsMounted(true);
+      setEnvironmentsLink(result);
+      return;
+    }
+    setSection("tasks");
+    setDeepLink(result);
+  }, []);
+
+  useEffect(() => {
+    if (section === "codex") setCodexMounted(true);
+    if (section === "environments") setEnvironmentsMounted(true);
+  }, [section]);
+
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
@@ -68,18 +101,12 @@ export default function App() {
       void (async () => {
         try {
           const pending = await api.takePendingDeepLink();
-          if (!cancelled && pending) {
-            setSection("tasks");
-            setDeepLink(pending);
-          }
+          if (!cancelled && pending) routeDeepLink(pending);
         } catch {
           // Ignore bridge races during boot.
         }
       })();
-      stop = api.onDeepLink((result) => {
-        setSection("tasks");
-        setDeepLink(result);
-      });
+      stop = api.onDeepLink(routeDeepLink);
     } catch {
       // Non-Electron preview.
     }
@@ -87,7 +114,7 @@ export default function App() {
       cancelled = true;
       stop?.();
     };
-  }, []);
+  }, [routeDeepLink]);
 
   const refreshThreads = useCallback(async () => {
     const api = desktopApi();
@@ -209,7 +236,7 @@ export default function App() {
     : "";
 
   useEffect(() => {
-    if (section !== "local-chat" || selectedId) return;
+    if (section !== "local-chat") return;
     queueMicrotask(() => {
       document.getElementById("composer-input")?.focus();
     });
@@ -239,6 +266,9 @@ export default function App() {
       setActiveThread(null);
       setChatProjectId(null);
       setDrafts({});
+      setEnvironmentsMounted(false);
+      setCodexMounted(false);
+      setSection("tasks");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-out failed");
     } finally {
@@ -344,8 +374,7 @@ export default function App() {
         if (!current || current.id !== threadId) {
           return {
             id: threadId!,
-            title:
-              content.length > 48 ? `${content.slice(0, 45)}…` : content,
+            title: content.length > 48 ? `${content.slice(0, 45)}…` : content,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             messages: [userMessage],
@@ -388,7 +417,9 @@ export default function App() {
     try {
       await desktopApi().cancelAssistant(selectedId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not stop generation");
+      setError(
+        err instanceof Error ? err.message : "Could not stop generation",
+      );
     }
   }
 
@@ -423,14 +454,14 @@ export default function App() {
     );
   }
 
-  if (bootError) {
+  if (bootError && section === "local-chat") {
     return (
       <div className="app-error" role="alert">
         <h1>Chat storage error</h1>
         <p>{bootError}</p>
         <p>
-          Local chats live under the app userData chat directory. Fix or remove
-          the corrupt file, then relaunch.
+          Project chat lives under the app userData chat directory. Fix or
+          remove the corrupt file, then relaunch.
         </p>
       </div>
     );
@@ -439,15 +470,47 @@ export default function App() {
   return (
     <ShellNav
       section={section}
-      employeeName={auth.user?.name ?? "Signed in"}
-      employeeEmail={auth.user?.email ?? ""}
+      employeeName={auth.user?.name || "Signed in"}
+      employeeEmail={auth.user?.email || ""}
       busy={busy || sending || signingOut}
+      renderHistory={
+        section === "local-chat"
+          ? (closeNavigation) => (
+              <ThreadList
+                threads={threads}
+                selectedId={selectedId}
+                busy={busy || sending || signingOut}
+                onSelect={(id) => {
+                  closeNavigation();
+                  void handleSelect(id);
+                }}
+                onCreate={() => {
+                  closeNavigation();
+                  void handleCreate();
+                }}
+                onDelete={(id) => {
+                  void handleDelete(id);
+                }}
+              />
+            )
+          : undefined
+      }
       onSectionChange={setSection}
       onSignOut={() => {
         void handleSignOut();
       }}
     >
-      {section === "tasks" ? (
+      {codexMounted && <div className="section-host" hidden={section !== "codex"}><CodexPanel webBaseUrl={auth.baseUrl} deepLink={codexLink} onDeepLinkHandled={clearCodexLink} /></div>}
+      {environmentsMounted ? (
+        <div className="section-host" hidden={section !== "environments"}>
+          <EnvironmentsPanel
+            webBaseUrl={auth.baseUrl}
+            deepLink={environmentsLink}
+            onDeepLinkHandled={clearEnvironmentsLink}
+          />
+        </div>
+      ) : null}
+      {section === "environments" || section === "codex" ? null : section === "tasks" ? (
         <ProjectPicker
           webBaseUrl={auth.baseUrl}
           deepLink={deepLink}
@@ -455,62 +518,52 @@ export default function App() {
         />
       ) : (
         <div className="app-shell">
-          <ThreadList
-            threads={threads}
-            selectedId={selectedId}
-            busy={busy || sending || signingOut}
-            onSelect={(id) => {
-              void handleSelect(id);
-            }}
-            onCreate={() => {
-              void handleCreate();
-            }}
-            onDelete={(id) => {
-              void handleDelete(id);
-            }}
-          />
-          <main className="main">
+          <main className="main" data-empty={!activeThread?.messages.length}>
             <header className="main-header">
-              <div className="chat-heading">
-                <h1>{activeThread?.title ?? "Project chat"}</h1>
-                <ChatProjectPicker
-                  selectedId={chatProjectId}
-                  onSelect={updateChatProjectId}
-                />
-              </div>
-            </header>
-            {activeThread ? (
-              <Conversation
-                messages={activeThread.messages}
-                emptyLabel="This chat has no messages yet. Type below to send the first turn."
+              <h1 title={activeThread?.title}>
+                {activeThread?.title ?? "Project chat"}
+              </h1>
+              <ChatProjectPicker
+                selectedId={chatProjectId}
+                onSelect={updateChatProjectId}
               />
-            ) : (
-              <div className="conversation">
-                <div className="main-empty" role="status">
-                  Type below to start. The first send creates the thread. New
-                  chat is only for another empty thread.
-                  {credentials ? ` ${credentials.message}` : ""}
-                </div>
-              </div>
-            )}
-            <Composer
-              value={draft}
-              disabled={false}
-              sending={sending}
-              error={error}
-              onChange={(value) => {
-                setDrafts((current) => ({
-                  ...current,
-                  [draftKey]: value,
-                }));
-              }}
-              onSend={() => {
-                void handleSend();
-              }}
-              onStop={() => {
-                void handleStop();
-              }}
+              <span
+                className="chat-storage-note"
+                title="Chat history is saved on this device and does not sync to the web dashboard."
+              >
+                Saved on this device
+              </span>
+            </header>
+            <Conversation
+              key={selectedId ?? LANDING_DRAFT_KEY}
+              messages={activeThread?.messages ?? []}
+              emptyLabel=""
             />
+            <div className="chat-compose-area">
+              {credentials && !credentials.configured ? (
+                <p className="credential-banner" role="status">
+                  {credentials.message}
+                </p>
+              ) : null}
+              <Composer
+                value={draft}
+                disabled={false}
+                sending={sending}
+                error={error}
+                onChange={(value) => {
+                  setDrafts((current) => ({
+                    ...current,
+                    [draftKey]: value,
+                  }));
+                }}
+                onSend={() => {
+                  void handleSend();
+                }}
+                onStop={() => {
+                  void handleStop();
+                }}
+              />
+            </div>
           </main>
         </div>
       )}

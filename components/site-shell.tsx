@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { SquaresFour, Users, List, X, House, ListChecks, Database, Lightning, HardDrives, ShieldCheck, Play, Graph, Cpu, GitPullRequest, PlugsConnected, TerminalWindow } from "@phosphor-icons/react";
+import { SquaresFour, Users, List, X, House, HardDrives, Play, Gear } from "@phosphor-icons/react";
 import { Select } from "./ui/select";
 import { EmployeeMenu } from "./employee-auth";
 import { authClient } from "@/lib/auth-client";
@@ -11,13 +11,19 @@ import "./site-shell.css";
 
 type ProjectLink = { id: string; name: string };
 const views = [
-  ["Overview", "", House], ["Task board", "board", ListChecks],
-  ["Services", "services", Database], ["Activity", "activity", Lightning],
-  ["Resources", "resources", HardDrives], ["Requests", "requests", ShieldCheck],
-  ["Runs", "runs", Play], ["Graph", "graph", Graph], ["Inference", "inference", Cpu],
-  ["Review", "review", GitPullRequest], ["Agents", "agents", PlugsConnected],
-  ["CLI connection", "desktop", TerminalWindow],
+  ["Overview", "", House],
+  ["Environments", "environments", HardDrives],
+  ["Runs", "runs", Play],
+  ["Settings", "settings", Gear],
 ] as const;
+const legacySections: Record<string, string> = {
+  board: "",
+  resources: "environments",
+  requests: "environments",
+  activity: "runs",
+  agents: "settings",
+  desktop: "settings",
+};
 
 export function WebsiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -36,6 +42,7 @@ function SiteShell({ children }: { children: ReactNode }) {
   const content = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const pieces = pathname.split("/");
+  const section = legacySections[pieces[3]] ?? pieces[3] ?? "";
   const project = projects.find(p => p.id === pieces[2]) || (pieces[1] !== "projects" || !pieces[2] || pieces[2] === "new" ? projects[0] : undefined);
   useEffect(() => {setProjects([]);}, [activeOrganization?.id]);
   useEffect(() => {
@@ -76,10 +83,9 @@ function SiteShell({ children }: { children: ReactNode }) {
       <Link className="site-brand" href="/projects" onClick={() => setOpen(false)}>agentcloud<span className="brand-cursor" aria-hidden="true" /></Link>
       <button className="button ghost site-sidebar-close" aria-label="Close navigation" onClick={() => setOpen(false)}><X /></button>
       <nav className="site-navigation" aria-label="Main navigation">
-        <div className="site-nav-group">{navLink("Projects", "/projects", SquaresFour, pathname === "/projects" || pathname === "/projects/new")}{navLink("People & organizations", "/organizations", Users)}</div>
+        <div className="site-nav-group">{navLink("Projects", "/projects", SquaresFour, pathname === "/projects" || pathname === "/projects/new")}{navLink("Organizations", "/organizations", Users)}</div>
         {projects.length > 0 && <div className="site-nav-group"><div className="site-project-picker"><h2 className="site-nav-label">Project</h2><Select aria-label="Current project" value={project?.id || ""} onChange={event => {router.push(`/projects/${event.target.value}`); setOpen(false);}}><option value="" disabled>Select project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></div>
-        {project && views.map(([label, segment, Icon]) => navLink(label, `/projects/${project.id}${segment ? "/" + segment : ""}`, Icon))}</div>}
-        <div className="site-nav-group">{navLink("Design system", "/design-system", SquaresFour)}</div>
+        {project && views.map(([label, segment, Icon]) => navLink(label, `/projects/${project.id}${segment ? "/" + segment : ""}`, Icon, pieces[1] === "projects" && pieces[2] === project.id && section === segment))}</div>}
       </nav>
       <div className="site-account"><EmployeeMenu navigation={false} /></div>
     </aside>

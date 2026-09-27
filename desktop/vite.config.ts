@@ -10,6 +10,8 @@ export default defineConfig({
   // Serve the same self-hosted font files Next uses so /fonts/* resolves in Electron.
   publicDir: path.resolve(__dirname, "../public"),
   resolve: {
+    // Shared web primitives must use the renderer's React instance.
+    dedupe: ["react", "react-dom", "@radix-ui/react-select", "@phosphor-icons/react"],
     alias: {
       "@agentcloud-tokens": path.resolve(__dirname, "../app/tokens.css"),
     },
@@ -40,7 +42,9 @@ export default defineConfig({
           build: {
             outDir: "dist-electron",
             rollupOptions: {
-              external: ["electron"],
+              // ssh2 loads optional native bindings at runtime; keep it a
+              // node_modules dependency instead of bundling it.
+              external: ["electron", "ssh2"],
             },
           },
         },

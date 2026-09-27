@@ -9,6 +9,7 @@ One window, two primary sections:
 | Section | Role |
 | --- | --- |
 | **Tasks** | Project/environment picker + task composer against the shared backend (`addTask`). Project chat is separate. |
+| **Environments** | Run boxes for a project (`GET /api/run-boxes`) with server states and an in-app SSH terminal for `ready` environments (HAC-90). |
 | **Project chat** | On-device threads (`threads.json`) that send turns to the selected project's agent via `POST /api/chat`. Does **not** create AgentCloud tasks. |
 
 Machine-first journey: connect/verify a machine in the **web** app → return to desktop **Tasks** to author work against a ready environment → monitor on the web. Project chat is an optional agent conversation beside that flow.
@@ -34,7 +35,7 @@ just desktop-verify  # check + test + build
 
 Other desktop recipes: `just desktop-check`, `just desktop-test`, `just desktop-build`, `just desktop-devtools`.
 
-`just desktop` opens **one** desktop window. After sign-in you land on **Tasks** (honest empty state). Use **Project chat** for agent conversation. UI (renderer) edits hot-reload through Vite.
+`just desktop` opens **one** desktop window. After sign-in you land on **Project chat**. **Tasks** is the shared-backend project panel. UI (renderer) edits hot-reload through Vite.
 
 ### Main-process HMR policy
 
@@ -55,7 +56,7 @@ Or set `AGENTCLOUD_DESKTOP_DEVTOOLS=1` in `desktop/.env`. DevTools are attached 
 ## Project chat loop
 
 1. Sign in with the same Better Auth employee email/password as the web app (web must be running at `AGENTCLOUD_URL`, default `http://127.0.0.1:3000`).
-2. Open **Project chat**. Select a project (required). Type and **Enter** to send — the first send auto-creates a thread.
+2. Open **Project chat**. Select a project, then type and **Enter** to send — the first send auto-creates a thread (no mandatory **New chat** click).
 3. **Shift+Enter** inserts a newline. **New chat** still starts another empty thread while one is open.
 4. Replies stream from `POST /api/chat` using the server model key. If the project has no agents yet, the server provisions a `desktop-chat` identity (no plaintext token returned to desktop).
 5. If the server lacks `OPENAI_API_KEY`, the failed assistant turn explains server setup — Electron never invents a reply and never reads an OpenAI key.
@@ -121,6 +122,23 @@ agentcloud://open?projectId=<id>&environmentId=<verified-resource-id>
 
 `environmentId` is optional. On cold start or a second-instance handoff, the existing window is focused (no duplicate shell). Valid IDs switch to **Tasks** and preselect the project/environment. Missing projects, unknown resources, or unverified environments show an honest error — desktop never invents a ready box. Website “Open in desktop” UI is a separate ticket.
 
+## Environments and in-app SSH terminal (HAC-90)
+
+Follows [docs/sandbox-mvp-contract.md](../docs/sandbox-mvp-contract.md).
+
+- **Device key.** After sign-in (and on launch with a valid session) the main process ensures one ed25519 keypair per device (`electron/device-key.ts`). It is generated with Node `crypto`, stored as an OpenSSH private key encrypted with `safeStorage` under `userData/ssh/device-ssh-key.bin`, and registered with `POST /api/ssh-keys { label: <hostname>, publicKey }`. The private key never crosses IPC and is never logged. If OS encryption is unavailable the key is kept in memory for that run only (not written to disk). The Environments view shows the key fingerprint and registration state.
+- **Environments view.** Pick a project; the list shows each run box's server state (queued, allocating, connecting, verifying SSH, ready, stopping, stopped, failed), provider/profile, and a **Trusted shell access** label. **Open terminal** is enabled only when the state is `ready`, the listing includes `ssh`, and no stop was requested. The list polls every 5 s while any job is in flight. Desktop does not create or stop environments.
+- **Terminal.** `terminal:open` fetches `GET /api/run-boxes/:id/connection` with the employee session, then connects with `ssh2` using the API's host, port, and username and the device key. The presented host key must equal `hostPublicKey` exactly (only `ssh-ed25519` is negotiated); otherwise the connection fails with “Host key does not match the pinned key for this environment”. A `403 { code: "no_authorized_key" }` explains that the device key was registered after the environment was created. Sessions are owned by the window that opened them and are closed when it reloads, closes, or the app quits. The xterm theme is read from the design tokens at runtime.
+- **Deep link.** `agentcloud://open?projectId=<id>&runBoxId=<jobId>` opens Environments with that project selected and opens the terminal automatically once the listing reports the job `ready`. Host or port values in the URL are ignored. The `environmentId` form still opens Tasks.
+- **Access model.** SSH is trusted shell access to the environment. It is not a filesystem or command sandbox.
+- **Limitation.** Keys registered after an environment was allocated are not on that environment; create a new environment.
+
+`npm test` includes an sshd integration test (`tests/ssh-integration.test.ts`) that builds a throwaway `alpine` + `openssh` image, connects with a generated device key and the container's real host key, runs `whoami`, and checks that a wrong pinned key and an unauthorized key are refused. It skips when Docker is unavailable; set `AGENTCLOUD_SKIP_DOCKER_TESTS=1` to skip it explicitly.
+
+### Using a local server on another port
+
+Set `AGENTCLOUD_URL=http://127.0.0.1:3010` in `desktop/.env` (or the shell) before `just desktop`. Plain `http` on loopback works because API calls run in the main process. A saved session keeps the origin it signed in against, so sign out and relaunch when switching servers.
+
 ## Persistence
 
 Threads live under the Electron `userData` chat directory (shown indirectly via the main process; path is available through the desktop bridge `dataDir`). Storage is a single `threads.json` file. Corrupt or missing storage surfaces an error screen instead of crashing in a loop.
@@ -160,3 +178,25 @@ Do not invent a parallel palette in this package. Use semantic tokens only
 `npm run tokens:check`, which scans `desktop/src/**/*.{css,tsx}` alongside web
 surfaces and fails on raw colors, inline styles, or undefined tokens.
 
+
+The desktop shell follows the web navigation treatment: a flush vertical glass
+sidebar, icon navigation, an account card, and a keyboard-accessible drawer on
+narrow windows. Flat dark surfaces, rounded controls, and semantic action colors
+consume the same tokens. Project and task dropdowns reuse the web Radix Select
+primitive directly, including keyboard navigation and accessible names.
+
+## Codex in a local Docker box
+
+The **Codex agents** section connects to sessions initialized on the AgentCloud website. Select the same project and session, send instructions, inspect attributed assistant and Docker command events, and stop generation or reconnect a stopped session. The website owns initialization and authentication setup. `agentcloud://open?projectId=…&codexSessionId=…` selects that session after employee sign-in; session data always comes from the authenticated server, never the link.
+
+This view polls bounded event snapshots and replaces events by stable IDs. Unsent drafts survive navigation during the current app session; failed sends retain text and reuse the request ID when retried unchanged. If a turn start is ambiguous, the draft stays intact and ordinary send is disabled; inspect the recovered history, then explicitly choose **Send as a new turn** only if another execution is intended. Unavailable deep-link projects or sessions never select a different agent automatically. Project chat remains an independent local scratchpad. Docker provides a local execution box, not an AWS deployment or GPU verification. Authenticated renderer requests are restricted to the configured server origin and do not follow redirects.
+
+### Project chat presentation
+
+Chat history lives in the shared navigation sidebar (or its drawer on narrow
+windows). New chats open with a centered greeting and composer; conversations use
+a restrained reading column, user bubbles, and unboxed assistant turns. Enter
+sends, Shift+Enter adds a line, and composing text with an IME does not send early.
+Send and Stop have accessible labels. Removed routine message counts and explanatory
+banners do not change storage or execution: chat history is still saved on this
+device, and missing configuration and failed turns remain visible.

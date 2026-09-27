@@ -1,3 +1,4 @@
+import { NotePencil, Trash } from "@phosphor-icons/react";
 import type { ChatThreadSummary } from "../lib/types";
 
 type ThreadListProps = {
@@ -9,19 +10,6 @@ type ThreadListProps = {
   onDelete: (threadId: string) => void;
 };
 
-function formatUpdated(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
-
 export function ThreadList({
   threads,
   selectedId,
@@ -31,27 +19,24 @@ export function ThreadList({
   onDelete,
 }: ThreadListProps) {
   return (
-    <aside className="sidebar" aria-label="Project chats">
+    <aside className="sidebar" aria-label="Project chat">
       <div className="sidebar-header">
-        <div>
-          <div className="brand">Project chats</div>
-          <div className="brand-meta">
-            On-device only — not AgentCloud tasks
-          </div>
-        </div>
+        <h2 className="brand">Chats</h2>
         <button
           type="button"
-          className="button primary"
+          className="button icon-button"
+          aria-label="New chat"
+          title="New chat"
           onClick={onCreate}
           disabled={busy}
         >
-          New chat
+          <NotePencil aria-hidden="true" />
         </button>
       </div>
 
       {threads.length === 0 ? (
         <div className="sidebar-empty" role="status">
-          No chats yet. Start a new chat to begin. Nothing is seeded.
+          No chats yet
         </div>
       ) : (
         <div className="thread-list" role="list">
@@ -65,16 +50,12 @@ export function ThreadList({
                 onClick={() => onSelect(thread.id)}
               >
                 <span className="thread-title">{thread.title}</span>
-                <span className="thread-meta">
-                  {thread.messageCount} message
-                  {thread.messageCount === 1 ? "" : "s"} ·{" "}
-                  {formatUpdated(thread.updatedAt)}
-                </span>
               </button>
               <button
                 type="button"
-                className="button ghost thread-delete"
+                className="button danger thread-delete icon-button"
                 aria-label={`Delete ${thread.title}`}
+                title={`Delete ${thread.title}`}
                 disabled={busy}
                 onClick={() => {
                   const confirmed = window.confirm(
@@ -83,7 +64,7 @@ export function ThreadList({
                   if (confirmed) onDelete(thread.id);
                 }}
               >
-                Delete
+                <Trash aria-hidden="true" />
               </button>
             </div>
           ))}

@@ -102,6 +102,10 @@ export interface ResourceRequest {
     cloud: "SECURE";
     durationHours: number;
     maxHourlyUsd: number;
+  } | {
+    provider: "docker-local";
+    profileId: string;
+    durationHours: number;
   };
   status: ResourceRequestStatus;
   decision: {

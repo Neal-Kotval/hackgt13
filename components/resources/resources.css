@@ -176,7 +176,6 @@
 
 .resource-badge--registered,
 .resource-badge--requested,
-.resource-badge--approved,
 .resource-badge--allocated,
 .resource-badge--queued,
 .resource-badge--allocating,
@@ -187,6 +186,7 @@
   background: var(--color-warning-soft);
 }
 
+.resource-badge--approved,
 .resource-badge--verified,
 .resource-badge--running,
 .resource-badge--ready,

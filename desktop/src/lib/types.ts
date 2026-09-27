@@ -2,6 +2,8 @@ export type MessageRole = "user" | "assistant";
 
 export type { DeepLinkParseResult, DeepLinkTarget } from "./deep-link";
 import type { DeepLinkParseResult } from "./deep-link";
+import type { RunBoxSummary } from "./run-boxes";
+export type { RunBoxSummary, RunBoxState } from "./run-boxes";
 
 export type MessageStatus =
   | "complete"
@@ -125,6 +127,20 @@ export type AssistantStreamEvent =
     }
   | { type: "done"; threadId: string; messageId: string };
 
+/** Public status of this device's SSH key. Never includes private material. */
+export type DeviceKeyStatus = {
+  state: "unavailable" | "registering" | "registered" | "error";
+  fingerprint: string | null;
+  label: string | null;
+  /** True when the private key is stored encrypted on disk (safeStorage). */
+  persistent: boolean;
+  message: string;
+};
+
+export type TerminalEvent =
+  | { type: "data"; sessionId: string; data: string }
+  | { type: "closed"; sessionId: string; error?: string };
+
 export type DesktopApi = {
   listThreads: () => Promise<ChatThreadSummary[]>;
   createThread: () => Promise<ChatThread>;
@@ -172,4 +188,16 @@ export type DesktopApi = {
   ) => Promise<{ state: AgentCloudStateSummary; raw: unknown }>;
   takePendingDeepLink: () => Promise<DeepLinkParseResult | null>;
   onDeepLink: (handler: (result: DeepLinkParseResult) => void) => () => void;
+  listRunBoxes: (projectId: string) => Promise<RunBoxSummary[]>;
+  deviceKeyStatus: () => Promise<DeviceKeyStatus>;
+  /** Opens an SSH shell for a ready run box. `sessionId` is chosen by the caller. */
+  terminalOpen: (
+    sessionId: string,
+    runBoxId: string,
+    size: { cols: number; rows: number },
+  ) => Promise<{ sessionId: string; username: string; host: string; port: number }>;
+  terminalWrite: (sessionId: string, data: string) => void;
+  terminalResize: (sessionId: string, cols: number, rows: number) => void;
+  terminalClose: (sessionId: string) => Promise<void>;
+  onTerminalEvent: (handler: (event: TerminalEvent) => void) => () => void;
 };

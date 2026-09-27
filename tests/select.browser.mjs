@@ -117,7 +117,7 @@ try {
       },
     });
     expect(agent.ok()).toBeTruthy();
-    await page.reload();
+    await page.goto(origin + `/projects/${projectId}/board`);
     await page.getByRole("button", { name: "New task", exact: true }).click();
     await page.getByRole("combobox", { name: /Depends on/ }).click();
     await expect(page.getByRole("listbox")).toBeVisible();
@@ -164,9 +164,9 @@ try {
     await page.keyboard.press("Escape");
 
     if (width <= 768) await page.getByRole("button", { name: "Open navigation" }).click();
-    await page.getByRole("link", { name: "Resources", exact: true }).click();
+    await page.getByRole("link", { name: "Environments", exact: true }).click();
     await expect(
-      page.locator('.site-nav-link[href$="/resources"]'),
+      page.locator('.site-nav-link[href$="/environments"]'),
     ).toHaveAttribute("aria-current", "page");
     await expect(page.locator('.site-nav-link[aria-current="page"]')).toHaveCount(1);
     await page.goto(origin + "/organizations");
@@ -206,7 +206,7 @@ try {
       await expect(page.locator(".site-sidebar")).not.toBeVisible();
       await expect(page.getByRole("button", { name: "Open navigation" })).toBeFocused();
     }
-    for (const destination of ["Projects", "People & organizations", "Overview", "Task board", "Services", "Activity", "Resources", "Requests", "Runs", "Graph", "Inference", "Review", "Agents", "CLI connection", "Design system"]) {
+    for (const destination of ["Projects", "Organizations", "Overview", "Environments", "Runs", "Settings"]) {
       if (width <= 768) await page.getByRole("button", { name: "Open navigation" }).click();
       const link = page.locator(".site-navigation").getByRole("link", { name: destination, exact: true });
       const href = await link.getAttribute("href");
@@ -214,6 +214,30 @@ try {
       await expect(page).toHaveURL(origin + href);
       await expect(page.locator('.site-nav-link[aria-current="page"]')).toHaveText(destination);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+      await expect(page.locator(".site-navigation a")).toHaveCount(6);
+      await expect(page.locator('.site-navigation a[href="/design-system"]')).toHaveCount(0);
+      if (destination === "Overview") {
+        await expect(page.getByRole("button", {name: "New task", exact: true})).toHaveCount(0);
+        await expect(page.getByRole("heading", {name: "Task progress"})).toBeVisible();
+        await expect(page.getByRole("cell", {name: "queued", exact: true})).toBeVisible();
+      }
+      if (destination === "Environments") {
+        await page.getByText("Machines & resource catalog", {exact: true}).focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("button", {name: "Register resource", exact: true})).toBeVisible();
+      }
+      if (destination === "Settings") {
+        await page.getByText("CLI connection guide", {exact: true}).focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("button", {name: "Copy command", exact: true})).toBeVisible();
+        // Each click must scroll even when the URL already contains this hash.
+        for (let activation = 0; activation < 2; activation++) {
+          await page.getByRole("link", {name: "Agent setup", exact: true}).click();
+          await expect(page.locator("#agent-setup")).toBeFocused();
+          await expect.poll(() => page.locator("#agent-setup").evaluate(element => element.getBoundingClientRect().top)).toBeGreaterThanOrEqual(0);
+          await expect.poll(() => page.locator("#agent-setup").evaluate(element => element.getBoundingClientRect().top)).toBeLessThan(100);
+        }
+      }
     }
     expect(errors).toEqual([]);
     console.log(

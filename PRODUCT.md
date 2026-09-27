@@ -33,7 +33,7 @@ This repository is the web application and a local coordination foundation. New 
 | Employee login and resource policy | Local Better Auth verified accounts, organization invitations/roles, and project memberships; human routes require authentication. Resource decisions remain unevaluated; no allocation approval or SSH enforcement |
 | Resource graph and inference | Graph of persisted coordination relationships and configuration drafts only; no GPU allocation, private endpoint, or serving process |
 | SSH / hosted compute | Setup intent and metadata only until a workspace provider is implemented |
-| Run boxes and artifact homes | Planned execution and publication lifecycles; neither is provisioned by this application yet |
+| Run boxes and artifact homes | The Environments page records a request and owner decision in one step and queues a run-box job for a server-owned profile; a separate worker must allocate and verify it before it is shown as ready. Artifact homes remain planned |
 | Repository import / worktrees | Repository and branch metadata in the app; an isolated local Git provider exists but is not connected to project actions, so no project clone or Git isolation is claimed |
 | Codex / Claude execution | Agent identities and protocol foundation; real tool adapters and remote execution remain to build |
 | Merge / test execution | Planned operations; no live diff, merge, or test execution |
@@ -115,3 +115,15 @@ For the remote MVP: show employee login, an actual provisioned or attached run e
 ## Deferred scope
 
 Managed GPU purchasing, spend management, generalized resource marketplaces, two-agent service integration, artifact homes, snapshots and restore, graphical desktop packaging, and automatic conflict resolution are outside the first reliable demo. Attaching an existing SSH-accessible GPU machine is part of the remote-computer path; AgentCloud must verify access before showing it as ready. A resource request must control an actual allocation or attachment to be presented as functional. Do not claim enforced cost or expiry limits until they affect the real resource.
+
+The normal project navigation is Overview, Environments, Runs, and Settings. Overview shows read-only task progress and setup guidance; Environments groups resource requests/approvals with an expandable catalog; Runs contains activity and reported output; Settings contains agent registration and an expandable CLI guide. Organization management is labeled Organizations. Design system, collaboration/stretch pages, and the legacy task board remain directly addressable but are absent from normal navigation. This presentation change preserves records and API contracts; it does not claim desktop integration or remote execution is complete.
+
+## Local Docker Codex integration (HAC-116)
+
+The opt-in local Codex path initializes a real Codex app-server in a Docker CPU
+box from project Settings and lets desktop send turns to the same persistent
+thread. Employee membership gates reads and chat; owners control setup and
+lifecycle. SQLite stores bounded attributed session items, while the Docker
+volume retains Codex history and workspace files. This local implementation does
+not satisfy the AWS/GPU execution or public multi-tenant milestones above. See
+[LOCAL_CODEX.md](LOCAL_CODEX.md) for setup, authentication, recovery and limits.

@@ -109,3 +109,24 @@ The dominant interface palette is black, blue, and cool grey. Use saturated blue
 The sidebar hides native scrollbar chrome while preserving wheel, touch, and keyboard scrolling. Its Project section uses a heading aligned with navigation icons. Account identity combines an initials avatar, display name, and email; long names wrap and email truncates with its full value available on hover. All account styling uses existing semantic and scale tokens.
 
 Entrances use a noticeable 24px rise over 420ms, with 65ms staggering capped at 260ms for sibling surfaces. The drawer travels 48px. Buttons and project links lift slightly on hover. Native smooth scrolling applies to page anchors and sidebar programmatic scrolling without intercepting wheel or touch input; reduced motion restores instant scrolling and disables travel and staggering.
+
+The normal project navigation is Overview, Environments, Runs, and Settings. Overview shows read-only task progress and setup guidance; Environments groups resource requests/approvals with an expandable catalog; Runs contains activity and reported output; Settings contains agent registration and an expandable CLI guide. Organization management is labeled Organizations. Design system, collaboration/stretch pages, and the legacy task board remain directly addressable but are absent from normal navigation. This presentation change preserves records and API contracts; it does not claim desktop integration or remote execution is complete.
+
+Semantic action variants use sage (`.button.success`) for approvals, access grants, and acceptance; coral (`.button.danger`) for removal, revocation, decline, and stopping resources; and amber (`.button.warning`) for operations that require caution, such as moving ownership context. General creation, navigation, and sending actions remain blue or neutral. Variants use the paired soft surface at rest and the semantic fill on hover, with `--color-status-action-text` as the dark foreground. Labels, disabled states, and immediate focus outlines remain visible. Task and request badges use the corresponding status roles; an approved request still does not mean a resource is ready.
+
+The project summary and metadata appear only on Overview, followed by a `--space-8` gap. Subsection pages begin with their own content beneath the breadcrumb; their page title remains available to assistive technology. Section stacks own their gaps; embedded cards, setup layouts, and resource views must not add a second outer margin or padding at that boundary. Preserve each panel’s internal padding independently.
+
+The desktop renderer shares the web token source and Select primitive. Its
+Tasks, Environments, and Project chat destinations use the same flush glass
+sidebar and account-card treatment, with a focus-managed drawer on narrow
+windows. Desktop errors use danger colors; agent identity colors must not
+stand in for failed states.
+
+Project chat places its history inside the shared desktop navigation. The reading
+column and composer use `--content-narrow`, with user turns on a neutral selected
+surface and assistant turns on the canvas. Only the empty-chat greeting is centered;
+conversation content remains left aligned. A compact composer expands with its
+text, keeps Send/Stop reachable, and exposes keyboard guidance through its accessible
+description. Routine timestamps, message counts, and repeated setup explanations
+are omitted; errors and missing configuration remain visible. History actions are
+available through the existing focus-managed navigation drawer on narrow windows.

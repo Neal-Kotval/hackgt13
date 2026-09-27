@@ -26,6 +26,23 @@ test("bootstraps named account and accepts only a matching GPU proof", async () 
   assert.match(result.evidenceRef, /^ssh:12345678-1234-1234-1234-123456789abc:[a-f0-9]{64}$/);
 });
 
+test("bootstrap installs operator and member device keys for the desktop account", async () => {
+  const member = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG1lbWJlcmRldmljZWtleWZvcnRlc3Rpbmdvbmx5";
+  const scripts = [];
+  await verifyRunpodSsh(job, { ...connection, authorizedKeys: [connection.publicKey, member] }, { run: async (_c, account, script) => {
+    scripts.push(script);
+    return account === "root" ? "" : `AGENTCLOUD_EVIDENCE=${JSON.stringify(validProof())}\n`;
+  } });
+  const encoded = scripts[0].match(/printf '%s' '([A-Za-z0-9+/=]+)' \| base64 -d > \/home\/agentcloud\/.ssh\/authorized_keys/)[1];
+  assert.equal(Buffer.from(encoded, "base64").toString(), `${connection.publicKey}\n${member}\n`);
+  let called = false;
+  await assert.rejects(verifyRunpodSsh(job, { ...connection, authorizedKeys: [member] }, { run: async () => { called = true; } }),
+    /authorized keys/);
+  await assert.rejects(verifyRunpodSsh(job, { ...connection, authorizedKeys: [connection.publicKey, "ssh-rsa AAAA"] },
+    { run: async () => { called = true; } }), /authorized keys/);
+  assert.equal(called, false);
+});
+
 test("does not bootstrap when direct SSH pinning or repository is invalid", async () => {
   let called = false;
   const run = async () => { called = true; };

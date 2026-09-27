@@ -113,3 +113,13 @@ JSON still stores coordination data. There is no cross-store transaction: failed
 ## Local Docker simulation
 
 `compose.yaml` builds the real backend as a non-root Node 22 development container, with persistent SQLite/JSON state and captured mail in a named volume. Its generated auth secret stays private in that volume, outside Docker image layers and Terraform state. `just dev-docker` connects the local frontend bridge to loopback port 3002. Remote bridge HTTP is accepted only for literal loopback hosts; other upstreams require HTTPS. `infra/local` is an alternative Docker Terraform root, separate from both AWS roots and never automatically applied. The simulator verifies local application flows, not AWS IAM, EC2 allocation, GPU availability, or agent execution.
+
+## Local Docker Codex integration (HAC-116)
+
+The opt-in local Codex path initializes a real Codex app-server in a Docker CPU
+box from project Settings and lets desktop send turns to the same persistent
+thread. Employee membership gates reads and chat; owners control setup and
+lifecycle. SQLite stores bounded attributed session items, while the Docker
+volume retains Codex history and workspace files. This local implementation does
+not satisfy the AWS/GPU execution or public multi-tenant milestones above. See
+[LOCAL_CODEX.md](LOCAL_CODEX.md) for setup, authentication, recovery and limits.
