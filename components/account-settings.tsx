@@ -85,7 +85,7 @@ export function AccountSettings() {
         </div>
         <p id="environment-limit-usage"><strong>{settings.activeEnvironments} of {settings.maxActiveEnvironments} slots in use</strong> at last refresh.</p>
         <div id="environment-limit-help" className="account-settings-help">
-          <p>Queued, starting, running, and stopping environments count toward your limit. Failed environments also count until cleanup finishes.</p>
+          <p>Queued, starting, and running environments count toward your limit. AWS frees a slot when it accepts termination; other providers and failed environments count until cleanup finishes.</p>
           <p>Lowering the limit leaves existing environments running. New environments must wait for a free slot. Organization budgets and approvals still apply.</p>
         </div>
         <div className="account-settings-actions">
