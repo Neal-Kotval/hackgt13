@@ -14,8 +14,9 @@ Decisions:
 | --- | --- |
 | Account | `agentcloud` (non-root), as today |
 | Codex binary | `codex` on `PATH` (`/usr/local/bin/codex` or the npm global bin), version `0.157.1` |
-| Other tools | `git`, `tmux`, `bash`, Node 22 |
-| Workspace (repo checkout) | Docker: `/home/agentcloud/workspace/repo` (or `/home/agentcloud/workspace` when no repo). Runpod: `/home/agentcloud/agentcloud/<jobId>`. Always read `workspacePath` from the API; never hardcode it. |
+| Other tools | `git`, `tmux`, `bash`, Node 22 (22.23.3, official tarball, SHA-256 pinned) |
+| Workspace (repo checkout) | Docker: `/home/agentcloud/workspace/repo` (or `/home/agentcloud/workspace` when no repo). Runpod: `/home/agentcloud/agentcloud/<jobId>/repo` (the clone inside the job directory, so `git diff` works there). Always read `workspacePath` from the API; never hardcode it. |
+| Codex config | `~/.codex/config.toml` (agentcloud, 0600) contains `cli_auth_credentials_store = "file"`, written merge-safe at box start (Docker `entrypoint.sh`, Runpod start script). This keeps sign-in in `auth.json`; a keyring store would escape teardown cleanup. The agent check fails without it. |
 | Codex auth | `~/.codex/auth.json` (0600), created by `codex login --device-auth`; removed at teardown |
 | Terminal session | tmux session named `agentcloud` |
 | AgentCloud scratch | `/tmp/agentcloud-*` and `~/.cache/agentcloud` only |
@@ -33,7 +34,14 @@ Each job gains:
 }
 ```
 
-`agent.codex.state` is `ready` only after the worker ran `codex --version` over SSH as `agentcloud` and saw the pinned version. That result is recorded as evidence in table `run_box_agent_check (job_id, agent, version, checked_at, ok, reason)`. The environment's own `state` (`ready`, etc.) is unchanged, so SSH readiness and agent readiness are separate facts.
+`agent.codex.state` is `ready` only after the worker ran `codex --version` over SSH as `agentcloud`, saw the pinned version, and found the file credential store configured. That result is recorded as evidence in table `run_box_agent_check (job_id, agent, version, checked_at, ok, reason)` (primary key `job_id, agent`; the latest check wins). The environment's own `state` (`ready`, etc.) is unchanged, so SSH readiness and agent readiness are separate facts: a failed check leaves the environment `ready` with `agent.codex.state = "failed"` and a reason.
+
+`workspacePath` is stored in table `run_box_workspace (job_id, path, recorded_at)` when the job becomes ready, and is returned only while the job is `ready`.
+
+Implementation (HAC-121, `lib/agent-check.mjs`):
+- Docker: `codex --version` runs inside the existing SSH verification script, before the worker's one-time key is removed.
+- Runpod: after the GPU proof, a follow-up SSH command as `agentcloud` with the operator key waits (up to 240 s) for the background toolchain step of the start script (`/var/lib/agentcloud/toolchain.done`), then runs `codex --version`. The start script installs tmux (apt), Node 22 when `node` is older, and Codex when it is missing or not 0.157.1, in the background so sshd is not delayed.
+- The Docker image is rebuilt automatically when `infra/sandbox/` changes (build-context hash label), so an older local image cannot lack Codex.
 
 **Teardown cleanup:** before removing a box on stop, expiry or reconciliation, the worker runs, best effort over SSH as `agentcloud`:
 
@@ -42,6 +50,10 @@ codex logout || true; rm -f ~/.codex/auth.json; rm -rf /tmp/agentcloud-* ~/.cach
 ```
 
 It then records `run_box_cleanup_log (job_id, step, ok, at)`. A cleanup failure never blocks teardown.
+
+Steps recorded (only names and outcomes; never command output): `cleanup-exec` (the cleanup reached the box), `codex-logout`, `remove-codex-auth`, `remove-scratch`, `verify-auth-absent`. Transport per provider:
+- Docker: the worker's one-time SSH key is already removed at ready, so cleanup runs through `docker exec --user agentcloud` (no SSH key needed; local Docker only) before `docker rm`, on stop, expiry, and reconciler removal of a running container.
+- Runpod: SSH as `agentcloud` with the operator key against the recorded host-key pin, in the reconciler before `terminatePod` (stop, expiry, lost guard). Tagged orphans with no job are terminated without cleanup.
 
 ## Agent run events (HAC-124)
 
@@ -114,7 +126,7 @@ The web Environments card uses `id="rb-<runBoxId>"`. The web Runs page reads `?r
 
 | Lane | Owns |
 | --- | --- |
-| HAC-121 | `infra/sandbox/**`, `lib/docker-sandbox-*.mjs`, `lib/runpod-worker.mjs` (start script only), new `lib/agent-check.mjs`, the `workspacePath`/`agent` fields in the GET of `app/api/run-boxes/route.ts` |
+| HAC-121 | `infra/sandbox/**`, `lib/docker-sandbox-*.mjs`, `lib/runpod-worker.mjs` (start script, plus the agent check and cleanup helpers), new `lib/agent-check.mjs`, the `workspacePath`/`agent` fields in the GET of `app/api/run-boxes/route.ts`. Also touched minimally: the optional `cleanupAgent` hook in `lib/runpod-reconcile.mjs`, the Runpod wiring in `scripts/run-box-worker.mjs`, and the module copy lists in `tests/run-box-api.test.mjs` / `tests/ssh-connection-api.test.mjs` |
 | HAC-122 | `desktop/electron/codex-*.ts`, `desktop/src/components/CodexPanel.tsx`, `desktop/src/lib/codex-*.ts`, and minimal registration lines in `desktop/electron/main.ts`/`preload.ts` |
 | HAC-123 | `desktop/electron/ssh-terminal.ts`, `terminal-sessions.ts`, `desktop/src/lib/deep-link.ts`, `desktop/src/components/TerminalPanel.tsx`, `EnvironmentsPanel.tsx`, and the routing in `desktop/src/App.tsx` |
 | HAC-124 | `lib/agent-runs.mjs`, `app/api/agent-runs/**`, `components/runs/**`, and the `id="rb-…"` anchor on web environment cards |
