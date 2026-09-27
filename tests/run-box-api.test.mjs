@@ -37,6 +37,7 @@ approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved
   maxRunMinutes: 120, monthlyMinutes: 1200, actorId: fixture.users[0].id });
 const admin = await route("../app/api/admin/aws-approvals/route.ts", "aws-approvals-route.js", 4);
 const stop = await route("../app/api/run-boxes/[id]/stop/route.ts", "stop-route.js", 5);
+const forceStop = await route("../app/api/run-boxes/[id]/force-stop/route.ts", "force-stop-route.js", 5);
 const owner = fixture.users[0];
 const member = fixture.users[1];
 
@@ -328,4 +329,48 @@ test("HAC-166: aws-cpu creation records the requester's CloudFront viewer IPv4 o
   } finally {
     delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
   }
+});
+
+// HAC-168: the single-active guard is global per provider, so a stuck job in a project
+// the caller cannot see blocked them with no explanation and no way to clear it.
+test("HAC-168: the active-box conflict names only a visible blocker, and its owner can force stop it", async () => {
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
+  // The organization owner sees every project; the member sees only their own.
+  const hidden = await store.action({ type: "createProject", name: "Hidden project",
+    repo: "https://example.com/hidden", compute: "Hosted Linux", template: "blank" });
+  fixture.grantMembership(owner.id, hidden.id, "owner");
+  const mine = await store.action({ type: "createProject", name: "Member project",
+    repo: "https://example.com/mine", compute: "Hosted Linux", template: "blank" });
+  fixture.grantMembership(member.id, mine.id, "owner");
+  const create = (user, project, key) => boxes.POST(request("/api/run-boxes",
+    { projectId: project, profileId: "aws-cpu", durationHours: 1, idempotencyKey: key }, user.cookie));
+  const blocker = await create(owner, hidden.id, "hac-168-blocker");
+  assert.equal(blocker.status, 201);
+  const job = (await blocker.json()).job;
+  db.prepare("UPDATE run_box_job SET state = 'stopping', stop_requested_at = ? WHERE id = ?").run(new Date().toISOString(), job.id);
+
+  const refused = await create(member, mine.id, "hac-168-refused");
+  assert.equal(refused.status, 409);
+  const refusedMessage = (await refused.json()).error;
+  assert.match(refusedMessage, /AWS run box is already active in another project/);
+  assert.match(refusedMessage, /force stop/i);
+  assert.doesNotMatch(refusedMessage, /Hidden project/);
+  const visible = await create(owner, projectId, "hac-168-visible");
+  assert.equal(visible.status, 409);
+  assert.match((await visible.json()).error, /in "Hidden project" \(stopping\).*force stop/is);
+
+  const call = (user, project, id = job.id) => forceStop.POST(request(`/api/run-boxes/${id}/force-stop`, { projectId: project }, user.cookie),
+    { params: Promise.resolve({ id }) });
+  assert.equal((await forceStop.POST(request(`/api/run-boxes/${job.id}/force-stop`, { projectId: hidden.id }), { params: Promise.resolve({ id: job.id }) })).status, 401);
+  assert.equal((await call(member, hidden.id)).status, 403);
+  assert.equal((await call(member, projectId)).status, 403);
+  assert.equal((await call(owner, projectId)).status, 404);
+  const forced = await call(owner, hidden.id);
+  assert.equal(forced.status, 200);
+  const result = await forced.json();
+  assert.equal(result.outcome, "stopped");
+  assert.equal(result.job.state, "stopped");
+  assert.equal(result.job.force_stop_requested_by, owner.id);
+  assert.equal((await create(member, mine.id, "hac-168-after")).status, 201);
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
 });
