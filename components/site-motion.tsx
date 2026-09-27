@@ -22,7 +22,7 @@ export function SiteMotion({ children }: { children: ReactNode }) {
       }
       running.clear();
     }
-    function enter(element: HTMLElement, kind: "surface" | "drawer" | "dialog" = "surface", index = 0) {
+    function enter(element: HTMLElement, kind: "surface" | "drawer" | "dialog" = "surface", index = 0, inPlace = false) {
       if (preference.matches || !element.isConnected || !element.getClientRects().length) return;
       const tokens = getComputedStyle(document.documentElement);
       const read = (name: string) => tokens.getPropertyValue(name).trim();
@@ -36,7 +36,8 @@ export function SiteMotion({ children }: { children: ReactNode }) {
       const previous = running.get(element);
       previous?.animation.cancel();
       previous?.restore();
-      const fadeOnly = element.matches(".select-menu, .toast");
+      // Content replacing a loading placeholder fades where the placeholder stood instead of rising.
+      const fadeOnly = inPlace || element.matches(".select-menu, .toast");
       const originals = (fadeOnly ? ["opacity"] : ["opacity", "transform"]).map(property => ({property, value: element.style.getPropertyValue(property), priority: element.style.getPropertyPriority(property)}));
       const restore = () => originals.forEach(({property, value, priority}) => {
         if (value) element.style.setProperty(property, value, priority);
@@ -66,7 +67,7 @@ export function SiteMotion({ children }: { children: ReactNode }) {
         element.removeAttribute("data-motion-active");
       }).catch(() => {});
     }
-    function discover(roots: ParentNode[]) {
+    function discover(roots: ParentNode[], inPlace = false) {
       const candidates = [...new Set(roots.flatMap(root => [
         ...(root instanceof HTMLElement && root.matches(surfaces) ? [root] : []),
         ...root.querySelectorAll<HTMLElement>(surfaces),
@@ -75,13 +76,15 @@ export function SiteMotion({ children }: { children: ReactNode }) {
       fresh.forEach(element => seen.add(element));
       // Animate the containing surface once instead of compounding nested fades.
       const topLevel = fresh.filter(element => !fresh.some(parent => parent !== element && parent.contains(element)));
-      topLevel.forEach((element, index) => enter(element, "surface", index));
+      topLevel.forEach((element, index) => enter(element, "surface", index, inPlace));
     }
     discover([document]);
     const observer = new MutationObserver(records => {
       const added: HTMLElement[] = [];
+      let replacedSkeleton = false;
       for (const record of records) {
         if (record.type === "childList") {
+          record.removedNodes.forEach(node => {if (node instanceof Element && node.matches(".skeleton-region, :has(.skeleton-region)")) replacedSkeleton = true;});
           record.addedNodes.forEach(node => {if (node instanceof HTMLElement) added.push(node);});
         } else if (record.target instanceof HTMLDialogElement && record.target.open) {
           const inner = record.target.querySelector<HTMLElement>(".modal-inner");
@@ -90,7 +93,7 @@ export function SiteMotion({ children }: { children: ReactNode }) {
           enter(record.target, "drawer");
         }
       }
-      discover(added);
+      discover(added, replacedSkeleton);
       // Detached surfaces cannot finish visibly; release their animations immediately.
       for (const [element, { animation, restore }] of running) {
         if (!element.isConnected) {animation.cancel(); restore(); element.removeAttribute("data-motion-active"); running.delete(element);}

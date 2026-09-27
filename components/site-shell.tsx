@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SquaresFour, Users, List, X, House, HardDrives, Play, Gear } from "@phosphor-icons/react";
 import { Select } from "./ui/select";
 import { EmployeeMenu } from "./employee-auth";
+import { Skeleton, SkeletonRegion } from "./ui/skeleton";
 import { authClient } from "@/lib/auth-client";
 import "./site-shell.css";
 
@@ -42,18 +43,18 @@ function SiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { data: activeOrganization } = authClient.useActiveOrganization();
-  const [projects, setProjects] = useState<ProjectLink[]>([]);
+  const [projects, setProjects] = useState<ProjectLink[] | null>(null);
   const [open, setOpen] = useState(false);
   const sidebar = useRef<HTMLElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const pieces = pathname.split("/");
   const section = legacySections[pieces[3]] ?? pieces[3] ?? "";
-  const project = projects.find(p => p.id === pieces[2]) || (pieces[1] !== "projects" || !pieces[2] || pieces[2] === "new" ? projects[0] : undefined);
-  useEffect(() => {setProjects([]);}, [activeOrganization?.id]);
+  const project = projects?.find(p => p.id === pieces[2]) || (pieces[1] !== "projects" || !pieces[2] || pieces[2] === "new" ? projects?.[0] : undefined);
+  useEffect(() => {setProjects(null);}, [activeOrganization?.id]);
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/state", { signal: controller.signal }).then(r => r.ok ? r.json() : null).then(data => {if (data) setProjects(data.projects);}).catch(() => {});
+    fetch("/api/state", { signal: controller.signal }).then(r => r.ok ? r.json() : null).then(data => setProjects(data ? data.projects : [])).catch(error => {if (error?.name !== "AbortError") setProjects([]);});
     return () => controller.abort();
   }, [pathname, activeOrganization?.id]);
   useEffect(() => {setOpen(false);}, [pathname]);
@@ -90,7 +91,8 @@ function SiteShell({ children }: { children: ReactNode }) {
       <button className="button ghost site-sidebar-close" aria-label="Close navigation" onClick={() => setOpen(false)}><X /></button>
       <nav className="site-navigation" aria-label="Main navigation">
         <div className="site-nav-group">{navLink("Projects", "/projects", SquaresFour, pathname === "/projects" || pathname === "/projects/new")}{navLink("Organizations", "/organizations", Users)}</div>
-        {projects.length > 0 && <div className="site-nav-group"><div className="site-project-picker"><h2 className="site-nav-label">Project</h2><Select aria-label="Current project" value={project?.id || ""} onChange={event => {router.push(`/projects/${event.target.value}`); setOpen(false);}}><option value="" disabled>Select project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></div>
+        {projects === null && <SkeletonRegion label="Loading projects" className="site-nav-group skeleton-nav"><Skeleton variant="control" />{views.map(([label]) => <Skeleton key={label} width="60" />)}</SkeletonRegion>}
+        {projects && projects.length > 0 && <div className="site-nav-group"><div className="site-project-picker"><h2 className="site-nav-label">Project</h2><Select aria-label="Current project" value={project?.id || ""} onChange={event => {router.push(`/projects/${event.target.value}`); setOpen(false);}}><option value="" disabled>Select project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></div>
         {project && views.map(([label, segment, Icon]) => navLink(label, `/projects/${project.id}${segment ? "/" + segment : ""}`, Icon, pieces[1] === "projects" && pieces[2] === project.id && section === segment))}</div>}
       </nav>
       <div className="site-account"><EmployeeMenu navigation={false} /></div>

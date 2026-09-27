@@ -248,6 +248,16 @@
   --duration-stagger: 65ms;
   --duration-stagger-max: 260ms;
   --duration-instant: 0ms;
+  /* Loading placeholders: one slow sweep communicates pending data, not decoration. */
+  --duration-skeleton: 1600ms;
+  --color-skeleton: color-mix(in srgb, var(--color-border) 55%, var(--color-surface-raised));
+  --color-skeleton-highlight: var(--color-surface-raised);
+  --skeleton-sweep-size: 200%;
+  --skeleton-text-height: 0.75rem;
+  --skeleton-title-height: 1.5rem;
+  --skeleton-hero-height: 2.25rem;
+  --skeleton-block-height: 6rem;
+  --skeleton-action-width: 8.5rem;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --opacity-disabled: 0.45;
   --opacity-reveal-start: 0;
@@ -384,6 +394,7 @@
     --duration-enter: var(--duration-instant);
     --duration-stagger: var(--duration-instant);
     --duration-stagger-max: var(--duration-instant);
+    --duration-skeleton: var(--duration-instant);
     --motion-hover-distance: var(--motion-rest-distance);
     --motion-enter-distance: var(--motion-rest-distance);
     --motion-drawer-distance: var(--motion-rest-distance);

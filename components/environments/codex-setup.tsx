@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle, Copy, Desktop } from "@phosphor-icons/react";
+import { CheckCircle, Desktop } from "@phosphor-icons/react";
 
 type Session = {
   id: string;
@@ -11,7 +11,6 @@ type Session = {
   isSetupSession?: boolean;
   target?: { kind: string; runBoxId?: string };
 };
-type Login = { verificationUrl: string; userCode: string };
 async function request<T>(url: string, body?: object): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...(body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
   const data = await response.json();
@@ -19,20 +18,21 @@ async function request<T>(url: string, body?: object): Promise<T> {
   return data as T;
 }
 
-/** Setup lives on the environment card; desktop only receives an authenticated target. */
-export function CodexEnvironmentSetup({ projectId, runBoxId, agentId, owner, desktopUrl }: {
-  projectId: string; runBoxId: string; agentId?: string; owner: boolean; desktopUrl: string;
+/** Settings owns setup; desktop supplies the browser OAuth callback tunnel. */
+export function CodexEnvironmentSetup({ projectId, runBoxId, owner, desktopUrl }: {
+  projectId: string; runBoxId: string; owner: boolean; desktopUrl: string;
 }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [peers, setPeers] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [login, setLogin] = useState<Login | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
   const [opening, setOpening] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const redirectAfterSignIn = useRef(false);
+  const peerRequestId = useRef<string | null>(null);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
@@ -44,9 +44,10 @@ export function CodexEnvironmentSetup({ projectId, runBoxId, agentId, owner, des
         if (!active) return;
         const matches = data.sessions.filter(item => item.target?.kind === "runBox" && item.target.runBoxId === runBoxId);
         setSession(matches.find(item => item.isSetupSession) || matches[0] || null);
+        setPeers(matches.filter(item => item.isSetupSession && item.agentId !== (matches.find(candidate => candidate.isSetupSession) || matches[0])?.agentId));
         setLoadError("");
       } catch (cause) {
-        if (active) { setLoadError(cause instanceof Error ? cause.message : "Could not check Codex sign-in."); setSession(null); }
+        if (active) { setLoadError(cause instanceof Error ? cause.message : "Could not check Codex sign-in."); setSession(null); setPeers([]); }
       } finally {
         if (active) { setLoading(false); timer = setTimeout(poll, 2500); }
       }
@@ -57,7 +58,7 @@ export function CodexEnvironmentSetup({ projectId, runBoxId, agentId, owner, des
   const ready = session?.status === "ready" || session?.status === "running";
   useEffect(() => {
     if (!ready) return;
-    setLogin(null);
+    setSigningIn(false);
     if (redirectAfterSignIn.current && desktopUrl) {
       redirectAfterSignIn.current = false;
       setOpening(true);
@@ -67,57 +68,70 @@ export function CodexEnvironmentSetup({ projectId, runBoxId, agentId, owner, des
   async function prepare() {
     setBusy(true); setError("");
     try {
-      let id = agentId;
-      if (!id) {
-        const state = await request<{ projects: { id: string; agents: { id: string; client: string }[] }[] }>("/api/state");
-        id = state.projects.find(item => item.id === projectId)?.agents.find(item => item.client === "Codex")?.id;
-        if (!id) {
-          const result = await request<{ agentId: string }>("/api/state", { type: "addAgent", projectId, client: "Codex", role: "Project coding agent" });
-          id = result.agentId;
-        }
-      }
       const result = session
         ? await request<{ session: Session }>(`/api/codex-sessions/${session.id}`, { action: "resume" })
-        : await request<{ session: Session }>("/api/codex-sessions", { projectId, agentId: id, runBoxId });
+        : await request<{ session: Session }>("/api/codex-sessions", { projectId, runBoxId });
       if (mounted.current) { setSession(result.session); setRefresh(value => value + 1); }
     } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : "Could not prepare Codex."); }
     finally { if (mounted.current) setBusy(false); }
   }
-  async function signIn() {
-    if (!session) return;
+  async function addPeer() {
     setBusy(true); setError("");
+    peerRequestId.current ||= crypto.randomUUID();
     try {
-      const result = await request<{ login: Login }>(`/api/codex-sessions/${session.id}`, { action: "login", method: "deviceCode" });
-      const url = new URL(result.login.verificationUrl);
-      if (url.origin !== "https://auth.openai.com" || !url.pathname.startsWith("/codex/") || url.username || url.password) throw new Error("Codex returned an unsupported sign-in link.");
-      if (mounted.current) { setLogin(result.login); setCopied(false); redirectAfterSignIn.current = true; }
-    } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : "Could not start sign-in."); }
+      await request<{ session: Session }>("/api/codex-sessions", { projectId, runBoxId, newAgent: true, requestId: peerRequestId.current });
+      peerRequestId.current = null;
+      if (mounted.current) setRefresh(value => value + 1);
+    } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : "Could not add another agent."); }
     finally { if (mounted.current) setBusy(false); }
+  }
+  function signIn() {
+    if (!session || !desktopUrl) return;
+    setError("");
+    // Identifiers only: desktop obtains the OAuth URL through its authenticated
+    // API and binds the pinned SSH callback tunnel before opening the browser.
+    const url = new URL(desktopUrl);
+    url.searchParams.set("panel", "codex-login");
+    url.searchParams.set("codexSessionId", session.id);
+    setSigningIn(true);
+    redirectAfterSignIn.current = true;
+    window.location.assign(url.toString());
   }
   async function cancel() {
     if (!session) return;
     redirectAfterSignIn.current = false;
     setBusy(true);
-    try { await request(`/api/codex-sessions/${session.id}`, { action: "cancelLogin" }); setLogin(null); }
+    try { await request(`/api/codex-sessions/${session.id}`, { action: "cancelLogin" }); setSigningIn(false); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not cancel sign-in."); }
     finally { setBusy(false); }
   }
   return <section className="environment-codex" aria-label="Codex setup">
     <div className="resource-detail-title"><h4>Codex</h4><span className={`resource-badge ${ready ? "resource-badge--ready" : ""}`}>{loading ? "Checking sign-in" : ready ? "Signed in" : session?.status === "initializing" ? "Connecting" : "Setup needed"}</span></div>
-    <p className="resource-note">Set up this environment here, then create and manage your chats in the desktop app.</p>
+    <p className="resource-note">Sign in with ChatGPT to use Codex in this environment. Chats share its account and workspace.</p>
     {(error || loadError) && <p className="resource-feedback resource-feedback--error" role="alert">{error || loadError}</p>}
     {session?.status === "error" && !error && <p className="resource-feedback resource-feedback--error" role="alert">{session.error || "Reconnect this environment to continue setup."}</p>}
-    {login && !ready && <div className="environment-signin">
-      <p>Enter this code on the ChatGPT sign-in page. Your sign-in is shared by chats in this project environment and ends when the environment is removed.</p>
-      <div className="environment-actions"><code className="environment-signin-code">{login.userCode}</code><button className="button" type="button" onClick={() => void navigator.clipboard.writeText(login.userCode).then(() => setCopied(true)).catch(() => setError("Could not copy the code. Select and copy it manually."))}><Copy aria-hidden="true" />{copied ? "Copied" : "Copy code"}</button></div>
-      <div className="environment-actions"><a className="button primary" href={login.verificationUrl} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a><button className="button" type="button" disabled={busy} onClick={() => void cancel()}>Cancel sign-in</button></div>
-      <p className="resource-note" role="status">Waiting for sign-in. We’ll open desktop when it completes.</p>
+    {signingIn && !ready && <div className="environment-signin">
+      <p>Complete sign-in in your browser. The desktop app connects the login to this environment.</p>
+      <div className="environment-actions"><button className="button" type="button" onClick={signIn}>Open sign-in again</button><button className="button" type="button" disabled={busy} onClick={() => void cancel()}>Cancel sign-in</button></div>
+      <p className="resource-note" role="status">Waiting for sign-in. If nothing opened, start the desktop app and try again.</p>
     </div>}
     <div className="environment-actions">
-      {ready && desktopUrl ? <a className="button primary" href={desktopUrl}><Desktop aria-hidden="true" />Open in desktop</a> : !loading && owner && !login && session?.status !== "initializing" ? <button className="button primary" type="button" disabled={busy} onClick={() => void (session?.status === "auth_required" ? signIn() : prepare())}>{busy ? "Connecting…" : session?.status === "auth_required" ? "Sign in with ChatGPT" : session ? "Reconnect Codex" : "Set up Codex"}</button> : null}
+      {ready && desktopUrl ? <a className="button primary" href={desktopUrl}><Desktop aria-hidden="true" />Open in desktop</a> : !loading && owner && !signingIn && session?.status !== "initializing" ? <button className="button primary" type="button" disabled={busy} onClick={() => void (session?.status === "auth_required" ? signIn() : prepare())}>{busy ? "Connecting…" : session?.status === "auth_required" ? "Sign in with ChatGPT" : session ? "Reconnect Codex" : "Add Codex"}</button> : null}
       {!owner && !ready && !loading && <p className="resource-note">A project owner needs to finish Codex setup for this environment.</p>}
       {(error || loadError) && <button className="button" type="button" onClick={() => { setError(""); setRefresh(value => value + 1); }}>Check again</button>}
     </div>
+    {ready && <div className="environment-codex-peers">
+      <p className="resource-note">Each additional agent gets its own workspace and chat in this environment.</p>
+      {peers.map((peer, index) => {
+        const url = desktopUrl ? new URL(desktopUrl) : null;
+        url?.searchParams.set("codexSessionId", peer.id);
+        return <div className="environment-actions" key={peer.id}>
+          <span>Codex {index + 2} · {peer.status === "ready" || peer.status === "running" ? "Ready" : peer.status === "initializing" ? "Connecting" : peer.status === "auth_required" ? "Sign-in needed" : peer.status}</span>
+          {url && <a className="button" href={url.toString()}>Open in desktop</a>}
+        </div>;
+      })}
+      {owner && <div className="environment-actions"><button className="button" type="button" disabled={busy} onClick={() => void addPeer()}>{busy ? "Adding agent…" : "Add another Codex agent"}</button></div>}
+    </div>}
     {opening && ready && <p className="resource-note" role="status"><CheckCircle aria-hidden="true" />Signed in. If desktop didn’t open, use Open in desktop above.</p>}
   </section>;
 }

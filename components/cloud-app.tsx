@@ -38,8 +38,10 @@ import {
 import type { State, Project, Agent, Task, Handoff } from "@/lib/types";
 import { ResourceCatalog, ResourceRequests, InferenceDraft } from "./resources";
 import { RunControl } from "./runs/run-control";
+import { Skeleton, SkeletonHeading, SkeletonPanel, SkeletonRegion, SkeletonRows } from "./ui/skeleton";
 import { ResourceGraph } from "./resource-graph";
 import { Environments } from "./environments";
+import { AgentSettings } from "./environments/agent-settings";
 type Action = Record<string, unknown>;
 const iconProps = { weight: "duotone" as const };
 function Icon({ children }: { children: ReactNode }) {
@@ -79,13 +81,17 @@ function time(value: string) {
         second: "2-digit",
       });
 }
+// Section links remount this route, so keep the last snapshot in the browser to
+// render the next section immediately while the stream reconnects. Server renders
+// never read it, so one visitor's workspace cannot reach another request.
+let workspaceSnapshot: State | null = null;
 export function CloudApp() {
   const pathname = usePathname();
   const router = useRouter();
-  const [state, setState] = useState<State | null>(null);
+  const [state, setState] = useState<State | null>(() => typeof window === "undefined" ? null : workspaceSnapshot);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [online, setOnline] = useState(false);
+  const [online, setOnline] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<"task" | "handoff" | null>(null);
   const [selectedHandoff, setSelectedHandoff] = useState<Handoff | null>(null);
@@ -116,6 +122,9 @@ export function CloudApp() {
     source.onerror = () => setOnline(false);
     return () => source.close();
   }, []);
+  useEffect(() => {
+    if (state) workspaceSnapshot = state;
+  }, [state]);
   useEffect(() => {
     setFilter("all");
   }, [pathname]);
@@ -159,18 +168,25 @@ export function CloudApp() {
   const base = `/projects/${project?.id || id || ""}`;
   if (!state)
     return (
-      <main className="loading">
-        <TerminalWindow {...iconProps} />
-        <h1>
-          alto<span className="cyan-text">_</span>
-        </h1>
-        <p>{error || "Opening your workspace…"}</p>
-        {error && (
-          <button className="button" onClick={() => location.reload()}>
-            Try again
-          </button>
-        )}
-      </main>
+      <>
+        <main className="app-shell" id="workspace-content" tabIndex={-1}>
+          {error ? (
+            <div className="workspace-load-error">
+              <div role="alert" className="alert error">
+                <Warning />
+                {error}
+              </div>
+              <button className="button" onClick={() => location.reload()}>
+                Try again
+              </button>
+            </div>
+          ) : (
+            <WorkspaceSkeleton
+              view={isProjects ? "projects" : isSetup ? "setup" : page === "dashboard" ? "overview" : "section"}
+            />
+          )}
+        </main>
+      </>
     );
   return (
     <>
@@ -191,9 +207,9 @@ export function CloudApp() {
               <span>{page === "dashboard" ? "overview" : page}</span>
             </>
           )}
-          <span className={`connection ${online ? "connected" : ""}`}>
+          <span className={`connection ${online ? "connected" : online === null ? "pending" : ""}`}>
             <span className="status-dot" />
-            {online ? "stream connected" : "reconnecting…"}
+            {online ? "stream connected" : online === null ? "connecting…" : "reconnecting…"}
           </span>
         </div>
         {error && (
@@ -258,7 +274,7 @@ export function CloudApp() {
               </span>
               <span className="meta-right">Project workspace pending</span>
             </div>
-            </> : <h1 className="visually-hidden project-section-title">{({board: "Task board", desktop: "CLI connection"} as Record<string, string>)[page] ?? page.charAt(0).toUpperCase() + page.slice(1)}</h1>}
+            </> : <h1 className="visually-hidden project-section-title">{({board: "Task board", desktop: "Agent settings"} as Record<string, string>)[page] ?? page.charAt(0).toUpperCase() + page.slice(1)}</h1>}
             {page === "environments" ? (
               <div className="project-sections">
                 <Environments project={project} />
@@ -274,21 +290,8 @@ export function CloudApp() {
                   <ResourceCatalog project={project} onAction={resourceAction} />
                 </details>
               </div>
-            ) : page === "settings" ? (
-              <div className="project-sections">
-                <AgentSetup project={project} action={action} busy={busy} notify={setNotice} />
-                <details className="project-disclosure" id="cli-guide">
-                  <summary>CLI connection guide</summary>
-                  <DesktopPage project={project} notify={setNotice} />
-                </details>
-              </div>
-            ) : page === "agents" ? (
-              <AgentSetup
-                project={project}
-                action={action}
-                busy={busy}
-                notify={setNotice}
-              />
+            ) : page === "settings" || page === "agents" || page === "desktop" ? (
+              <AgentSettings key={project.id} project={project} />
             ) : page === "review" ? (
               <Review
                 project={project}
@@ -299,8 +302,6 @@ export function CloudApp() {
                   setModal("handoff");
                 }}
               />
-            ) : page === "desktop" ? (
-              <DesktopPage project={project} notify={setNotice} />
             ) : page === "resources" ? (
               <ResourceCatalog project={project} onAction={resourceAction} />
             ) : page === "requests" ? (
@@ -897,6 +898,40 @@ function ActivityFeed({
     </div>
   );
 }
+// Mirrors the breadcrumb, heading, and panel geometry of each workspace view.
+function WorkspaceSkeleton({ view }: { view: "projects" | "setup" | "overview" | "section" }) {
+  return (
+    <SkeletonRegion label="Loading workspace">
+      <div className="breadcrumb"><Skeleton width="20" /></div>
+      {view === "projects" ? (
+        <>
+          <SkeletonHeading />
+          <div className="projects-summary"><Skeleton width="20" /></div>
+          <div className="project-list skeleton-project-list"><SkeletonRows count={3} /></div>
+        </>
+      ) : view === "setup" ? (
+        <>
+          <SkeletonHeading action={false} />
+          <SkeletonPanel rows={0} lines={2} action />
+        </>
+      ) : view === "overview" ? (
+        <>
+          <SkeletonHeading />
+          <div className="project-meta"><Skeleton width="50" /></div>
+          <div className="project-sections">
+            <SkeletonPanel rows={2} icon={false} lines={1} action />
+            <SkeletonPanel rows={2} />
+          </div>
+        </>
+      ) : (
+        <div className="project-sections">
+          <SkeletonPanel rows={3} lines={1} />
+          <SkeletonPanel rows={0} lines={1} />
+        </div>
+      )}
+    </SkeletonRegion>
+  );
+}
 function Projects({ projects }: { projects: Project[] }) {
   return (
     <>
@@ -1110,14 +1145,14 @@ function Setup({
             <span>02</span>
             <div>
               <h3>Connect the team</h3>
-              <p>Give clients separate tokens and roles.</p>
+              <p>Set up an environment, then add Codex in Settings.</p>
             </div>
           </li>
           <li>
             <span>03</span>
             <div>
               <h3>Coordinate the work</h3>
-              <p>Assign tasks. Publish services. Pass handoffs.</p>
+              <p>Open desktop and give Codex work through chat.</p>
             </div>
           </li>
         </ol>
@@ -1244,148 +1279,6 @@ function Modal({
     </dialog>
   );
 }
-function AgentSetup({
-  project,
-  action,
-  busy,
-  notify,
-}: {
-  project: Project;
-  action: (a: Action) => Promise<any>;
-  busy: boolean;
-  notify: (s: string) => void;
-}) {
-  const [result, setResult] = useState<{
-    token: string;
-    agentId: string;
-  } | null>(null);
-  const [client, setClient] = useState("Codex");
-  useEffect(() => {
-    if (window.location.hash !== "#agent-setup") return;
-    const setup = document.getElementById("agent-setup");
-    setup?.focus({ preventScroll: true });
-    setup?.scrollIntoView();
-  }, []);
-  return (
-    <div id="agent-setup" tabIndex={-1} className="setup-layout connect-layout">
-      <section>
-        <SectionTitle label="Connect an agent" />
-        <p className="section-description">
-          A separate identity for every teammate. Give it a role, then connect
-          the CLI.
-        </p>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            const data = await action({
-              type: "addAgent",
-              client,
-              role: f.get("role"),
-            });
-            if (data) {
-              setResult(data);
-              notify("Agent registered. Save its connection token.");
-            }
-          }}
-        >
-          <fieldset>
-            <legend>Agent client</legend>
-            <div className="client-options">
-              {["Codex", "Claude", "Other"].map((c) => (
-                <button
-                  type="button"
-                  key={c}
-                  className={client === c ? "selected" : ""}
-                  aria-pressed={client === c}
-                  onClick={() => setClient(c)}
-                >
-                  {c === "Codex" ? (
-                    <Command />
-                  ) : c === "Claude" ? (
-                    <span>✳</span>
-                  ) : (
-                    <Code />
-                  )}
-                  {c}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-          <label>
-            Role
-            <input
-              name="role"
-              required
-              placeholder={
-                client === "Codex" ? "Backend engineer" : "Frontend engineer"
-              }
-              maxLength={80}
-            />
-          </label>
-          <div className="info-note">
-            <ShieldCheck />
-            Trusted client access to collaboration metadata. This connection
-            does not launch an AI tool or enforce filesystem permissions.
-          </div>
-          <button className="button primary" disabled={busy}>
-            <PlugsConnected />
-            Generate connection token
-          </button>
-        </form>
-        {result && (
-          <div className="token-panel">
-            <Tag tone="green">Agent registered</Tag>
-            <h3>Save this token now</h3>
-            <p>
-              It is shown once. Set it as an environment variable in the
-              terminal running your client.
-            </p>
-            <code className="token-value">{result.token}</code>
-            <button
-              className="button secondary"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(result.token);
-                  notify("Connection token copied.");
-                } catch {
-                  notify("Clipboard unavailable. Select the token to copy it.");
-                }
-              }}
-            >
-              <Copy />
-              Copy token
-            </button>
-            <pre>{`export AGENTCLOUD_TOKEN='<your-token>'\nnode cli/agentcloud.mjs connect ${project.id} --agent ${result.agentId}`}</pre>
-            <p>Keep this process running to report your connection status.</p>
-          </div>
-        )}
-      </section>
-      <aside>
-        <SectionTitle label="Project roster" number={project.agents.length} />
-        <div className="roster">
-          {project.agents.map((a) => (
-            <div key={a.id}>
-              <span
-                className={`agent-avatar ${agentTone(ownerName(project, a.id))}`}
-              >
-                {a.name.slice(0, 1)}
-              </span>
-              <div>
-                <h3>{a.name}</h3>
-                <p>{a.role}</p>
-              </div>
-              <Tag tone={a.status === "connected" ? "green" : "neutral"}>
-                {a.status}
-              </Tag>
-            </div>
-          ))}
-        </div>
-        <p className="muted">For terminal setup, expand the CLI connection guide in Settings.</p>
-      </aside>
-    </div>
-  );
-}
 function Review({
   project,
   action,
@@ -1488,97 +1381,5 @@ function Review({
         </aside>
       </div>
     </section>
-  );
-}
-function DesktopPage({
-  project,
-  notify,
-}: {
-  project: Project;
-  notify: (s: string) => void;
-}) {
-  const command = `node cli/agentcloud.mjs connect ${project.id} --agent <agent-id>`;
-  return (
-    <div className="setup-layout">
-      <section>
-        <div className="eyebrow">Your local bridge</div>
-        <h2 className="large-heading">
-          Same tools.
-          <br />
-          Shared project.
-        </h2>
-        <p className="section-description">
-          The CLI connects a client identity to alto and keeps your team’s
-          context within reach.
-        </p>
-        <ol className="cli-steps">
-          <li>
-            <h3>1. Create an agent identity</h3>
-            <p>Choose a role and generate a scoped connection token.</p>
-            <Link
-              className="button secondary"
-              href={`/projects/${project.id}/settings#agent-setup`}
-              onClick={(event) => {
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-                const setup = document.getElementById("agent-setup");
-                if (!setup) return;
-                // Handle local anchors directly: the router skips repeated hashes
-                // and can cancel an in-flight native smooth scroll.
-                event.preventDefault();
-                if (window.location.hash !== "#agent-setup") {
-                  window.history.pushState(null, "", event.currentTarget.href);
-                }
-                setup.focus({ preventScroll: true });
-                setup.scrollIntoView({ block: "start" });
-              }}
-            >
-              Agent setup <ArrowRight />
-            </Link>
-          </li>
-          <li>
-            <h3>2. Set your token</h3>
-            <pre>export AGENTCLOUD_TOKEN=&apos;&lt;your-token&gt;&apos;</pre>
-          </li>
-          <li>
-            <h3>3. Connect from this repository</h3>
-            <pre>{command}</pre>
-            <button
-              className="button ghost"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(command);
-                  notify(
-                    "Connection command copied. Replace <agent-id> with your agent ID.",
-                  );
-                } catch {
-                  notify(
-                    "Clipboard unavailable. Select the command to copy it.",
-                  );
-                }
-              }}
-            >
-              <Copy />
-              Copy command
-            </button>
-          </li>
-        </ol>
-      </section>
-      <aside className="setup-aside">
-        <Desktop {...iconProps} />
-        <h2>A small bridge for a bigger team.</h2>
-        <p>
-          The CLI supports real session heartbeats, task updates, service
-          registration, and handoffs through the collaboration API.
-        </p>
-        <div className="info-note">
-          <Warning />
-          Remote terminals, editor launching, Codex/Claude tool adapters, and a
-          native desktop shell are planned. The CLI does not launch an AI agent.
-        </div>
-        <Link className="text-link" href={`/projects/${project.id}`}>
-          Back to workspace <ArrowRight />
-        </Link>
-      </aside>
-    </div>
   );
 }

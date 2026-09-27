@@ -28,7 +28,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const keys = listSshKeys(db, employee.id) as { fingerprint: string }[];
     if (!keys.some((key) => injected.has(key.fingerprint)))
       return Response.json({
-        error: "None of your registered device keys was installed on this environment. Register this device, then create a new environment.",
+        error: "None of your device SSH keys is installed on this environment. It may have been created on the web before this device registered its key. Keep the desktop app signed in and retry in a minute; if it is still missing, create a new environment.",
         code: "no_authorized_key",
       }, { status: 403 });
     return Response.json({

@@ -256,3 +256,24 @@ test("HAC-166: worker and requester /32 rules share the job tag; revokeSshForJob
   assert.deepEqual(revoked.sort(), [worker.ruleId, requester.ruleId].sort());
   assert.deepEqual(rules, [other]);
 });
+
+test("HAC-166: revokeSshCidr removes one requester rule; termination still revokes every job-tagged rule", async () => {
+  const tagged = (id, cidr, job = jobId) => ({ SecurityGroupRuleId: id, IsEgress: false, IpProtocol: "tcp", FromPort: 22, ToPort: 22,
+    CidrIpv4: cidr, Tags: [{ Key: "AgentCloudJobId", Value: job }] });
+  const other = tagged("sgr-0999", "198.51.100.9/32", "33333333-3333-4333-8333-333333333333");
+  const rules = [tagged("sgr-0a01", "184.192.120.7/32"), tagged("sgr-0a02", "203.0.113.50/32"),
+    tagged("sgr-0a03", "203.0.113.51/32"), tagged("sgr-0a04", "203.0.113.52/32"), other];
+  const managedTags = [{ Key: "Project", Value: "AgentCloudDemo" }, { Key: "AgentCloudAutoExpire", Value: "true" }, { Key: "AgentCloudJobId", Value: jobId }];
+  let terminated = false;
+  const aws = fakeAws({ rules, overrides: {
+    "ec2:describe-instances": () => ({ Reservations: [{ Instances: [{ InstanceId: instanceId, Tags: managedTags,
+      State: { Name: terminated ? "terminated" : "running" }, BlockDeviceMappings: [{ Ebs: { VolumeId: "vol-0abc" } }] }] }] }),
+    "ec2:terminate-instances": () => { terminated = true; return {}; },
+    "ec2:describe-volumes": () => { throw new Error("AWS ec2:describe-volumes InvalidVolume.NotFound"); },
+  } });
+  const provider = createAwsCpuProvider({ aws, subnetId, sleep: async () => {} });
+  assert.deepEqual(await provider.revokeSshCidr(job(), "203.0.113.50/32"), ["sgr-0a02"]);
+  assert.deepEqual(await provider.revokeSshCidr(job(), "203.0.113.99/32"), []);
+  assert.equal((await provider.terminateInstance(instanceId)).state, "terminated");
+  assert.deepEqual(rules, [other]);
+});

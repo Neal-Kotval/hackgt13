@@ -24,6 +24,7 @@ import { SessionStore } from "./session-store.ts";
 import { DeviceKeyRegistrar, DeviceKeyStore } from "./device-key.ts";
 import { TerminalSessions } from "./terminal-sessions.ts";
 import { CodexLoginTunnels, type LoginTunnelEvent } from "./codex-login-tunnel.ts";
+import { createIpv4Fetch, ensureEnvironmentAccess } from "./environment-access.ts";
 import { isChatGptVerificationUrl } from "../src/lib/chatgpt-sign-in.ts";
 import type { AssistantStreamEvent, TerminalEvent } from "../src/lib/types.ts";
 import {
@@ -75,7 +76,9 @@ app.on("second-instance", (_event, argv) => {
 });
 
 if (process.defaultApp) {
-  if (process.argv.length >= 2) {
+  // macOS ignores argv when opening a URL handler. Keep the dedicated dev
+  // bundle registered instead of stealing links for generic Electron.app.
+  if (process.platform !== "darwin" && process.argv.length >= 2) {
     app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [
       path.resolve(process.argv[1]),
     ]);
@@ -461,8 +464,18 @@ app.whenReady().then(async () => {
   const registrar = new DeviceKeyRegistrar(keyStore, hostname(), (requestPath, init) =>
     authClient.fetchHuman(requestPath, init),
   );
+  // HAC-166: aws-cpu environments admit SSH only from registered /32s. Register this
+  // Mac's address over an IPv4-only connection so CloudFront sees the IPv4 that SSH uses.
+  const ipv4Fetch = createIpv4Fetch();
+  const ensureAccess = (runBoxId: string, onPending: () => void) =>
+    ensureEnvironmentAccess(
+      (requestPath, init) => authClient.fetchHuman(requestPath, init, ipv4Fetch),
+      runBoxId,
+      onPending,
+    );
   const terminalSessions = new TerminalSessions({
     request: (requestPath, init) => authClient.fetchHuman(requestPath, init),
+    ensureAccess,
     privateKey: () => registrar.privateKey(),
     beforeConnect: async () => {
       await registrar.ensureRegistered();
@@ -471,6 +484,7 @@ app.whenReady().then(async () => {
   terminals = terminalSessions;
   const codexLoginTunnels = new CodexLoginTunnels({
     request: (requestPath, init) => authClient.fetchHuman(requestPath, init),
+    ensureAccess,
     privateKey: () => registrar.privateKey(),
     beforeConnect: async () => {
       await registrar.ensureRegistered();

@@ -346,7 +346,9 @@ test("a pre-allocation stop waits for another worker's lease and for a recent la
     const service = provider([]);
     let result = await reconcileAwsRunBoxes(attempted.db, service, { workerId: "worker", requestStop });
     assert.equal(attempted.db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(attempted.job.id).state, "failed");
-    assert.ok(result.some((item) => item.status === "retry"));
+    // A failure before RunInstances waits quietly; it must not report `retry`, which would
+    // block every new allocation (live staging incident, HAC-166).
+    assert.ok(!result.some((item) => item.status === "retry"));
     const old = new Date(Date.now() - 20 * 60_000).toISOString();
     attempted.db.prepare("UPDATE run_box_transition SET created_at = ? WHERE job_id = ?").run(old, attempted.job.id);
     result = await reconcileAwsRunBoxes(attempted.db, provider([], { managedVolumes: [{ VolumeId: "vol-legacy", Tags: tagged("x", "Other") }] }),
@@ -384,18 +386,60 @@ function failedBeforeLaunch() {
   return { db, job };
 }
 
-test("a job that failed before any launch closes once quiet and EC2 shows nothing, unblocking new AWS requests", async () => {
+test("an aws-cpu job that failed before RunInstances closes at once when EC2 shows nothing, unblocking new AWS requests", async () => {
   const { db, job } = failedBeforeLaunch();
   try {
     assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
-    // Within 15 minutes of the claim it is left alone (a create could still surface).
-    await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
-    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
-    // After 15 quiet minutes with nothing tagged in EC2, it is closed.
-    db.prepare("UPDATE run_box_transition SET created_at = ? WHERE job_id = ?").run(new Date(Date.now() - 16 * 60_000).toISOString(), job.id);
-    db.prepare("UPDATE run_box_job SET lease_expires_at = ? WHERE id = ?").run(new Date(Date.now() - 60_000).toISOString(), job.id);
+    // No aws_cpu_environment row: the CPU worker never reached RunInstances, so no quiet window applies.
+    db.prepare("UPDATE run_box_job SET lease_expires_at = ? WHERE id = ?").run(new Date(Date.now() - 1_000).toISOString(), job.id);
     const result = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
     assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
+    const closed = db.prepare("SELECT * FROM run_box_transition WHERE job_id = ? ORDER BY id DESC LIMIT 1").get(job.id);
+    assert.equal(closed.evidence_ref, `job:no-launch:${job.id}:no-cpu-environment:ec2-inventory-empty`);
     assert.equal(nextAwsDecision(db).decision.outcome, "approved");
+  } finally { db.close(); }
+});
+
+test("an aws-cpu job never launched still waits for another worker's lease or a job-tagged resource", async () => {
+  const held = failedBeforeLaunch();
+  try {
+    held.db.prepare("UPDATE run_box_job SET worker_id = 'other', lease_expires_at = ? WHERE id = ?")
+      .run(new Date(Date.now() + 60_000).toISOString(), held.job.id);
+    await reconcileAwsRunBoxes(held.db, provider([]), { workerId: "worker", requestStop });
+    assert.equal(held.db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(held.job.id).state, "failed");
+  } finally { held.db.close(); }
+  const tagged = failedBeforeLaunch();
+  try {
+    const volumes = [{ VolumeId: "vol-1", Tags: [{ Key: "Project", Value: "AgentCloudDemo" }, { Key: "AgentCloudAutoExpire", Value: "true" },
+      { Key: "AgentCloudJobId", Value: tagged.job.id }] }];
+    await reconcileAwsRunBoxes(tagged.db, provider([], { managedVolumes: volumes }), { workerId: "worker", requestStop });
+    assert.equal(tagged.db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(tagged.job.id).state, "failed");
+  } finally { tagged.db.close(); }
+});
+
+test("an aws-cpu job with an environment row keeps the 15-minute quiet window", async () => {
+  const { db, job } = failedBeforeLaunch();
+  try {
+    // The row is written just before RunInstances, so a launch may have been attempted.
+    db.exec("CREATE TABLE aws_cpu_environment (job_id TEXT PRIMARY KEY, ssh_source_cidr TEXT, authorized_keys TEXT, created_at TEXT, updated_at TEXT)");
+    db.prepare("INSERT INTO aws_cpu_environment VALUES (?, '203.0.113.7/32', '[]', ?, ?)").run(job.id, new Date().toISOString(), new Date().toISOString());
+    await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+    db.prepare("UPDATE run_box_transition SET created_at = ? WHERE job_id = ?").run(new Date(Date.now() - 16 * 60_000).toISOString(), job.id);
+    const result = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+    assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
+  } finally { db.close(); }
+});
+
+// HAC-166 (live on staging): stopping a job that failed before any launch sent it down the
+// deterministic-RunInstances-rejection path, which reported `retry` and so blocked every
+// new allocation ("EC2 cleanup remains unconfirmed; refusing another allocation").
+test("a stopped job that failed before any launch never blocks allocation and closes on the next cycle", async () => {
+  const { db, job } = failedBeforeLaunch();
+  try {
+    requestRunBoxStop(db, job.id, "owner");
+    const closed = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+    assert.ok(!closed.some((item) => item.status === "retry"), JSON.stringify(closed));
+    assert.deepEqual(closed.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
   } finally { db.close(); }
 });

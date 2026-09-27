@@ -18,6 +18,7 @@ import net from "node:net";
 import type { Duplex } from "node:stream";
 import ssh2 from "ssh2";
 import { browserLoginCallbackPort, CODEX_CALLBACK_PORTS } from "../src/lib/chatgpt-sign-in.ts";
+import { AWS_CPU_PROFILE_ID } from "./environment-access.ts";
 import {
   fetchRunBoxConnection,
   HOST_KEY_MISMATCH_MESSAGE,
@@ -29,7 +30,7 @@ import {
 export const LOGIN_TUNNEL_TIMEOUT_MS = 10 * 60_000;
 export const UNREACHABLE_MESSAGE = "Could not reach the environment over SSH. Check that it is running, then try again.";
 export const FORWARD_REFUSED_MESSAGE =
-  "The environment refused to forward the sign-in callback. Use a device code instead.";
+  "The environment refused to forward the sign-in callback. Check SSH forwarding permissions and retry from project Settings.";
 export const LISTENER_MISSING_MESSAGE =
   "Codex's sign-in listener on the environment is not running. Start sign-in again.";
 export const TIMEOUT_MESSAGE = "ChatGPT sign-in timed out after 10 minutes. Start it again when you're ready.";
@@ -44,7 +45,7 @@ export class LoginTunnelError extends Error {
 }
 
 export function portInUseMessage(port: number): string {
-  return `Port ${port} on this Mac is in use (is another Codex sign-in running?). Close it, or use a device code instead.`;
+  return `Port ${port} on this Mac is in use (is another Codex sign-in running?). Close that sign-in and retry from project Settings.`;
 }
 
 /** Map a local listen error to a fixed message. */
@@ -233,7 +234,10 @@ export async function openLoginTunnel(options: {
   return { port, close: () => close() };
 }
 
-export type LoginTunnelEvent = { type: "closed"; sessionId: string; error?: string };
+export type LoginTunnelEvent =
+  | { type: "closed"; sessionId: string; error?: string }
+  /** HAC-166: waiting for an aws-cpu environment to admit this Mac's network. */
+  | { type: "access"; sessionId: string; state: "pending" };
 
 export type LoginTunnelDeps = {
   request: (path: string, init?: RequestInit) => Promise<Response>;
@@ -241,6 +245,8 @@ export type LoginTunnelDeps = {
   /** Called before connecting so a newly signed-in device key is registered. */
   beforeConnect?: () => Promise<void>;
   openExternal: (url: string) => Promise<void>;
+  /** HAC-166: admits this device's network to an aws-cpu environment before SSH. */
+  ensureAccess?: (runBoxId: string, onPending: () => void) => Promise<unknown>;
   connect?: (options: PinnedConnectOptions) => Promise<SshForwarder>;
   timeoutMs?: number;
 };
@@ -291,6 +297,12 @@ export class CodexLoginTunnels {
       await this.deps.beforeConnect?.();
       const connection = await fetchRunBoxConnection(this.deps.request, runBoxId);
       if (entry.cancelled) throw new LoginTunnelError("Sign-in was cancelled.");
+      if (connection.profileId === AWS_CPU_PROFILE_ID && this.deps.ensureAccess) {
+        await this.deps.ensureAccess(runBoxId, () => {
+          if (!entry.cancelled) send({ type: "access", sessionId, state: "pending" });
+        });
+        if (entry.cancelled) throw new LoginTunnelError("Sign-in was cancelled.");
+      }
       const tunnel = await openLoginTunnel({
         connection: {
           host: connection.host,

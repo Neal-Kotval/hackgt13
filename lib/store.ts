@@ -694,6 +694,62 @@ export async function agentAction(
   });
 }
 
+/** Resolve a current bearer credential without changing coordination state. */
+export async function authenticateAgentToken(token: string): Promise<{ projectId: string; agentId: string }> {
+  await globals.agentcloudQueue?.catch(() => {});
+  const disk = await load();
+  const credential = disk.credentials.find((c) => c.hash === hash(token));
+  if (!credential) throw new InputError("Invalid agent token", 401);
+  const p = project(disk, credential.projectId);
+  const a = agent(p, credential.agentId);
+  return { projectId: p.id, agentId: a.id };
+}
+
+/** Managed Codex uses the employee session and ChatGPT login, not a transport token.
+ * Call only after project ownership and environment readiness have been checked.
+ */
+export async function ensureManagedCodexAgent(projectId: string, preferredId?: string) {
+  return transaction((disk) => {
+    const p = project(disk, projectId);
+    const existing = preferredId
+      ? p.agents.find((row) => row.id === preferredId && row.client === "Codex")
+      : p.agents.find((row) => row.client === "Codex");
+    if (preferredId && !existing) throw new InputError("Codex identity not found in this project.", 409);
+    if (existing) return structuredClone(existing);
+    const createdId = id();
+    const created = {
+      id: createdId, name: "Codex", client: "Codex", role: "Project coding agent",
+      branch: `agents/${createdId.slice(0, 8)}`, status: "disconnected" as const,
+    };
+    p.agents.push(created);
+    event(p, "human", "Added Codex identity for environment sign-in; workspace branch is planned, not provisioned", "agent");
+    disk.state.revision++;
+    return structuredClone(created);
+  });
+}
+
+/** Add a separate tokenless Codex identity for another worktree on one box. */
+export async function createManagedCodexPeer(projectId: string, requestId: string) {
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(requestId))
+    throw new InputError("A unique agent request ID is required.", 400);
+  return transaction((disk) => {
+    const p = project(disk, projectId);
+    const existing = p.agents.find((row) => row.setupRequestId === requestId);
+    if (existing) return structuredClone(existing);
+    const number = p.agents.filter((row) => row.client === "Codex").length + 1;
+    const createdId = id();
+    const created = {
+      id: createdId, name: `Codex ${number}`, client: "Codex", role: "Project coding agent",
+      branch: `agent/${createdId}`, status: "disconnected" as const,
+      setupRequestId: requestId,
+    };
+    p.agents.push(created);
+    event(p, "human", `Added ${created.name} for a separate environment worktree`, "agent");
+    disk.state.revision++;
+    return structuredClone(created);
+  });
+}
+
 const DESKTOP_CHAT_CLIENT = "desktop-chat";
 
 /**

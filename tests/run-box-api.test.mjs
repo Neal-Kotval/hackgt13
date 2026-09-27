@@ -38,6 +38,8 @@ approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved
 const admin = await route("../app/api/admin/aws-approvals/route.ts", "aws-approvals-route.js", 4);
 const stop = await route("../app/api/run-boxes/[id]/stop/route.ts", "stop-route.js", 5);
 const memory = await route("../app/api/run-boxes/[id]/memory/route.ts", "memory-route.js", 5);
+const forceStop = await route("../app/api/run-boxes/[id]/force-stop/route.ts", "force-stop-route.js", 5);
+const sshAccess = await route("../app/api/run-boxes/[id]/ssh-access/route.ts", "ssh-access-route.js", 5);
 const owner = fixture.users[0];
 const member = fixture.users[1];
 
@@ -228,6 +230,30 @@ test("one-step local Docker sandbox path queues a CPU-only run box", {
   assert.equal(saved.computePreference.provider, "docker-local");
 });
 
+test("active Docker sandbox returns actionable conflict without recording another request", async () => {
+  const before = await requestCount();
+  const input = environment({ profileId: "local-docker-sandbox", durationHours: 1, idempotencyKey: "env-docker-1" });
+  const retry = await boxes.POST(request("/api/run-boxes", input, owner.cookie));
+  assert.equal(retry.status, 201);
+  const existing = (await retry.json()).job;
+  registerContainerTemplate(db, { id: "conflict-template", label: "Conflict template", imageRef: "example/codex:1",
+    imageId: `sha256:${"c".repeat(64)}`, source: "registry" });
+  for (const state of ["queued", "ready", "failed", "stopping"]) {
+    db.prepare("UPDATE run_box_job SET state = ? WHERE id = ?").run(state, existing.id);
+    for (const profileId of ["local-docker-sandbox", "local-template:conflict-template"]) {
+      const response = await boxes.POST(request("/api/run-boxes", { ...input, profileId,
+        idempotencyKey: `conflict-${state}-${profileId}` }, owner.cookie));
+      assert.equal(response.status, 409);
+      assert.match((await response.json()).error, /already active.*Use the existing environment or stop it/i);
+      assert.equal(await requestCount(), before);
+    }
+  }
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE id = ?").run(existing.id);
+  const replacement = await boxes.POST(request("/api/run-boxes", { ...input, idempotencyKey: "docker-after-stop" }, owner.cookie));
+  assert.equal(replacement.status, 201);
+  assert.notEqual((await replacement.json()).job.id, existing.id);
+});
+
 test("imported container template is listed and selectable for a local environment", async () => {
   registerContainerTemplate(db, { id: "codex-custom", label: "Custom Codex", imageRef: "example/codex:1",
     imageId: `sha256:${"b".repeat(64)}`, source: "registry" });
@@ -319,4 +345,121 @@ test("shared memory stays off until the project owner enables that environment",
   assert.equal((await enabled.json()).memory.enabled, true);
   const again = await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, owner.cookie))).json();
   assert.equal(again.jobs.find((item) => item.id === job.id).memory.enabled, true);
+});
+
+// HAC-168: the single-active guard is global per provider, so a stuck job in a project
+// the caller cannot see blocked them with no explanation and no way to clear it.
+test("HAC-168: the active-box conflict names only a visible blocker, and its owner can force stop it", async () => {
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
+  // The organization owner sees every project; the member sees only their own.
+  const hidden = await store.action({ type: "createProject", name: "Hidden project",
+    repo: "https://example.com/hidden", compute: "Hosted Linux", template: "blank" });
+  fixture.grantMembership(owner.id, hidden.id, "owner");
+  const mine = await store.action({ type: "createProject", name: "Member project",
+    repo: "https://example.com/mine", compute: "Hosted Linux", template: "blank" });
+  fixture.grantMembership(member.id, mine.id, "owner");
+  const create = (user, project, key) => boxes.POST(request("/api/run-boxes",
+    { projectId: project, profileId: "aws-cpu", durationHours: 1, idempotencyKey: key }, user.cookie));
+  const blocker = await create(owner, hidden.id, "hac-168-blocker");
+  assert.equal(blocker.status, 201);
+  const job = (await blocker.json()).job;
+  db.prepare("UPDATE run_box_job SET state = 'stopping', stop_requested_at = ? WHERE id = ?").run(new Date().toISOString(), job.id);
+
+  const refused = await create(member, mine.id, "hac-168-refused");
+  assert.equal(refused.status, 409);
+  const refusedMessage = (await refused.json()).error;
+  assert.match(refusedMessage, /AWS run box is already active in another project/);
+  assert.match(refusedMessage, /force stop/i);
+  assert.doesNotMatch(refusedMessage, /Hidden project/);
+  const visible = await create(owner, projectId, "hac-168-visible");
+  assert.equal(visible.status, 409);
+  assert.match((await visible.json()).error, /in "Hidden project" \(stopping\).*force stop/is);
+
+  const call = (user, project, id = job.id) => forceStop.POST(request(`/api/run-boxes/${id}/force-stop`, { projectId: project }, user.cookie),
+    { params: Promise.resolve({ id }) });
+  assert.equal((await forceStop.POST(request(`/api/run-boxes/${job.id}/force-stop`, { projectId: hidden.id }), { params: Promise.resolve({ id: job.id }) })).status, 401);
+  assert.equal((await call(member, hidden.id)).status, 403);
+  assert.equal((await call(member, projectId)).status, 403);
+  assert.equal((await call(owner, projectId)).status, 404);
+  const forced = await call(owner, hidden.id);
+  assert.equal(forced.status, 200);
+  const result = await forced.json();
+  assert.equal(result.outcome, "stopped");
+  assert.equal(result.job.state, "stopped");
+  assert.equal(result.job.force_stop_requested_by, owner.id);
+  assert.equal((await create(member, mine.id, "hac-168-after")).status, 201);
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
+});
+
+test("HAC-166: desktop registers its IPv4 for a ready aws-cpu environment", async () => {
+  const accessLib = await import(path.join(directory, "aws-cpu-ssh-access.mjs"));
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
+  process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER = "1";
+  const call = (method, jobId, { cookie = owner.cookie, viewer = "8.8.8.8:5000", headers = {} } = {}) =>
+    sshAccess[method](new Request(`http://localhost:3000/api/run-boxes/${jobId}/ssh-access`, {
+      method,
+      headers: { ...(cookie ? { cookie } : {}), ...(viewer ? { "cloudfront-viewer-address": viewer } : {}), ...headers },
+    }), { params: Promise.resolve({ id: jobId }) });
+  try {
+    const created = await boxes.POST(request("/api/run-boxes", { projectId, profileId: "aws-cpu", durationHours: 1, idempotencyKey: "hac-166-desktop" }, owner.cookie));
+    assert.equal(created.status, 201);
+    const job = (await created.json()).job;
+    const setJob = (fields) => db.prepare(`UPDATE run_box_job SET ${Object.keys(fields).map((key) => `${key} = @${key}`).join(", ")} WHERE id = @id`).run({ ...fields, id: job.id });
+    const rows = () => db.prepare("SELECT cidr, source, status FROM aws_cpu_ssh_access WHERE job_id = ? ORDER BY created_at, rowid").all(job.id).map((row) => ({ ...row }));
+
+    // Authentication, origin, membership, state, and profile.
+    assert.equal((await call("POST", job.id, { cookie: null })).status, 401);
+    assert.equal((await call("POST", job.id, { headers: { origin: "https://evil.example" } })).status, 403);
+    assert.equal((await call("POST", "00000000-0000-4000-8000-000000000000")).status, 404);
+    const notReady = await call("POST", job.id);
+    assert.equal(notReady.status, 409);
+    assert.equal((await notReady.json()).code, "not_ready");
+    setJob({ state: "ready" });
+    setJob({ stop_requested_at: new Date().toISOString() });
+    assert.equal((await (await call("POST", job.id)).json()).code, "not_ready");
+    setJob({ stop_requested_at: null, profile_id: "g6-l4-small" });
+    assert.equal((await (await call("POST", job.id)).json()).code, "not_aws_cpu");
+    setJob({ profile_id: "aws-cpu" });
+    const otherProject = (await store.action({ type: "createProject", name: "Other", repo: "https://example.com/other", compute: "Hosted Linux", template: "blank" })).id;
+    fixture.grantMembership(owner.id, otherProject, "owner");
+    setJob({ project_id: otherProject });
+    assert.equal((await call("POST", job.id, { cookie: member.cookie })).status, 403);
+    setJob({ project_id: projectId });
+
+    // The address comes only from the trusted CloudFront header; never X-Forwarded-For.
+    const ipv6 = await call("POST", job.id, { viewer: "2001:db8::1:443", headers: { "x-forwarded-for": "8.8.4.4" } });
+    assert.equal(ipv6.status, 409);
+    assert.equal((await ipv6.json()).code, "no_ipv4");
+    delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
+    const untrusted = await call("POST", job.id);
+    assert.equal(untrusted.status, 409);
+    assert.equal((await untrusted.json()).code, "address_untrusted");
+    process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER = "1";
+    assert.deepEqual(rows(), []);
+
+    // A member records a pending address; a repeat is idempotent; applied reports 200.
+    const pending = await call("POST", job.id, { cookie: member.cookie });
+    assert.equal(pending.status, 202);
+    assert.deepEqual(await pending.json(), { status: "pending", cidr: "8.8.8.8/32" });
+    assert.equal((await call("POST", job.id, { cookie: member.cookie })).status, 202);
+    assert.deepEqual(rows(), [{ cidr: "8.8.8.8/32", source: "desktop", status: "pending" }]);
+    assert.deepEqual((await (await call("GET", job.id, { cookie: member.cookie })).json()).sshAccess, { cidr: "8.8.8.8/32", status: "pending" });
+    await accessLib.applyReadyAwsCpuSshAccess(db, { async authorizeSsh(_job, cidr) { return { ruleId: "sgr-0abc", cidr }; } });
+    const applied = await call("POST", job.id, { cookie: member.cookie });
+    assert.equal(applied.status, 200);
+    assert.deepEqual(await applied.json(), { status: "applied", cidr: "8.8.8.8/32" });
+    assert.deepEqual((await (await call("GET", job.id)).json()).sshAccess, { cidr: "8.8.8.8/32", status: "applied" });
+    assert.equal((await (await call("GET", job.id, { viewer: "1.1.1.1:5000" })).json()).sshAccess.status, "none");
+
+    // At most five active addresses per job; the least recently requested is replaced.
+    for (const viewer of ["1.1.1.1", "1.0.0.1", "9.9.9.9", "4.4.4.4", "4.2.2.2"])
+      assert.equal((await call("POST", job.id, { viewer: `${viewer}:5000` })).status, 202);
+    const active = rows().filter((row) => ["pending", "applied"].includes(row.status));
+    assert.equal(active.length, accessLib.MAX_REQUESTER_CIDRS);
+    assert.equal(rows().find((row) => row.cidr === "8.8.8.8/32").status, "replaced");
+    assert.equal(rows().find((row) => row.cidr === "1.1.1.1/32").status, "pending");
+    setJob({ state: "stopped" });
+  } finally {
+    delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
+  }
 });

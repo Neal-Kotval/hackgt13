@@ -7,6 +7,8 @@ export interface Agent {
   branch: string;
   status: string;
   lastSeen?: string;
+  /** Idempotency key for a managed Codex identity created in Settings. */
+  setupRequestId?: string;
 }
 export interface Task {
   id: string;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { desktopApi } from "../lib/desktop-api";
 import {
   deriveChatTargets,
+  environmentLabel,
   parseCodexSession,
   parseCodexSessions,
   sessionForTarget,
@@ -142,6 +143,11 @@ export function ProjectChat({
             return;
           }
           blockAutoProject.current = false;
+          // Never fall back to the previous environment if this link cannot resolve.
+          setTargetChoice("");
+          targetChoiceRef.current = "";
+          setSessionId("");
+          setSnapshot(null);
           desiredSession.current = deepLink.target.codexSessionId || null;
           requestEnvironment(
             deepLink.target.runBoxId
@@ -397,9 +403,10 @@ export function ProjectChat({
       );
       return;
     }
+    // Environment context is independent of whether Codex can execute yet.
+    setTargetChoice(`runBox:${job.id}`);
     if (canTargetCodex(job)) {
       requestEnvironment(null);
-      setTargetChoice(`runBox:${job.id}`);
       setTargetNotice("Finish setting up Codex on the website, then return here to start chatting.");
       return;
     }
@@ -534,8 +541,8 @@ export function ProjectChat({
     error: "Needs attention",
     stopped: "Stopped",
   };
-  const environmentsUrl = projectId
-    ? `${webBaseUrl}/projects/${encodeURIComponent(projectId)}/environments`
+  const settingsUrl = projectId
+    ? `${webBaseUrl}/projects/${encodeURIComponent(projectId)}/settings#agent-setup`
     : webBaseUrl;
   const messages = session ? (snapshot?.events ?? []) : [];
   const hasConversation = messages.some(
@@ -590,10 +597,15 @@ export function ProjectChat({
     : selectedSession
       ? targetKey(selectedSession.target)
       : targetChoice;
+  const selectedBox = runBoxes.find(job => `runBox:${job.id}` === currentTarget);
+  const selectedBoxUnavailable = selectedBox && !canTargetCodex(selectedBox);
   const codexTargets = deriveChatTargets(
     projectId,
     runBoxes,
-    selectedSession?.target,
+    selectedSession?.target ?? (selectedBox ? {
+      kind: "runBox", runBoxId: selectedBox.id, provider: selectedBox.provider ?? null,
+      profileId: selectedBox.profileId ?? null, state: selectedBox.state,
+    } : null),
   ).map((target) => {
     const match = sessionForTarget(sessions, target.key);
     const unavailable = !target.available;
@@ -611,7 +623,7 @@ export function ProjectChat({
   if (pendingEnvironment && !codexTargets.some((t) => t.value === currentTarget))
     codexTargets.push({
       value: currentTarget,
-      label: `Environment ${pendingEnvironment.slice(0, 8)}`,
+      label: environmentLabel(pendingEnvironment, null, null),
       status: "Waiting",
       disabled: true,
     });
@@ -660,7 +672,7 @@ export function ProjectChat({
       selectedId={sessionId}
       busy={busy || attaching || !currentTarget || !targetAgents.some((item) => item.status === "ready" || item.status === "running")}
       loading={loading}
-      setupUrl={environmentsUrl}
+      setupUrl={settingsUrl}
       onSelect={(id) => {
         chooseAgent(id);
         close();
@@ -722,7 +734,7 @@ export function ProjectChat({
                       : busy && !sessionId
                         ? "Starting Codex on this environment…"
                         : !sessionId
-                          ? "Choose an environment to access its chats."
+                          ? currentTarget ? "This environment is selected. Finish its setup to start chatting." : "Choose an environment to access its chats."
                           : "Replies come from this project's agent via alto."}
               </p>
             </div>
@@ -761,21 +773,26 @@ export function ProjectChat({
               {targetNotice}
             </p>
           )}
-          {(session?.status === "auth_required" || setupRequired[currentTarget] || (currentTarget && !selectedSession)) && (
+          {selectedBoxUnavailable && <section className="codex-sign-in" aria-labelledby="environment-unavailable-title">
+            <h2 id="environment-unavailable-title">Environment unavailable</h2>
+            <p>{codexBlockedReason(selectedBox) ?? "This environment is not ready for Codex yet."}</p>
+            <a className="button primary" href={`${webBaseUrl.replace(/\/$/, "")}/projects/${projectId}/environments?environment=${selectedBox.id}`} target="_blank" rel="noreferrer">View environment</a>
+          </section>}
+          {!selectedBoxUnavailable && (session?.status === "auth_required" || setupRequired[currentTarget] || (currentTarget && !selectedSession)) && (
             <section className="codex-sign-in" aria-labelledby="environment-setup-title">
               <h2 id="environment-setup-title">Finish setup on the website</h2>
-              <p>Connect Codex and sign in on the environment’s web page. Return here to create chats when it is ready.</p>
-              <a className="button primary" href={`${environmentsUrl}?environment=${encodeURIComponent(currentTarget.slice("runBox:".length))}`} target="_blank" rel="noreferrer">Set up environment on web</a>
+              <p>Add Codex from project Settings, then sign in with ChatGPT in your browser. Return here to create chats when it is ready.</p>
+              <a className="button primary" href={settingsUrl} target="_blank" rel="noreferrer">Add Codex in Settings</a>
             </section>
           )}
           {!sessions.length && !loading && !pendingEnvironment && (
             <a
               className="button primary"
-              href={environmentsUrl}
+              href={settingsUrl}
               target="_blank"
               rel="noreferrer"
             >
-              Manage environments
+              Project settings
             </a>
           )}
           {ambiguous[sessionId] && (
@@ -808,7 +825,7 @@ export function ProjectChat({
                 ? hasConversation
                   ? `Message ${agentName(session)}`
                   : `Ask ${agentName(session)} to work on ${project?.name || "this project"}`
-                : "Choose an environment to start chatting"
+                : currentTarget ? "Finish environment setup to start chatting" : "Choose an environment to start chatting"
             }
             context={hasConversation ? context("toolbar") : undefined}
             attachments={draftAttachments}

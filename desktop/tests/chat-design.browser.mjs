@@ -134,10 +134,10 @@ try {
   await expect(page.getByRole('button', { name: 'Remove draft.md' })).toBeVisible();
   await page.evaluate(() => { window.__test.setupRequired = true; });
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Set up environment on web' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toBeVisible();
   await page.evaluate(() => { window.__test.setupRequired = false; });
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Set up environment on web' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toHaveCount(0);
   await expect(input).toHaveValue('');
   expect(await page.evaluate(() => window.__test.created.newChat)).toBe(true);
   expect(await page.evaluate(() => window.__test.created.runBoxId)).toBe('box-1');
@@ -146,7 +146,7 @@ try {
   await expect(page.locator('.message[data-role="user"]')).toHaveCount(1);
   await selectEnvironment('second-workspace');
   await expect(page.locator('.chat-history-item')).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Set up environment on web' })).toHaveAttribute('href', /environment=box-2/);
+  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toHaveAttribute('href', /settings#agent-setup/);
   await expect(page.getByRole('button', { name: 'New chat', exact: true })).toBeDisabled();
   await selectEnvironment();
   await expect(page.locator('.chat-history-item').filter({ hasText: 'Independent chat history' })).toBeVisible();
@@ -156,7 +156,7 @@ try {
   await expect(page.locator('.message[data-role="user"]')).toHaveCount(1);
   await expect(input).toHaveValue('');
   await page.evaluate(() => window.__test.deepLink({ ok: true, target: { projectId: 'p1', runBoxId: 'box-2' } }));
-  await expect(page.getByRole('link', { name: 'Set up environment on web' })).toHaveAttribute('href', /environment=box-2/);
+  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toHaveAttribute('href', /settings#agent-setup/);
   await expect(page.getByRole('heading', { name: 'Environment terminal', exact: true })).toHaveCount(0);
   // Removed Tasks links route truthfully; never connect to an origin from a link.
   await page.evaluate(() => window.__test.deepLink({ ok: true, target: { projectId: 'p1', taskRunBoxId: 'box-1' } }));
@@ -169,11 +169,11 @@ try {
   await page.goto(`${base}/?no-projects`);
   await expect(page.getByText('Choose a project to get started.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
-  await expect(page.getByRole('link', { name: 'Manage environments' }).last()).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Project settings' }).last()).toBeVisible();
   await page.goto(`${base}/?new-environment`);
   await expect(page.getByText('Choose an environment to access its chats.', { exact: true })).toBeVisible();
   await selectEnvironment();
-  await expect(page.getByRole('link', { name: 'Set up environment on web' })).toHaveAttribute('href', /projects\/p1\/environments\?environment=box-1/);
+  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toHaveAttribute('href', /projects\/p1\/settings#agent-setup/);
   await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => window.__test.created)).toBeUndefined();
   await page.evaluate(() => {
@@ -184,7 +184,7 @@ try {
   await expect(page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true })).toHaveCount(0);
   await page.evaluate(() => { window.__test.sessions[0].status = 'ready'; });
   await expect(input).toBeEnabled();
-  await expect(page.getByRole('link', { name: 'Set up environment on web' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Add Codex in Settings' })).toHaveCount(0);
   await input.fill('Ready after web sign-in');
   await expect(page.getByRole('button', { name: 'Send message' })).toBeEnabled();
   await layout('setup-required');

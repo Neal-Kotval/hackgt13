@@ -38,6 +38,8 @@ type Database = ReturnType<typeof getDatabase>;
 function decisionError(error: unknown): never {
   if (error instanceof Error && error.message === "Invalid repository URL")
     throw new InputError("Project repository URL is not eligible for a run box", 409);
+  if (error instanceof Error && error.message === "A local Docker sandbox is already active for this project")
+    throw new InputError("A local Docker sandbox is already active for this project. Use the existing environment or stop it before creating another.", 409);
   if (error instanceof Error && /Idempotency key reused|already has a run-box decision|run box is already active/.test(error.message))
     throw new InputError(error.message, 409);
   throw error;
@@ -58,6 +60,18 @@ function existingDecision(db: Database, idempotencyKey: string) {
 
 function respond(result: { decision: { outcome: string } }) {
   return Response.json(result, { status: result.decision.outcome === "approved" ? 201 : 200 });
+}
+
+// HAC-168: the single-active guard spans every project, so say where the blocking
+// environment is — by name only when the caller is a member of that project.
+function activeBoxMessage(employee: Employee, provider: string, blocking: { project_id: string; state: string },
+  projects: { id: string; name: string }[]) {
+  const base = provider === "aws-ec2" ? "An AWS run box is already active" : "A Runpod run box is already active";
+  const visible = employee.memberships.some((item) => item.projectId === blocking.project_id);
+  if (!visible)
+    return `${base} in another project. Only one is allowed at a time; ask that project's owner to stop it, or force stop it from its Environments page.`;
+  const name = projects.find((item) => item.id === blocking.project_id)?.name;
+  return `${base} in ${name ? `"${name}"` : "one of your projects"} (${blocking.state}). Only one is allowed at a time; a project owner can stop or force stop it from that project's Environments page.`;
 }
 
 // Serialize one-step creation per idempotency key so a retry cannot record a
@@ -87,7 +101,8 @@ async function createEnvironment(employee: Employee, input: Record<string, unkno
   if (templateId && !template) throw new InputError("Container template is unavailable", 409);
   const profile = template ? { provider: "docker-local", kind: "run-box", label: template.label }
     : environmentProfiles[profileId as EnvironmentProfileId];
-  const project = (await getState()).projects.find((item) => item.id === projectId);
+  const projects = (await getState()).projects;
+  const project = projects.find((item) => item.id === projectId);
   if (!project) throw new InputError("Project not found", 404);
   const db = getDatabase();
   migrateRunBoxJobs(db);
@@ -105,9 +120,15 @@ async function createEnvironment(employee: Employee, input: Record<string, unkno
     throw new InputError(`${profile.label} is not available on this server yet`, 409);
   // Check the single-active-box guard before recording a request so a refusal
   // does not leave an undecided request in the project history.
-  if (membership.role === "owner" && ["aws-ec2", "runpod"].includes(profile.provider) &&
-      db.prepare("SELECT id FROM run_box_job WHERE provider = ? AND state != 'stopped' LIMIT 1").get(profile.provider))
-    throw new InputError(profile.provider === "aws-ec2" ? "An AWS run box is already active" : "A Runpod run box is already active", 409);
+  if (membership.role === "owner" && ["aws-ec2", "runpod"].includes(profile.provider)) {
+    const blocking = db.prepare("SELECT id, project_id, state FROM run_box_job WHERE provider = ? AND state != 'stopped' ORDER BY created_at LIMIT 1")
+      .get(profile.provider) as { id: string; project_id: string; state: string } | undefined;
+    if (blocking) throw new InputError(activeBoxMessage(employee, profile.provider, blocking, projects), 409);
+  }
+
+  if (membership.role === "owner" && profile.provider === "docker-local" &&
+      db.prepare("SELECT id FROM run_box_job WHERE provider = 'docker-local' AND project_id = ? AND state != 'stopped' LIMIT 1").get(projectId))
+    decisionError(new Error("A local Docker sandbox is already active for this project"));
 
   const { request: resourceRequest } = await resourceAction({
     type: "requestResource",

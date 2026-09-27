@@ -1,7 +1,9 @@
 "use client";
+import { SkeletonPanel, SkeletonRegion } from "@/components/ui/skeleton";
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Select } from "@/components/ui/select";
+import { PlatformAwsEnvironments } from "@/components/platform-aws-environments";
 
 type Organization = {
   id: string;
@@ -60,12 +62,13 @@ export function PlatformAwsApprovals() {
     }
   }
 
-  return <main className="organization-page">
+  return <main className="organization-page organization-page--wide">
     <header className="section-heading"><div><p className="eyebrow">Platform administration</p><h1>Managed AWS access</h1></div></header>
+    <PlatformAwsEnvironments />
     <p>Approve organizations and set limits before they can request alto funded AWS runs. Approval does not start a machine.</p>
     {error && <p className="auth-error" role="alert">{error}</p>}
     {notice && <p className="auth-success" role="status">{notice}</p>}
-    {organizations === null ? <p role="status">Loading organizations…</p> : organizations.length === 0 ?
+    {organizations === null ? <SkeletonRegion label="Loading organizations"><SkeletonPanel rows={0} lines={2} action /><SkeletonPanel rows={0} lines={2} action /></SkeletonRegion> : organizations.length === 0 ?
       <section className="organization-panel"><h2>No organizations yet</h2><p>Organizations will appear here after someone creates one.</p></section> :
       organizations.map((organization) => <ApprovalForm key={organization.id} organization={organization} busy={busyId !== null} onUpdate={update} />)}
   </main>;
