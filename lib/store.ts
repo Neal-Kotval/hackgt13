@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import {
   demoGpuDurations,
+  awsCpuProfile,
   demoGpuProfile,
   localDockerSandboxProfile,
   findRunpodProfile,
@@ -458,13 +459,15 @@ export async function resourceAction(
           input.gpuProfileId !== undefined || input.durationHours !== undefined;
         // The CPU-only local sandbox is a run box, never a GPU request.
         const isLocalSandbox = input.gpuProfileId === localDockerSandboxProfile.id;
+        // The AWS CPU environment (HAC-125) is also a run box, not GPU capacity.
+        const isAwsCpu = input.gpuProfileId === awsCpuProfile.id;
         if (
           hasGpuPreference &&
           (resourceId ||
-            kind !== (isLocalSandbox ? "run-box" : "gpu") ||
+            kind !== (isLocalSandbox || isAwsCpu ? "run-box" : "gpu") ||
             (input.gpuProfileId !== demoGpuProfile.id &&
               !findRunpodProfile(input.gpuProfileId) &&
-              !isLocalSandbox) ||
+              !isLocalSandbox && !isAwsCpu) ||
             typeof input.durationHours !== "number" ||
             !demoGpuDurations.some((hours) => hours === input.durationHours))
         )
@@ -493,6 +496,16 @@ export async function resourceAction(
                   provider: localDockerSandboxProfile.provider,
                   profileId: localDockerSandboxProfile.id,
                   durationHours: input.durationHours as number,
+                } : isAwsCpu ? {
+                  provider: awsCpuProfile.provider,
+                  profileId: awsCpuProfile.id,
+                  region: awsCpuProfile.region,
+                  instanceType: awsCpuProfile.instanceType,
+                  durationHours: input.durationHours as number,
+                  estimatedComputeUsd: Number(
+                    (awsCpuProfile.hourlyComputeUsd * (input.durationHours as number)).toFixed(4),
+                  ),
+                  quotedAt: awsCpuProfile.quotedAt,
                 } : findRunpodProfile(input.gpuProfileId) ? {
                   provider: "runpod",
                   profileId: findRunpodProfile(input.gpuProfileId)!.id,

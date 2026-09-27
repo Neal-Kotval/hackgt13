@@ -15,7 +15,7 @@ Decisions:
 | Account | `agentcloud` (non-root), as today |
 | Codex binary | `codex` on `PATH` (`/usr/local/bin/codex` or the npm global bin), version `0.157.1` |
 | Other tools | `git`, `tmux`, `bash`, Node 22 (22.23.3, official tarball, SHA-256 pinned) |
-| Workspace (repo checkout) | Docker: `/home/agentcloud/workspace/repo` (or `/home/agentcloud/workspace` when no repo). Runpod: `/home/agentcloud/agentcloud/<jobId>/repo` (the clone inside the job directory, so `git diff` works there). Always read `workspacePath` from the API; never hardcode it. |
+| Workspace (repo checkout) | Docker: `/home/agentcloud/workspace/repo` (or `/home/agentcloud/workspace` when no repo). Runpod: `/home/agentcloud/agentcloud/<jobId>/repo` (the clone inside the job directory, so `git diff` works there). Always read `workspacePath` from the API; never hardcode it. AWS `aws-cpu`: `/home/agentcloud/agentcloud/<jobId>/repo`. Always read `workspacePath` from the API; never hardcode it. |
 | Codex config | `~/.codex/config.toml` (agentcloud, 0600) contains `cli_auth_credentials_store = "file"`, written merge-safe at box start (Docker `entrypoint.sh`, Runpod start script). This keeps sign-in in `auth.json`; a keyring store would escape teardown cleanup. The agent check fails without it. |
 | Codex auth | `~/.codex/auth.json` (0600), created by `codex login --device-auth`; removed at teardown |
 | Terminal session | tmux session named `agentcloud` |

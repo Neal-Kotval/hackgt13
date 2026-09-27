@@ -6,6 +6,8 @@ import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-recon
 import { migrateAwsGpuEvidence } from "../lib/aws-gpu-evidence.mjs";
 import { assumeGpuWorkerRole, createAwsGpuProvider } from "../lib/aws-gpu-provider.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
+import { createAwsCpuProvider, discoverPublicIpv4, scanPublicHostKey } from "../lib/aws-cpu-provider.mjs";
+import { migrateAwsCpuEnvironment, workOneAwsCpuJob } from "../lib/aws-cpu-worker.mjs";
 import { createRunpodProvider } from "../lib/runpod-provider.mjs";
 import { verifyRunpodSsh } from "../lib/runpod-ssh-proof.mjs";
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
@@ -27,20 +29,35 @@ if (process.argv.length > 4 || !["--once", "--loop"].includes(mode) || !["aws-ec
   process.exit(2);
 }
 
+// aws-cpu (HAC-125) runs in the same cycle when its SSH settings are present:
+// AGENTCLOUD_AWS_CPU_SSH_CIDR (a public /32, or "auto" to use this host's address),
+// AGENTCLOUD_AWS_CPU_SSH_KEY_FILE and AGENTCLOUD_AWS_CPU_SSH_PUBLIC_KEY (operator ed25519 key).
 async function awsCycle() {
   const aws = await assumeGpuWorkerRole();
-  const provider = createAwsGpuProvider({ aws, subnetId: process.env.AGENTCLOUD_GPU_SUBNET_ID });
+  const subnetId = process.env.AGENTCLOUD_GPU_SUBNET_ID;
+  const gpuProvider = createAwsGpuProvider({ aws, subnetId });
+  // The CPU adapter reuses the GPU adapter's tagged-instance operations and also
+  // revokes a job's SSH rule before terminating its instance.
+  const provider = createAwsCpuProvider({ aws, subnetId });
   await provider.identifyWorker();
   const db = getDatabase();
   migrateRunBoxJobs(db);
   migrateRunBoxCleanup(db);
   migrateAwsGpuEvidence(db);
+  migrateAwsCpuEnvironment(db);
   const reconciled = await reconcileAwsRunBoxes(db, provider, { workerId, requestStop: requestRunBoxStop });
   if (reconciled.some((item) => item.status === "retry"))
-    throw new Error("GPU cleanup remains unconfirmed; refusing another allocation");
-  const result = await workOneAwsGpuJob(db, provider, { workerId });
+    throw new Error("EC2 cleanup remains unconfirmed; refusing another allocation");
+  const result = await workOneAwsGpuJob(db, gpuProvider, { workerId });
   if (result) console.log(`Processed GPU job ${result.jobId}: ${result.state} (${result.evidenceRef})`);
-  return result;
+  if (result || !process.env.AGENTCLOUD_AWS_CPU_SSH_CIDR) return result;
+  const configured = process.env.AGENTCLOUD_AWS_CPU_SSH_CIDR;
+  const cpu = await workOneAwsCpuJob(db, provider, { workerId,
+    sshSourceCidr: configured === "auto" ? await discoverPublicIpv4() : configured,
+    connection: { keyFile: process.env.AGENTCLOUD_AWS_CPU_SSH_KEY_FILE, publicKey: process.env.AGENTCLOUD_AWS_CPU_SSH_PUBLIC_KEY },
+    probeHostKey: (host) => scanPublicHostKey(host) });
+  if (cpu) console.log(`Processed CPU job ${cpu.jobId}: ${cpu.state}${cpu.retry ? ` (${cpu.reason})` : ""}`);
+  return cpu;
 }
 
 // Opt-in supervised test from a developer machine: key from the environment and the
