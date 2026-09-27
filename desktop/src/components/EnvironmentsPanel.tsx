@@ -1,5 +1,8 @@
+import "./EnvironmentsPanel.css";
+import { readHideStopped, saveHideStopped, visibleEnvironments } from "../lib/environment-visibility";
 import { Select } from "./ui/Select";
-import { useCallback, useEffect, useState } from "react";
+import { useSurfaceMotion } from "./SurfaceMotion";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TerminalPanel } from "./TerminalPanel";
 import { desktopApi } from "../lib/desktop-api";
 import type { DeepLinkParseResult } from "../lib/deep-link";
@@ -97,8 +100,15 @@ export function EnvironmentsPanel({
   onDeepLinkHandled,
   onOpenCodex,
 }: EnvironmentsPanelProps) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [hideStopped, setHideStopped] = useState(readHideStopped);
+  const updateHideStopped = (value: boolean) => {
+    setHideStopped(value);
+    saveHideStopped(value);
+  };
   const [projects, setProjects] = useState<ProjectsLoad>({ kind: "loading" });
   const [projectId, setProjectId] = useState<string | null>(null);
+  useSurfaceMotion(contentRef, projectId ?? "no-project");
   const [jobs, setJobs] = useState<JobsLoad>({ kind: "idle" });
   const [deviceKey, setDeviceKey] = useState<DeviceKeyStatus | null>(null);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
@@ -208,6 +218,9 @@ export function EnvironmentsPanel({
 
   const jobList =
     jobs.kind === "ok" ? jobs.jobs : jobs.kind === "loading" ? jobs.previous : [];
+
+  const visibleJobs = visibleEnvironments(jobList, hideStopped);
+  const hiddenCount = jobList.length - visibleJobs.length;
 
   // Resolve a pending auto-open once the listing for its project arrives.
   useEffect(() => {
@@ -319,7 +332,7 @@ export function EnvironmentsPanel({
       ) : null}
 
       {projectList.length > 0 ? (
-        <div className="environments-layout">
+        <div className="environments-layout" ref={contentRef}>
           <label className="picker-select">
             <span className="visually-hidden">Project</span>
             <Select
@@ -338,6 +351,22 @@ export function EnvironmentsPanel({
               ))}
             </Select>
           </label>
+
+          <div className="environment-visibility">
+            <label className="environment-visibility-toggle">
+              <input
+                type="checkbox"
+                checked={hideStopped}
+                onChange={(event) => updateHideStopped(event.target.checked)}
+              />
+              Hide stopped environments
+            </label>
+            {hiddenCount > 0 ? (
+              <span className="detail-secondary" role="status">
+                {hiddenCount} stopped {hiddenCount === 1 ? "environment" : "environments"} hidden
+              </span>
+            ) : null}
+          </div>
 
           {jobs.kind === "error" ? (
             <p className="error-banner" role="alert">
@@ -361,9 +390,19 @@ export function EnvironmentsPanel({
             </div>
           ) : null}
 
-          {jobList.length > 0 ? (
+          {jobs.kind === "ok" && hiddenCount > 0 && visibleJobs.length === 0 ? (
+            <div className="tasks-empty">
+              <h2>All environments are stopped</h2>
+              <p>Show stopped environments to review them, or create an environment on the website.</p>
+              <button type="button" className="button ghost" onClick={() => updateHideStopped(false)}>
+                Show stopped environments
+              </button>
+            </div>
+          ) : null}
+
+          {visibleJobs.length > 0 ? (
             <ul className="environment-list" aria-label="Environments">
-              {jobList.map((job) => {
+              {visibleJobs.map((job) => {
                 const blocked = terminalBlockedReason(job);
                 const codexBlocked = codexBlockedReason(job);
                 const created = formatTime(job.createdAt);

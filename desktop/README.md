@@ -144,3 +144,8 @@ to this screen from chat. Creation uses the existing authenticated `createProjec
 action and server organization-admin authorization; errors keep entered values.
 Success selects the returned project. Saving metadata does not clone a repository,
 connect to SSH, provision compute, or start an agent.
+
+The Environments tab hides stopped environments by default. Use **Hide stopped
+environments** to include them again; the preference stays on this device across
+visits. Failed, stopping, and unknown environments remain visible. When every
+environment is stopped, the empty state offers **Show stopped environments**.
