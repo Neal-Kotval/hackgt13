@@ -26,8 +26,8 @@ else
   read -rsp "Google app password for $SENDER (input hidden): " APP_PASSWORD
   echo
 fi
-APP_PASSWORD="${APP_PASSWORD// /}"
-[[ ${#APP_PASSWORD} -eq 16 ]] || { echo 'A Google app password is 16 letters (spaces are ignored).' >&2; exit 1; }
+APP_PASSWORD="${APP_PASSWORD//[[:space:]]/}"
+[[ ${#APP_PASSWORD} -eq 16 ]] || { echo 'A Google app password is 16 letters (spaces and line breaks are ignored).' >&2; exit 1; }
 
 CURRENT="$(aws --region "$STAGING_REGION" secretsmanager get-secret-value \
   --secret-id "$STAGING_SECRET" --query SecretString --output text)"
