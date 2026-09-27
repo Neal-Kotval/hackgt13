@@ -13,6 +13,7 @@ type Session = {
   agentId: string;
   status: SessionStatus;
   error: string | null;
+  target?: { kind: "local" } | { kind: "runBox"; runBoxId: string };
 };
 type Login = { verificationUrl: string; userCode: string };
 const labels: Record<SessionStatus, string> = {
@@ -68,11 +69,13 @@ function ProjectCodexSessions({ project }: { project: Project }) {
           request<{ memberships: { projectId: string; role: string }[] }>("/api/employee"),
         ]);
         if (disposed) return;
-        setSessions(data.sessions);
+        // This panel manages local Docker boxes; environment sessions are opened from Project chat.
+        const local = data.sessions.filter((session) => !session.target || session.target.kind === "local");
+        setSessions(local);
         setEnabled(data.enabled);
         setOwner(employee.memberships.some((membership) => membership.projectId === project.id && membership.role === "owner"));
         setLoadError("");
-        timer = setTimeout(refresh, data.sessions.some((session) => session.status !== "stopped") ? 1000 : 5000);
+        timer = setTimeout(refresh, local.some((session) => session.status !== "stopped") ? 1000 : 5000);
       } catch (cause) {
         if (!disposed) setLoadError(cause instanceof Error ? cause.message : "Could not load Codex sessions.");
       }

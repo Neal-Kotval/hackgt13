@@ -32,6 +32,9 @@ test('Codex setup is owner-scoped; session reads and messages require project me
  assert.equal((await routes.POST(request(input))).status,401);
  assert.equal((await routes.POST(request(input,member.cookie))).status,403);
  assert.equal((await routes.POST(request({...input,agentId:'other'},owner.cookie))).status,400);
+ assert.equal((await routes.POST(request({...input,runBoxId:'../etc'},owner.cookie))).status,400);
+ assert.equal((await routes.POST(request({...input,runBoxId:7},owner.cookie))).status,400);
+ assert.equal((await routes.POST(request({...input,runBoxId:'rb-1'},member.cookie))).status,403);
  assert.equal((await routes.POST(request(input,owner.cookie))).status,202);
  const ctx={params:Promise.resolve({id:'s1'})};
  assert.equal((await detail.GET(request(null,member.cookie),ctx)).status,200);
