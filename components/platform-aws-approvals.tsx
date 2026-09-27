@@ -93,8 +93,8 @@ function ApprovalForm({ organization, busy, onUpdate }: {
 
   return <section className="organization-panel" aria-labelledby={`organization-${organization.id}`}>
     <div><h2 id={`organization-${organization.id}`}>{organization.name}</h2><p>{organization.slug}</p></div>
-    <p>Status: <strong>{organization.approved ? "Approved" : "Pending"}</strong></p>
-    {organization.approved && <p>{usedHours} of {organization.monthlyMinutes / 60} hours used this month{approvedAt ? ` · Approved ${approvedAt}` : ""}</p>}
+    <p>Status: <strong>{organization.approved ? "Approved" : organization.approvedAt ? "Revoked" : "Pending"}</strong></p>
+    {organization.approved && <p>{usedHours} of {organization.monthlyMinutes / 60} run hours reserved this month{approvedAt ? ` · Approved ${approvedAt}` : ""}</p>}
     <form className="organization-form" onSubmit={approve}>
       <label>Maximum run duration
         <Select value={String(maxRunMinutes)} onChange={(event) => setMaxRunMinutes(Number(event.target.value))} disabled={busy}>

@@ -17,8 +17,8 @@ for (const name of ["store", "http", "resource-profiles"]) {
   const source = await readFile(new URL(`../lib/${name}.ts`, import.meta.url), "utf8");
   await writeFile(path.join(directory, `${name}.js`), transpile(source).replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh"];
-for (const name of ["run-box-jobs", "ssh-keys", "run-box-ssh"])
+const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh", "aws-organization-approval"];
+for (const name of ["run-box-jobs", "ssh-keys", "run-box-ssh", "aws-organization-approval"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
 const db = fixture.getDatabase();
