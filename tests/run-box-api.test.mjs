@@ -16,7 +16,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys", "agent-check", "container-templates", "aws-organization-approval"])
+for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
 const db = fixture.getDatabase();
@@ -27,7 +27,7 @@ async function route(sourcePath, outputName, depth) {
   const code = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replaceAll(prefix, "./").replace(/from ["']\.\/([\w-]+)["']/g, (match, name) =>
-    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates", "aws-organization-approval"].includes(name) ? ".mjs" : ".js"}'`);
+    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access"].includes(name) ? ".mjs" : ".js"}'`);
   await writeFile(path.join(directory, outputName), code);
   return import(path.join(directory, outputName));
 }
@@ -273,4 +273,35 @@ test("Runpod approval is owner scoped, profile pinned, and duplicate allocation 
     projectId, resourceRequestId: next.id, idempotencyKey: "runpod-approval-2",
   }, owner.cookie));
   assert.equal(duplicate.status, 409);
+});
+
+test("HAC-166: aws-cpu creation records the requester's CloudFront viewer IPv4 only when trusted", async () => {
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
+  const create = (key, headers = {}) => boxes.POST(new Request("http://localhost:3000/api/run-boxes", {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: "http://localhost:3000", cookie: owner.cookie, ...headers },
+    body: JSON.stringify({ projectId, profileId: "aws-cpu", durationHours: 1, idempotencyKey: key }),
+  }));
+  const rows = (jobId) => db.prepare("SELECT cidr, source, requested_by, status FROM aws_cpu_ssh_access WHERE job_id = ?").all(jobId);
+  delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
+  const untrusted = await create("hac-166-untrusted", { "cloudfront-viewer-address": "8.8.8.8:5000", "x-forwarded-for": "1.1.1.1" });
+  assert.equal(untrusted.status, 201);
+  const untrustedJob = (await untrusted.json()).job;
+  (await import(path.join(directory, "aws-cpu-ssh-access.mjs"))).migrateAwsCpuSshAccess(db);
+  assert.deepEqual(rows(untrustedJob.id), []);
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE id = ?").run(untrustedJob.id);
+  process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER = "1";
+  try {
+    const spoofed = await create("hac-166-private", { "cloudfront-viewer-address": "10.0.0.8:5000" });
+    assert.equal(spoofed.status, 201);
+    const spoofedJob = (await spoofed.json()).job;
+    assert.deepEqual(rows(spoofedJob.id), []);
+    db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE id = ?").run(spoofedJob.id);
+    const created = await create("hac-166-trusted", { "cloudfront-viewer-address": "8.8.8.8:5000" });
+    assert.equal(created.status, 201);
+    const job = (await created.json()).job;
+    assert.deepEqual(rows(job.id).map((row) => ({ ...row })), [{ cidr: "8.8.8.8/32", source: "create", requested_by: owner.id, status: "pending" }]);
+  } finally {
+    delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
+  }
 });
