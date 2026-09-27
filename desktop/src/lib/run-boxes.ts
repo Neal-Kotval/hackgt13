@@ -27,6 +27,13 @@ export type RunBoxSummary = {
   createdAt: string | null;
   updatedAt: string | null;
   stopRequested: boolean;
+  /** Stage 2 `agent.codex` check; null when the server does not report it. */
+  codex: RunBoxCodexCheck | null;
+};
+
+export type RunBoxCodexCheck = {
+  state: "pending" | "ready" | "failed" | "unknown";
+  reason: string | null;
 };
 
 const STATES: readonly RunBoxState[] = [
@@ -76,6 +83,14 @@ function parseSsh(value: unknown): RunBoxSummary["ssh"] {
   return { host, port, username };
 }
 
+function parseCodexCheck(value: unknown): RunBoxCodexCheck | null {
+  const codex = asRecord(asRecord(value)?.codex);
+  if (!codex) return null;
+  const raw = text(codex.state);
+  const state = raw === "pending" || raw === "ready" || raw === "failed" ? raw : "unknown";
+  return { state, reason: text(codex.reason) };
+}
+
 /** Normalize one GET /api/run-boxes job (camelCase contract or raw snake_case row). */
 export function parseRunBox(value: unknown): RunBoxSummary | null {
   const record = asRecord(value);
@@ -100,6 +115,7 @@ export function parseRunBox(value: unknown): RunBoxSummary | null {
     createdAt: text(pick(record, "createdAt", "created_at")),
     updatedAt: text(pick(record, "updatedAt", "updated_at")),
     stopRequested: Boolean(pick(record, "stopRequestedAt", "stop_requested_at")),
+    codex: parseCodexCheck(record.agent),
   };
 }
 
@@ -158,5 +174,24 @@ export function terminalBlockedReason(job: RunBoxSummary): string | null {
     return `Terminal opens once the environment is ready (currently ${runBoxStateLabel(job).toLowerCase()}).`;
   }
   if (!job.ssh) return "The server has not published SSH access for this environment.";
+  return null;
+}
+
+/** Codex can be targeted from Project chat only when both SSH and the agent check are ready. */
+export function canTargetCodex(job: RunBoxSummary): boolean {
+  return job.state === "ready" && !job.stopRequested && job.codex?.state === "ready";
+}
+
+/** Why Codex cannot target this environment, or null when it can. */
+export function codexBlockedReason(job: RunBoxSummary): string | null {
+  if (job.stopRequested) return "Stop was requested for this environment.";
+  if (job.state !== "ready") {
+    return `Codex opens once the environment is ready (currently ${runBoxStateLabel(job).toLowerCase()}).`;
+  }
+  if (!job.codex) return "The server has not reported a Codex check for this environment.";
+  if (job.codex.state === "pending") return "Codex is still being checked on this environment.";
+  if (job.codex.state !== "ready") {
+    return job.codex.reason ? `Codex is unavailable: ${job.codex.reason}` : "Codex is unavailable on this environment.";
+  }
   return null;
 }

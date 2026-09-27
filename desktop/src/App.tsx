@@ -5,7 +5,7 @@ import { EnvironmentsPanel } from "./components/EnvironmentsPanel";
 import { ProjectChatTerminal } from "./components/ProjectChatTerminal";
 import { ProjectChat } from "./components/ProjectChat";
 import { desktopApi } from "./lib/desktop-api";
-import { deepLinkServerError } from "./lib/deep-link";
+import { deepLinkDestination, deepLinkServerError } from "./lib/deep-link";
 import type { AuthStatus, DeepLinkParseResult } from "./lib/types";
 
 export default function App() {
@@ -48,11 +48,19 @@ export default function App() {
       setSection("local-chat");
       return;
     }
-    if (result.ok && result.target.codexSessionId) {
+    const destination = deepLinkDestination(result.target);
+    if (
+      destination === "project-chat-session" ||
+      destination === "project-chat-environment-codex"
+    ) {
+      // Project chat targets the environment itself once projects load.
       setChatRunBox(null);
       setCodexLink(result);
       setSection("local-chat");
-    } else if (result.ok && result.target.runBoxId) {
+    } else if (
+      destination === "project-chat-environment-terminal" &&
+      result.target.runBoxId
+    ) {
       setCodexLink(result);
       setChatRunBox({
         projectId: result.target.projectId,
@@ -219,6 +227,12 @@ export default function App() {
                 webBaseUrl={auth.baseUrl}
                 deepLink={environmentLink}
                 onDeepLinkHandled={clearEnvironmentLink}
+                onOpenCodex={(projectId, runBoxId) =>
+                  void routeDeepLink({
+                    ok: true,
+                    target: { projectId, runBoxId, panel: "codex" },
+                  })
+                }
               />
             </div>
           )}

@@ -74,4 +74,16 @@ only share a session with members trusted to read them.
 Containers and volumes are identified by install and session labels. Stop does
 not delete them. There is no automatic expiry or cloud cost enforcement here.
 
+## Codex on a remote environment (HAC-153)
+
+A session can also target a ready environment instead of a local Docker box
+(`POST /api/codex-sessions { projectId, agentId, runBoxId }`). This does not
+need `AGENTCLOUD_CODEX_ENABLED`, but the run-box worker must have created the
+environment after this change so it trusts the install's Codex runner key
+(`<AGENTCLOUD_DATA_DIR>/codex-runner/id_ed25519`, created on first use). The
+backend opens SSH itself. `AGENTCLOUD_CODEX_API_KEY` is never sent to an
+environment; sign in with a ChatGPT device code. Stop closes only the SSH
+connection. Stopping the environment closes the session with "Environment
+stopped". Details are in [docs/stage3-contract.md](docs/stage3-contract.md).
+
 Protocol reference: https://developers.openai.com/codex/app-server/

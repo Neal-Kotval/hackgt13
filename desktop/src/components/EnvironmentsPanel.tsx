@@ -1,11 +1,11 @@
 import { Select } from "./ui/Select";
 import { useCallback, useEffect, useState } from "react";
 import { TerminalPanel } from "./TerminalPanel";
-import { CodexPanel } from "./CodexPanel";
 import { desktopApi } from "../lib/desktop-api";
 import type { DeepLinkParseResult } from "../lib/deep-link";
 import {
   canOpenTerminal,
+  codexBlockedReason,
   isTransitional,
   runBoxStateLabel,
   runBoxStateTone,
@@ -36,6 +36,8 @@ type EnvironmentsPanelProps = {
   webBaseUrl: string;
   deepLink?: DeepLinkParseResult | null;
   onDeepLinkHandled?: () => void;
+  /** Opens Project chat targeting this environment's Codex (HAC-153). */
+  onOpenCodex?: (projectId: string, runBoxId: string) => void;
 };
 
 function providerLabel(job: RunBoxSummary): string {
@@ -92,6 +94,7 @@ export function EnvironmentsPanel({
   webBaseUrl,
   deepLink = null,
   onDeepLinkHandled,
+  onOpenCodex,
 }: EnvironmentsPanelProps) {
   const [projects, setProjects] = useState<ProjectsLoad>({ kind: "loading" });
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -99,8 +102,6 @@ export function EnvironmentsPanel({
   const [deviceKey, setDeviceKey] = useState<DeviceKeyStatus | null>(null);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   const [terminalFor, setTerminalFor] = useState<RunBoxSummary | null>(null);
-  // HAC-122: Codex panel for a ready environment, shown beside the terminal.
-  const [codexFor, setCodexFor] = useState<RunBoxSummary | null>(null);
   const [notice, setNotice] = useState<{ tone: "error" | "info"; text: string } | null>(
     null,
   );
@@ -363,6 +364,7 @@ export function EnvironmentsPanel({
             <ul className="environment-list" aria-label="Environments">
               {jobList.map((job) => {
                 const blocked = terminalBlockedReason(job);
+                const codexBlocked = codexBlockedReason(job);
                 const created = formatTime(job.createdAt);
                 const active = terminalFor?.id === job.id;
                 return (
@@ -402,15 +404,20 @@ export function EnvironmentsPanel({
                       <button
                         type="button"
                         className="button"
-                        disabled={blocked !== null}
-                        aria-describedby={blocked ? `blocked-${job.id}` : undefined}
-                        onClick={() => setCodexFor(job)}
+                        disabled={codexBlocked !== null || !onOpenCodex}
+                        aria-describedby={!codexBlocked ? undefined : codexBlocked === blocked ? `blocked-${job.id}` : `codex-blocked-${job.id}`}
+                        onClick={() => onOpenCodex?.(job.projectId || projectId || "", job.id)}
                       >
-                        {codexFor?.id === job.id ? "Codex open" : "Open Codex"}
+                        Open Codex
                       </button>
                       {blocked ? (
                         <span className="detail-secondary" id={`blocked-${job.id}`}>
                           {blocked}
+                        </span>
+                      ) : null}
+                      {codexBlocked && codexBlocked !== blocked ? (
+                        <span className="detail-secondary" id={`codex-blocked-${job.id}`}>
+                          {codexBlocked}
                         </span>
                       ) : null}
                     </div>
@@ -431,15 +438,6 @@ export function EnvironmentsPanel({
         />
       ) : null}
 
-      {codexFor ? (
-        <CodexPanel
-          key={codexFor.id}
-          runBoxId={codexFor.id}
-          projectId={codexFor.projectId || projectId || ""}
-          title={`${providerLabel(codexFor)} · ${codexFor.id}`}
-          onClose={() => setCodexFor(null)}
-        />
-      ) : null}
     </main>
   );
 }

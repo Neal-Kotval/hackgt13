@@ -77,6 +77,8 @@ export type ProjectAgentSnapshot = {
   role: string;
   status: string;
   lastSeen?: string;
+  /** Agent client (e.g. "Codex") when the server reports it. */
+  client?: string;
 };
 
 export type ProjectTaskSnapshot = {
@@ -190,6 +192,8 @@ export type DesktopApi = {
   takePendingDeepLink: () => Promise<DeepLinkParseResult | null>;
   onDeepLink: (handler: (result: DeepLinkParseResult) => void) => () => void;
   listRunBoxes: (projectId: string) => Promise<RunBoxSummary[]>;
+  /** Opens a ChatGPT device sign-in page in the system browser; main rejects anything off https://auth.openai.com/. */
+  openChatGptSignIn: (verificationUrl: string) => Promise<void>;
   deviceKeyStatus: () => Promise<DeviceKeyStatus>;
   /** Opens an SSH shell for a ready run box. `sessionId` is chosen by the caller. */
   terminalOpen: (

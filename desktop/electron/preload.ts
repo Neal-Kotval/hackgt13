@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { createCodexBridge } from "./codex-preload.ts";
 import type {
   AgentCloudStateSummary,
   AssistantStreamEvent,
@@ -100,6 +99,8 @@ const api: DesktopApi = {
   },
   listRunBoxes: (projectId) =>
     ipcRenderer.invoke("api:listRunBoxes", projectId) as Promise<RunBoxSummary[]>,
+  openChatGptSignIn: (verificationUrl) =>
+    ipcRenderer.invoke("codexSignIn:open", verificationUrl) as Promise<void>,
   deviceKeyStatus: () =>
     ipcRenderer.invoke("deviceKey:status") as Promise<DeviceKeyStatus>,
   terminalOpen: (sessionId, runBoxId, size) =>
@@ -127,6 +128,5 @@ const api: DesktopApi = {
 };
 
 contextBridge.exposeInMainWorld("agentcloudDesktop", api);
-contextBridge.exposeInMainWorld("agentcloudCodex", createCodexBridge(ipcRenderer));
 
 export type { DesktopApi, MessageRole, MessageStatus };

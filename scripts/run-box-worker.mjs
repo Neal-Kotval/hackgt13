@@ -4,10 +4,10 @@ import { getDatabase } from "../lib/auth.mjs";
 import { migrateRunBoxJobs, requestRunBoxStop } from "../lib/run-box-jobs.mjs";
 import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
 import { migrateAwsGpuEvidence } from "../lib/aws-gpu-evidence.mjs";
-import { assumeGpuWorkerRole, createAwsGpuProvider } from "../lib/aws-gpu-provider.mjs";
+import { createAwsGpuProvider, scopedWorkerAws } from "../lib/aws-gpu-provider.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
 import { createAwsCpuProvider, discoverPublicIpv4, scanPublicHostKey } from "../lib/aws-cpu-provider.mjs";
-import { migrateAwsCpuEnvironment, workOneAwsCpuJob } from "../lib/aws-cpu-worker.mjs";
+import { createAwsCpuAgentCleanup, migrateAwsCpuEnvironment, reconcileAwsCpuSshAccess, workOneAwsCpuJob } from "../lib/aws-cpu-worker.mjs";
 import { createRunpodProvider } from "../lib/runpod-provider.mjs";
 import { verifyRunpodSsh } from "../lib/runpod-ssh-proof.mjs";
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
@@ -20,6 +20,14 @@ import { reconcileDockerSandboxes, workOneDockerSandboxJob } from "../lib/docker
 import { loadRunpodApiKey } from "../lib/runpod-secret.mjs";
 import { checkRunpodExpiryGuard } from "./runpod-expiry-preflight.mjs";
 import { localWatchdogReady } from "./runpod-local-watchdog.mjs";
+import { getCodexRunnerKey } from "../lib/codex-runner-key.mjs";
+
+// HAC-153: the install's Codex runner public key is added to every new environment so
+// the backend can run `codex app-server` there over SSH. Only the public half is passed.
+async function runnerKey() {
+  const { publicKey, fingerprint } = await getCodexRunnerKey();
+  return { publicKey, fingerprint };
+}
 
 const mode = process.argv[2];
 const providerName = process.argv[3] || "aws-ec2";
@@ -33,7 +41,7 @@ if (process.argv.length > 4 || !["--once", "--loop"].includes(mode) || !["aws-ec
 // AGENTCLOUD_AWS_CPU_SSH_CIDR (a public /32, or "auto" to use this host's address),
 // AGENTCLOUD_AWS_CPU_SSH_KEY_FILE and AGENTCLOUD_AWS_CPU_SSH_PUBLIC_KEY (operator ed25519 key).
 async function awsCycle() {
-  const aws = await assumeGpuWorkerRole();
+  const aws = await scopedWorkerAws();
   const subnetId = process.env.AGENTCLOUD_GPU_SUBNET_ID;
   const gpuProvider = createAwsGpuProvider({ aws, subnetId });
   // The CPU adapter reuses the GPU adapter's tagged-instance operations and also
@@ -45,17 +53,23 @@ async function awsCycle() {
   migrateRunBoxCleanup(db);
   migrateAwsGpuEvidence(db);
   migrateAwsCpuEnvironment(db);
-  const reconciled = await reconcileAwsRunBoxes(db, provider, { workerId, requestStop: requestRunBoxStop });
+  const cpuConnection = { keyFile: process.env.AGENTCLOUD_AWS_CPU_SSH_KEY_FILE, publicKey: process.env.AGENTCLOUD_AWS_CPU_SSH_PUBLIC_KEY };
+  const cpuConfigured = Boolean(process.env.AGENTCLOUD_AWS_CPU_SSH_CIDR);
+  const reconciled = await reconcileAwsRunBoxes(db, provider, { workerId, requestStop: requestRunBoxStop,
+    cleanupAgent: cpuConfigured ? createAwsCpuAgentCleanup(db, cpuConnection) : null });
   if (reconciled.some((item) => item.status === "retry"))
     throw new Error("EC2 cleanup remains unconfirmed; refusing another allocation");
   const result = await workOneAwsGpuJob(db, gpuProvider, { workerId });
   if (result) console.log(`Processed GPU job ${result.jobId}: ${result.state} (${result.evidenceRef})`);
-  if (result || !process.env.AGENTCLOUD_AWS_CPU_SSH_CIDR) return result;
+  if (!cpuConfigured) return result;
+  const runner = await runnerKey();
+  for (const item of await reconcileAwsCpuSshAccess(db, cpuConnection, { runnerKey: runner }))
+    console.log(`Reconciled AWS CPU SSH access ${item.jobId}: ${item.status}`);
+  if (result) return result;
   const configured = process.env.AGENTCLOUD_AWS_CPU_SSH_CIDR;
   const cpu = await workOneAwsCpuJob(db, provider, { workerId,
     sshSourceCidr: configured === "auto" ? await discoverPublicIpv4() : configured,
-    connection: { keyFile: process.env.AGENTCLOUD_AWS_CPU_SSH_KEY_FILE, publicKey: process.env.AGENTCLOUD_AWS_CPU_SSH_PUBLIC_KEY },
-    probeHostKey: (host) => scanPublicHostKey(host) });
+    connection: cpuConnection, probeHostKey: (host) => scanPublicHostKey(host), runnerKey: runner });
   if (cpu) console.log(`Processed CPU job ${cpu.jobId}: ${cpu.state}${cpu.retry ? ` (${cpu.reason})` : ""}`);
   return cpu;
 }
@@ -81,10 +95,11 @@ async function runpodCycle() {
     checkCleanupGuard: runpodGuard, cleanupAgent: createRunpodAgentCleanup(db, connection) });
   if (reconciled.some((item) => item.status === "retry"))
     throw new Error("Runpod cleanup remains unconfirmed; refusing another allocation");
-  for (const item of await reconcileRunpodSshAccess(db, provider, connection))
+  const runner = await runnerKey();
+  for (const item of await reconcileRunpodSshAccess(db, provider, connection, { runnerKey: runner }))
     console.log(`Reconciled Runpod SSH access ${item.jobId}: ${item.status}`);
   const result = await workOneRunpodJob(db, provider, { workerId, connection, verify: verifyRunpodSsh,
-    checkCleanupGuard: runpodGuard, checkAgent: checkRunpodAgent });
+    checkCleanupGuard: runpodGuard, checkAgent: checkRunpodAgent, runnerKey: runner });
   if (result) console.log(`Processed Runpod job ${result.jobId}: ${result.state}${result.retry ? " (verification pending)" : ""}`);
   return result;
 }
@@ -100,9 +115,10 @@ async function dockerLocalCycle() {
   migrateRunBoxJobs(db);
   migrateSshKeys(db);
   migrateRunBoxSsh(db);
-  for (const item of await reconcileDockerSandboxes(db, dockerProvider))
+  const runner = await runnerKey();
+  for (const item of await reconcileDockerSandboxes(db, dockerProvider, { runnerKey: runner }))
     console.log(`Reconciled sandbox ${item.jobId || item.containerId}: ${item.status}`);
-  const result = await workOneDockerSandboxJob(db, dockerProvider, { workerId });
+  const result = await workOneDockerSandboxJob(db, dockerProvider, { workerId, runnerKey: runner });
   if (result) console.log(`Processed sandbox job ${result.jobId}: ${result.state}${result.port ? ` (ssh 127.0.0.1:${result.port})` : ""}`);
   return result;
 }
