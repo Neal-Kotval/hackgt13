@@ -21,7 +21,22 @@ export function copyRuntimeTree(name, fromDirectory, destination) {
   }
 }
 
+// A configured release has a public backend default; developer builds retain localhost.
+// Keep the origin separate from secrets and honor explicit runtime overrides.
+export function createPackagedBootstrap(serverUrl) {
+  if (!serverUrl?.trim()) return null;
+  let url;
+  try { url = new URL(serverUrl.trim()); }
+  catch { throw new Error('ALTO_DESKTOP_SERVER_URL must be an HTTPS origin (HTTP is allowed only on loopback).'); }
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error('ALTO_DESKTOP_SERVER_URL must be a credential-free HTTPS origin without a path, query, or fragment (HTTP is allowed only on loopback).');
+  }
+  return `if (!process.env.AGENTCLOUD_URL && !process.env.BETTER_AUTH_URL) {\n  process.env.AGENTCLOUD_URL = ${JSON.stringify(url.origin)};\n}\nawait import('./dist-electron/main.js');\n`;
+}
+
 export function packageMacOS(desktop) {
+  const bootstrap = createPackagedBootstrap(process.env.ALTO_DESKTOP_SERVER_URL);
   if (process.platform !== 'darwin') throw new Error('DMG packaging requires macOS.');
   for (const file of ['dist/index.html', 'dist-electron/main.js', 'dist-electron/preload.cjs', 'cli/alto.mjs']) {
     if (!existsSync(path.join(desktop, file))) throw new Error(`Missing ${file}; build desktop and include the alto CLI first.`);
@@ -42,7 +57,8 @@ export function packageMacOS(desktop) {
     const app = path.join(resources, 'app');
     mkdirSync(app);
     for (const directory of ['dist', 'dist-electron', 'cli']) cpSync(path.join(desktop, directory), path.join(app, directory), { recursive: true, dereference: true });
-    writeFileSync(path.join(app, 'package.json'), JSON.stringify({ name: metadata.name, version: metadata.version, main: metadata.main, type: 'module' }, null, 2));
+    if (bootstrap) writeFileSync(path.join(app, 'bootstrap.mjs'), bootstrap);
+    writeFileSync(path.join(app, 'package.json'), JSON.stringify({ name: metadata.name, version: metadata.version, main: bootstrap ? 'bootstrap.mjs' : metadata.main, type: 'module' }, null, 2));
     copyRuntimeTree('ssh2', desktop, app);
     mkdirSync(path.join(resources, 'bin'));
     cpSync(path.join(desktop, 'scripts/alto-launcher'), path.join(resources, 'bin/alto'));

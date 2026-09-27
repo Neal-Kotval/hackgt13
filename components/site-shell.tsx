@@ -28,7 +28,7 @@ const legacySections: Record<string, string> = {
 
 export function WebsiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  if (["/", "/sign-in", "/sign-up"].includes(pathname)) return children;
+  if (["/", "/sign-in", "/sign-up", "/download"].includes(pathname)) return children;
   return <AuthenticatedShell>{children}</AuthenticatedShell>;
 }
 
