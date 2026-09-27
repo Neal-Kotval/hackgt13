@@ -76,7 +76,7 @@ export function SignIn({ signup = false, invite = "", verified = false, verifica
     <Link className="auth-account-link" href={`${signup || checkEmail ? "/sign-in" : "/sign-up"}${suffix}`}>{signup || checkEmail ? "Back to sign in" : "Create an account"}</Link></div>
   </section></main>;
 }
-export function EmployeeMenu({ navigation = true }: { navigation?: boolean }) {
+export function EmployeeMenu({ navigation = true, onNavigate }: { navigation?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const { data, isPending } = client.useSession();
   const { data: organizations, isPending: organizationsPending } = client.useListOrganizations();
@@ -97,8 +97,8 @@ export function EmployeeMenu({ navigation = true }: { navigation?: boolean }) {
     }}><option value="" disabled>Select organization</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</Select></label>}
     {navigation && <Link className="button ghost" href="/organizations">Organizations</Link>}
     <div className="account-identity"><span className="account-avatar" aria-hidden="true">{data?.user ? initials : <User />}</span><div className="account-details"><strong className="local-label">{name}</strong>{data?.user?.email && <span className="account-email" title={data.user.email}>{data.user.email}</span>}</div></div>
-    <Link className="button ghost" href="/settings" aria-current={pathname === "/settings" ? "page" : undefined}><Gear aria-hidden="true" />Account settings</Link>
-    <Link className="button ghost" href="/download"><DownloadSimple aria-hidden="true" />Download desktop app</Link>
+    <Link className="button ghost" href="/settings" onClick={onNavigate} aria-current={pathname === "/settings" ? "page" : undefined}><Gear aria-hidden="true" />Account settings</Link>
+    <Link className="button ghost" href="/download" onClick={onNavigate}><DownloadSimple aria-hidden="true" />Download desktop app</Link>
     <button className="button ghost" onClick={async () => {try {const result=await client.signOut();if(result.error)setError("Sign-out failed");else window.location.assign("/sign-in");}catch{setError("Sign-out failed");}}}><SignOut aria-hidden="true" />Sign out</button>
     {error && <span role="alert">{error}</span>}
   </>;

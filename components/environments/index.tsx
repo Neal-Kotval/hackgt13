@@ -66,7 +66,7 @@ const stateCopy: Record<JobState, { label: string; phase: string; detail: string
   stopping: {
     label: "Stopping",
     phase: "Stopping",
-    detail: "Shutdown can take several minutes. This environment counts toward your limit until the provider confirms it is released.",
+    detail: "Shutdown can take several minutes. Waiting for the provider to confirm this environment is released.",
   },
   stopped: {
     label: "Stopped",
@@ -305,7 +305,7 @@ export function Environments({ project }: { project: Project }) {
       setNotice(
         data.outcome === "stopped"
           ? "Stopped. No machine was ever launched for this environment, so it was closed immediately."
-          : "Termination requested. This environment counts toward your limit until the provider confirms it is released.",
+          : "Termination requested. Waiting for the provider to confirm this environment is released.",
       );
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "Could not force stop.");
@@ -609,7 +609,7 @@ function EnvironmentCard({
     stopped && !job.provider_resource_id
       ? "Stopped before a machine was allocated."
       : terminationRequested
-        ? "Termination requested. This environment counts toward your limit until the provider confirms it is released."
+        ? "Termination requested. Waiting for the provider to confirm this environment is released."
         : copy.detail;
   const phase = terminationRequested ? "Termination requested" : copy.phase;
 
@@ -821,7 +821,7 @@ function EnvironmentCard({
           <p>
             Force stop this environment? If no machine was ever launched, it closes now.
             Otherwise AgentCloud requests termination from the provider, and this
-            environment counts toward your limit until the release is confirmed.
+            environment is not fully released until the provider confirms teardown.
             Anything not pushed from it is lost.
           </p>
           <div className="environment-actions">
