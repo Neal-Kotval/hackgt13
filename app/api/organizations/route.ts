@@ -33,8 +33,13 @@ export async function POST(request: Request) {
       const legacy = db.prepare("SELECT role FROM project_membership WHERE user_id=? AND project_id=?").get(employee.id, input.projectId) as { role: string } | undefined;
       if (legacy?.role !== "owner") throw new InputError("Existing project owner required", 403);
       if (!(await getState()).projects.some((p) => p.id === input.projectId)) throw new InputError("Project not found", 404);
-      if (db.prepare("SELECT 1 FROM project_organization WHERE project_id=?").get(input.projectId)) throw new InputError("Project already belongs to an organization", 409);
-      db.prepare("INSERT INTO project_organization (project_id, organization_id) VALUES (?, ?)").run(input.projectId, org.id);
+      db.transaction(() => {
+        const legacy = db.prepare("SELECT role FROM project_membership WHERE user_id=? AND project_id=?").get(employee.id, input.projectId) as { role: string } | undefined;
+        if (legacy?.role !== "owner") throw new InputError("Existing project owner required", 403);
+        if (db.prepare("SELECT 1 FROM project_organization WHERE project_id=?").get(input.projectId)) throw new InputError("Project already belongs to an organization", 409);
+        db.prepare("INSERT INTO project_organization (project_id, organization_id) VALUES (?, ?)").run(input.projectId, org.id);
+        db.prepare("DELETE FROM project_membership WHERE project_id=? AND user_id<>?").run(input.projectId, employee.id);
+      })();
     } else if (input.type === "setProjectAccess") {
       if (typeof input.userId !== "string" || typeof input.allowed !== "boolean") throw new InputError("Member and access required");
       if (!db.prepare("SELECT 1 FROM project_organization WHERE project_id=? AND organization_id=?").get(input.projectId, org.id)) throw new InputError("Project not in organization", 403);
