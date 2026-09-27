@@ -312,7 +312,11 @@ After `npm run build`, run `npm run test:motion:browser` to verify Motion entran
 
 Runs groups recent saved work into one entry per environment-backed Codex chat.
 Entries use the first retained request as their title, sort by latest activity,
-and show the latest request’s outcome and response. Earlier requests remain in
+and show a manually assigned status: To do (the default), In progress, Needs
+attention, or Done. Project members change it in conversation details; their
+choice is saved on the server with attribution and survives later replies or
+server restarts. Details separately show the latest request’s outcome and
+response. Earlier requests remain in
 expandable conversation details. The underlying history API retains individual
 requests; completion, failure and interruption come from saved
 turn events. Environment shutdown does not change an already completed outcome.

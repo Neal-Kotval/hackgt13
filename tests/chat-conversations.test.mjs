@@ -22,3 +22,13 @@ test('latest response activity sorts conversations and empty history stays empty
   assert.equal(groupChatConversations([run('other','other-chat','2026-01-03'),a])[0].id,'chat');
   assert.deepEqual(groupChatConversations([]),[]);
 });
+
+test('manual conversation status defaults to todo and stays independent of model outcomes', () => {
+  const first=run('first','chat','2026-01-01','completed');
+  assert.equal(groupChatConversations([first])[0].workflowStatus,'todo');
+  first.workflowStatus='in_progress';
+  const next={...first,id:'next',startedAt:'2026-01-02',status:'failed'};
+  const conversation=groupChatConversations([first,next])[0];
+  assert.equal(conversation.workflowStatus,'in_progress');
+  assert.equal(conversation.status,'failed');
+});
