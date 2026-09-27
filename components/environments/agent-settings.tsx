@@ -1,5 +1,6 @@
 "use client";
 
+import { SkeletonRegion, SkeletonRows } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Project } from "@/lib/types";
@@ -53,7 +54,7 @@ export function AgentSettings({ project }: { project: Project }) {
     <header className="resource-section-heading"><div><p className="eyebrow">Agent settings</p><h2 id="agent-settings-title">Codex</h2></div></header>
     <p className="section-description">Add Codex to an existing environment, sign in with ChatGPT, then start chats in the desktop app.</p>
     {error && <div className="resource-feedback resource-feedback--error" role="alert">{error}<button className="button" onClick={() => setRetry(value => value + 1)}>Try again</button></div>}
-    {!jobs && !error && <p className="resource-note" role="status">Loading environments…</p>}
+    {!jobs && !error && <SkeletonRegion label="Loading environments"><SkeletonRows count={2} /></SkeletonRegion>}
     {jobs && !available.length && <div className="resource-panel environment-codex"><h3>Set up an environment first</h3><p className="resource-note">Once your environment is ready, return here to add Codex.</p><div className="environment-actions"><Link className="button primary" href={`/projects/${project.id}/environments`}>Set up environment</Link></div></div>}
     <div className="environment-list">
       {available.map(job => {

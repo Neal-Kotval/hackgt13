@@ -1,4 +1,5 @@
 "use client";
+import { SkeletonPanel, SkeletonRegion } from "@/components/ui/skeleton";
 import { Select } from "@/components/ui/select";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -60,7 +61,7 @@ export function OrganizationDashboard() {
   return <>
   <main className="organization-page"><div className="section-heading"><h1>Organizations</h1><button className="button" disabled={!data || busy} onClick={() => createDialog.current?.showModal()}>New organization</button></div>
     {error && <p className="auth-error" role="alert">{error}</p>}{notice && <p className="auth-success" role="status">{notice}</p>}
-    {!data ? <p>Loading organizations…</p> : <>
+    {!data ? <SkeletonRegion label="Loading organizations" className="organization-skeleton"><SkeletonPanel rows={1} icon={false} action /><SkeletonPanel rows={2} icon={false} lines={1} /></SkeletonRegion> : <>
       <section className="organization-panel"><h2>Your organizations</h2>
         {data.organizations.length===0 ? <p>Create your first organization, or open an invitation from your email.</p> : <ul className="organization-list">{data.organizations.map(org=><li key={org.id}><div><strong>{org.name}</strong><p>{org.role}{active?.id===org.id ? " · Active" : ""}</p></div><button className="button" disabled={busy || active?.id===org.id} onClick={()=>void run(async()=>{checked(await client.organization.setActive({organizationId:org.id}));},"Active organization changed.")}>Switch to {org.name}</button></li>)}</ul>}
         {active && <Link className="button primary" href="/projects">Open projects</Link>}
