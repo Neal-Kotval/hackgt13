@@ -20,7 +20,7 @@ test('initialization is idempotent and waits for actual account/thread',async()=
  const f=fixture({signedIn:false});const a=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});
  assert.equal(a.status,'initializing');assert.equal(f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'}).id,a.id);
  await tick();assert.equal(f.service.get(a.id).status,'auth_required');assert.equal(f.calls.some(x=>x.method==='thread/start'),false);
- const result=await f.service.action(a.id,{action:'login'});assert.equal(result.login.userCode,'TEST-CODE');
+ const result=await f.service.action(a.id,{action:'login',method:'deviceCode'});assert.equal(result.login.userCode,'TEST-CODE');
  assert.equal(JSON.stringify(f.service.snapshot(a.id)).includes('TEST-CODE'),false);f.service.close();f.db.close();
 });
 test('message idempotency, real streamed snapshots, interrupt confirmation and persistence',async()=>{
