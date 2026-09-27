@@ -7,6 +7,7 @@ import { listRunBoxJobs, migrateRunBoxJobs, saveRunBoxDecision } from "../../../
 import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../../../lib/run-box-ssh.mjs";
 import { getAgentCheck, getWorkspacePath, migrateAgentCheck } from "../../../lib/agent-check.mjs";
 import { getContainerTemplate, listContainerTemplates, templateIdFromProfile } from "../../../lib/container-templates.mjs";
+import { requestAwsCpuSshAccess, trustedRequesterCidr } from "../../../lib/aws-cpu-ssh-access.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,7 +63,9 @@ function respond(result: { decision: { outcome: string } }) {
 // second resource request while the first is still being decided.
 const pending = new Map<string, Promise<unknown>>();
 
-async function createEnvironment(employee: Employee, input: Record<string, unknown>) {
+// `requesterCidr` is the caller's public /32 from the trusted CloudFront header
+// (lib/aws-cpu-ssh-access.mjs), or null. It is used only for aws-cpu jobs.
+async function createEnvironment(employee: Employee, input: Record<string, unknown>, requesterCidr: string | null) {
   for (const key of Object.keys(input))
     if (!["projectId", "profileId", "durationHours", "idempotencyKey"].includes(key))
       throw new InputError(`Unsupported field: ${key}`);
@@ -114,8 +117,9 @@ async function createEnvironment(employee: Employee, input: Record<string, unkno
     durationHours,
   }, { employeeId: employee.id, organizationId, projectRole: membership.role });
   if (!resourceRequest) throw new Error("Resource request was not recorded");
+  let result;
   try {
-    return respond(saveRunBoxDecision(db, {
+    result = saveRunBoxDecision(db, {
       idempotencyKey,
       resourceRequestId: resourceRequest.id,
       projectId,
@@ -126,10 +130,14 @@ async function createEnvironment(employee: Employee, input: Record<string, unkno
       profileId,
       maxDurationMinutes: durationHours * 60,
       repoUrl: project.repo,
-    }));
+    });
   } catch (error) {
     decisionError(error);
   }
+  // HAC-166: the worker adds a tcp/22 rule for the requester's address next to its own.
+  if (profileId === awsCpuProfile.id && result.job && requesterCidr)
+    requestAwsCpuSshAccess(db, { jobId: result.job.id, cidr: requesterCidr, employeeId: employee.id, source: "create" });
+  return respond(result);
 }
 
 export async function POST(request: Request) {
@@ -141,7 +149,7 @@ export async function POST(request: Request) {
       const key = `${employee.id}:${String(input.idempotencyKey)}`;
       const operation = (pending.get(key) ?? Promise.resolve())
         .catch(() => {})
-        .then(() => createEnvironment(employee, input));
+        .then(() => createEnvironment(employee, input, trustedRequesterCidr(request.headers)));
       pending.set(key, operation);
       try { return await operation; } finally { if (pending.get(key) === operation) pending.delete(key); }
     }

@@ -184,3 +184,18 @@ test("a public endpoint serving a different host key fails the job", async () =>
   await assert.rejects(runUntilSettled(db, provider, { probeHostKey: async () => ed25519PublicKey() }), /different host key/);
   assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
 });
+
+test("HAC-166: the worker authorizes its own /32 and the recorded requester /32 before verification", async () => {
+  const { db, job } = setup();
+  const { requestAwsCpuSshAccess, listAwsCpuSshAccess } = await import("../lib/aws-cpu-ssh-access.mjs");
+  requestAwsCpuSshAccess(db, { jobId: job.id, cidr: "8.8.8.8/32", employeeId: "employee-1" });
+  // Same address as the worker: authorizeSsh dedupes to the worker's rule.
+  const provider = fakeProvider();
+  const results = await runUntilSettled(db, provider, { probeHostKey: async () => provider.hostKey });
+  assert.equal(results.at(-1).state, "ready");
+  const authorized = provider.calls.filter((call) => call[0] === "authorize").map((call) => call[1]);
+  assert.deepEqual(authorized, [cidr, "8.8.8.8/32"]);
+  assert.ok(provider.calls.findIndex((call) => call[0] === "authorize" && call[1] === "8.8.8.8/32") <
+    provider.calls.findIndex((call) => call[0] === "checkAgent"));
+  assert.equal(listAwsCpuSshAccess(db, job.id)[0].status, "applied");
+});
