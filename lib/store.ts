@@ -100,8 +100,8 @@ export function visibleState(state: State, now = Date.now()): State {
   }
   return publicState;
 }
-function projectInput(input: Record<string, unknown>) {
-  const repo = str(input.repo, "repo");
+function repoInput(value: unknown) {
+  const repo = str(value, "repo");
   let url: URL;
   try {
     url = new URL(repo);
@@ -115,6 +115,10 @@ function projectInput(input: Record<string, unknown>) {
     !url.hostname
   )
     throw new InputError("Repository must be an HTTPS URL without credentials");
+  return repo;
+}
+function projectInput(input: Record<string, unknown>) {
+  const repo = repoInput(input.repo);
   const compute = str(input.compute, "compute");
   if (!["Hosted Linux", "SSH machine"].includes(compute))
     throw new InputError("Choose Hosted Linux or SSH machine");
@@ -125,6 +129,53 @@ function projectInput(input: Record<string, unknown>) {
       throw new InputError("SSH host must be a hostname or user@hostname");
   }
   return { repo, compute, host };
+}
+/**
+ * Project settings are owner-only, so they are not reachable through the member
+ * `action` endpoint. Callers authorize the employee and validate the machine id
+ * against the catalog before calling this.
+ */
+export async function updateProjectSettings(
+  projectId: string,
+  input: Record<string, unknown>,
+  actor: string,
+) {
+  return transaction(async (disk) => {
+    const p = project(disk, projectId);
+    const changes: string[] = [];
+    if (input.name !== undefined) {
+      const name = str(input.name, "Project name", 100);
+      if (/[\u0000-\u001f\u007f]/.test(name))
+        throw new InputError("Project name cannot contain control characters");
+      if (name !== p.name) changes.push("name");
+      p.name = name;
+    }
+    if (input.repo !== undefined) {
+      const repo = repoInput(input.repo);
+      if (repo !== p.repo) changes.push("repository");
+      p.repo = repo;
+    }
+    if (input.environmentDefaults !== undefined) {
+      const value = input.environmentDefaults as Record<string, unknown> | null;
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new InputError("Environment defaults must be an object");
+      const machineId = value.machineId ?? null;
+      if (machineId !== null && (typeof machineId !== "string" || !/^[a-z0-9-]{1,64}$/.test(machineId)))
+        throw new InputError("Choose a machine size from the catalog");
+      if (value.visibility !== "private" && value.visibility !== "public")
+        throw new InputError("Visibility must be private or public");
+      const sharedMemory = value.sharedMemory ?? p.environmentDefaults?.sharedMemory ?? false;
+      if (typeof sharedMemory !== "boolean") throw new InputError("Shared memory must be on or off");
+      const next = { machineId: machineId as string | null, visibility: value.visibility as "private" | "public", sharedMemory };
+      if (JSON.stringify(next) !== JSON.stringify(p.environmentDefaults ?? null)) changes.push("environment defaults");
+      p.environmentDefaults = next;
+    }
+    if (changes.length) {
+      event(p, actor, `Updated project ${changes.join(", ")}`, "project");
+      disk.state.revision += 1;
+    }
+    return structuredClone(p);
+  });
 }
 function project(disk: Disk, projectId: unknown): Project {
   const p = disk.state.projects.find((p) => p.id === projectId);

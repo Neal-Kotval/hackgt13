@@ -41,7 +41,7 @@ import { RunControl } from "./runs/run-control";
 import { Skeleton, SkeletonHeading, SkeletonPanel, SkeletonRegion, SkeletonRows } from "./ui/skeleton";
 import { ResourceGraph } from "./resource-graph";
 import { Environments } from "./environments";
-import { AgentSettings } from "./environments/agent-settings";
+import { ProjectSettings } from "./project-settings";
 type Action = Record<string, unknown>;
 const iconProps = { weight: "duotone" as const };
 function Icon({ children }: { children: ReactNode }) {
@@ -276,7 +276,7 @@ export function CloudApp() {
               </span>
               <span className="meta-right">Project workspace pending</span>
             </div>
-            </> : <h1 className="visually-hidden project-section-title">{({board: "Task board", desktop: "Agent settings"} as Record<string, string>)[page] ?? page.charAt(0).toUpperCase() + page.slice(1)}</h1>}
+            </> : <h1 className="visually-hidden project-section-title">{({board: "Task board", agents: "Settings", desktop: "Settings"} as Record<string, string>)[page] ?? page.charAt(0).toUpperCase() + page.slice(1)}</h1>}
             {page === "environments" ? (
               <div className="project-sections">
                 <Environments project={project} />
@@ -293,7 +293,8 @@ export function CloudApp() {
                 </details>
               </div>
             ) : page === "settings" || page === "agents" || page === "desktop" ? (
-              <AgentSettings key={project.id} project={project} />
+              // Codex sign-in moved into project Settings; the old agents/desktop links still land here.
+              <ProjectSettings key={project.id} project={project} onProjectChange={refresh} />
             ) : page === "review" ? (
               <Review
                 project={project}
