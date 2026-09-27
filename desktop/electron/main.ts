@@ -23,6 +23,7 @@ import { ChatStore, ChatStoreError } from "./chat-store.ts";
 import { SessionStore } from "./session-store.ts";
 import { DeviceKeyRegistrar, DeviceKeyStore } from "./device-key.ts";
 import { TerminalSessions } from "./terminal-sessions.ts";
+import { CodexLoginTunnels, type LoginTunnelEvent } from "./codex-login-tunnel.ts";
 import { isChatGptVerificationUrl } from "../src/lib/chatgpt-sign-in.ts";
 import type { AssistantStreamEvent, TerminalEvent } from "../src/lib/types.ts";
 import {
@@ -117,6 +118,7 @@ let store: ChatStore;
 let authClient: DesktopAuthClient;
 let apiClient: LoopbackApiClient;
 let terminals: TerminalSessions | null = null;
+let loginTunnels: CodexLoginTunnels | null = null;
 let assistant: AssistantAdapter;
 
 const activeRuns = new Map<
@@ -379,10 +381,15 @@ function createWindow(): void {
   attachWindowHandlers(win);
   const ownerId = win.webContents.id;
   // SSH sessions belong to this renderer; tear them down with it.
-  win.webContents.once("destroyed", () => terminals?.closeOwner(ownerId));
-  win.webContents.on("render-process-gone", () => terminals?.closeOwner(ownerId));
+  // HAC-161: a ChatGPT sign-in tunnel also ends with the window that started it.
+  const closeOwned = () => {
+    terminals?.closeOwner(ownerId);
+    loginTunnels?.closeOwner(ownerId);
+  };
+  win.webContents.once("destroyed", closeOwned);
+  win.webContents.on("render-process-gone", closeOwned);
   win.webContents.on("did-start-navigation", (details) => {
-    if (details.isMainFrame && !details.isSameDocument) terminals?.closeOwner(ownerId);
+    if (details.isMainFrame && !details.isSameDocument) closeOwned();
   });
   void loadRenderer(win).catch((error) => {
     console.error("[desktop] initial load failed:", error);
@@ -462,6 +469,16 @@ app.whenReady().then(async () => {
     },
   });
   terminals = terminalSessions;
+  const codexLoginTunnels = new CodexLoginTunnels({
+    request: (requestPath, init) => authClient.fetchHuman(requestPath, init),
+    privateKey: () => registrar.privateKey(),
+    beforeConnect: async () => {
+      await registrar.ensureRegistered();
+    },
+    // The tunnel re-validates the URL against https://auth.openai.com/ and its port before this runs.
+    openExternal: (url) => shell.openExternal(url),
+  });
+  loginTunnels = codexLoginTunnels;
 
   wrapIpc("auth:status", async () => {
     const status = await authClient.status();
@@ -475,6 +492,7 @@ app.whenReady().then(async () => {
   });
   wrapIpc("auth:signOut", async () => {
     terminalSessions.closeAll();
+    codexLoginTunnels.closeAll();
     registrar.reset();
     await authClient.signOut();
     return authClient.status();
@@ -497,6 +515,27 @@ app.whenReady().then(async () => {
       throw new Error("Refusing to open a sign-in address outside https://auth.openai.com/.");
     }
     await shell.openExternal(verificationUrl);
+  });
+  // HAC-161: ChatGPT browser sign-in for Codex on an environment. The tunnel
+  // listens on 127.0.0.1:<callbackPort> only, forwards over the pinned SSH
+  // connection, and opens the browser only once it is listening.
+  wrapIpc("codexSignIn:startBrowser", async (event, input: Record<string, unknown>) => {
+    const sender = event.sender;
+    return codexLoginTunnels.start(
+      sender.id,
+      (payload: LoginTunnelEvent) => {
+        if (!sender.isDestroyed()) sender.send("codexSignIn:event", payload);
+      },
+      {
+        sessionId: input?.sessionId,
+        runBoxId: input?.runBoxId,
+        authUrl: input?.authUrl,
+        callbackPort: input?.callbackPort,
+      },
+    );
+  });
+  wrapIpc("codexSignIn:stopBrowser", async (event, sessionId: unknown) => {
+    codexLoginTunnels.stop(event.sender.id, sessionId);
   });
   wrapIpc("api:listRunBoxes", async (_event, projectId: string) =>
     apiClient.listRunBoxes(projectId),
@@ -770,6 +809,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   terminals?.closeAll();
+  loginTunnels?.closeAll();
 });
 
 app.on("window-all-closed", () => {
