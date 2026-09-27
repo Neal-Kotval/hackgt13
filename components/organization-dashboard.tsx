@@ -3,28 +3,48 @@ import { Select } from "@/components/ui/select";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { authClient as client } from "@/lib/auth-client";
+import { organizationUrl } from "@/lib/organization-url";
 type Org = { id: string; name: string; slug: string; role: string };
 type Member = { id: string; userId: string; role: string; name: string; email: string };
 type Invitation = { id: string; email: string; role: "member" | "admin"; status: string; expiresAt: string | number; delivery: string | null };
 type Project = { id: string; name: string };
 type Snapshot = { id: string; organizations: Org[]; activeOrganization: Org | null; members: Member[]; invitations: Invitation[]; projects: Project[]; legacyProjects: Project[]; assignments: { userId: string; projectId: string }[]; mailMode: "local" | "smtp" | "unavailable" };
-export function OrganizationDashboard() {
+export function OrganizationDashboard({ organizationId }: { organizationId?: string }) {
   const createDialog = useRef<HTMLDialogElement>(null);
+  const requestScope = useRef(0);
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
   const [data, setData] = useState<Snapshot | null>(null);
   const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [busy, setBusy] = useState(false);
-  async function load() {
+  async function load(scope = requestScope.current) {
     const response = await fetch("/api/organizations");
+    if (scope !== requestScope.current) return;
     if (response.status === 401 || response.status === 403) {window.location.assign("/sign-in"); return;}
     if (!response.ok) throw Error("Could not load organizations");
-    setData(await response.json());
+    let snapshot = await response.json() as Snapshot;
+    if (scope !== requestScope.current) return;
+    if (organizationId && snapshot.activeOrganization?.id !== organizationId) {
+      if (!snapshot.organizations.some((org) => org.id === organizationId)) {
+        setData(null);
+        throw Error("You no longer have access to this organization.");
+      }
+      checked(await client.organization.setActive({ organizationId }));
+      if (scope !== requestScope.current) return;
+      const updated = await fetch("/api/organizations");
+      if (scope !== requestScope.current) return;
+      if (!updated.ok) throw Error("Could not open this organization.");
+      snapshot = await updated.json() as Snapshot;
+      if (snapshot.activeOrganization?.id !== organizationId) throw Error("Could not activate this organization.");
+    }
+    if (scope === requestScope.current) setData(snapshot);
   }
-  useEffect(() => {void load().catch(e => setError(e.message));}, []);
+  useEffect(() => {const scope = ++requestScope.current; setData(null); setError("");
+    void load(scope).catch(e => {if(scope===requestScope.current)setError(e.message);});}, [organizationId]);
   async function run(operation: () => Promise<unknown>, message: string) {
+    const scope = requestScope.current;
     setBusy(true);setError("");setNotice("");
-    try { await operation(); await load();setNotice(message); }
-    catch(e) {setError(e instanceof Error ? e.message : "The request failed. Please try again.");}
+    try { await operation(); if (scope !== requestScope.current) return; await load(scope);if (scope === requestScope.current) setNotice(message); }
+    catch(e) {if (scope === requestScope.current) setError(e instanceof Error ? e.message : "The request failed. Please try again.");}
     finally{setBusy(false);}
   }
   function checked(result: { error?: { message?: string } | null }) {if(result.error)throw Error(result.error.message || "Request failed");}
@@ -41,17 +61,20 @@ export function OrganizationDashboard() {
     if (creating) return;
     const form = event.currentTarget;
     const values = new FormData(form);
+    const scope = requestScope.current;
     setCreating(true);
     setCreateError("");
     try {
       checked(await client.organization.create({name: String(values.get("name")).trim(), slug: String(values.get("slug")).trim()}));
+      if (scope !== requestScope.current) return;
+      if (organizationId) {window.location.assign("/organizations"); return;}
       form.reset();
       createDialog.current?.close();
       setError("");
       setNotice("Organization created. You are its owner.");
-      await load().catch(() => setError("Organization created, but the list could not refresh. Reload the page to see it."));
+      await load(scope).catch(() => setError("Organization created, but the list could not refresh. Reload the page to see it."));
     } catch (e) {
-      setCreateError(e instanceof Error ? e.message : "Could not create the organization. Please try again.");
+      if (scope === requestScope.current) setCreateError(e instanceof Error ? e.message : "Could not create the organization. Please try again.");
     } finally {
       setCreating(false);
     }
@@ -62,7 +85,7 @@ export function OrganizationDashboard() {
     {error && <p className="auth-error" role="alert">{error}</p>}{notice && <p className="auth-success" role="status">{notice}</p>}
     {!data ? <p>Loading organizations…</p> : <>
       <section className="organization-panel"><h2>Your organizations</h2>
-        {data.organizations.length===0 ? <p>Create your first organization, or open an invitation from your email.</p> : <ul className="organization-list">{data.organizations.map(org=><li key={org.id}><div><strong>{org.name}</strong><p>{org.role}{active?.id===org.id ? " · Active" : ""}</p></div><button className="button" disabled={busy || active?.id===org.id} onClick={()=>void run(async()=>{checked(await client.organization.setActive({organizationId:org.id}));},"Active organization changed.")}>Switch to {org.name}</button></li>)}</ul>}
+        {data.organizations.length===0 ? <p>Create your first organization, or open an invitation from your email.</p> : <ul className="organization-list">{data.organizations.map(org=><li key={org.id}><div><strong>{org.name}</strong><p>{org.role}{active?.id===org.id ? " · Active" : ""}</p></div><div className="auth-actions"><Link className="button" href={organizationUrl(org)}>Open {org.name}</Link>{!organizationId && <button className="button" disabled={busy || active?.id===org.id} onClick={()=>void run(async()=>{checked(await client.organization.setActive({organizationId:org.id}));},"Active organization changed.")}>Switch to {org.name}</button>}</div></li>)}</ul>}
         {active && <Link className="button primary" href="/projects">Open projects</Link>}
       </section>
       {active && <section className="organization-panel"><h2>{active.name} · People</h2><p>Your role: {active.role}. Owners and admins manage all organization projects; members receive explicit project access.</p>
