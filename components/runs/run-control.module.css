@@ -58,10 +58,9 @@
   white-space: nowrap;
 }
 
-.summaryGrid,
-.agentGrid {
+.summaryGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
 }
 
@@ -120,15 +119,24 @@
   font-size: var(--text-xl);
 }
 
+.agentGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--agent-card-min-width)), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
 .agentCard {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
   padding: var(--space-5);
   background: var(--color-surface-raised);
 }
 
 .agentTop {
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-wrap: anywhere;
 }
 
 .agentTop h3 {
@@ -142,6 +150,11 @@
 }
 
 .status {
+  max-width: 100%;
+  white-space: normal;
+  border-radius: var(--radius-xs);
+  padding: var(--space-1) var(--space-2);
+  line-height: var(--leading-normal);
   color: var(--color-warning);
   background: var(--color-warning-soft);
   border-color: var(--color-warning);
@@ -160,11 +173,13 @@
 
 .agentFacts {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   margin: 0;
 }
 
 .agentFacts > div {
+  min-width: 0;
   display: grid;
   gap: var(--space-1);
 }
@@ -176,12 +191,17 @@
 
 .agentFacts dd {
   margin: 0;
+  text-align: start;
+  color: var(--color-text);
   overflow-wrap: anywhere;
   font-size: var(--text-sm);
 }
 
 .agentCaveat {
-  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
   padding-top: var(--space-4);
   border-top: var(--border-width) solid var(--color-border);
   font-size: var(--text-xs);
@@ -342,8 +362,7 @@
     flex-wrap: wrap;
   }
 
-  .summaryGrid,
-  .agentGrid {
+  .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -353,12 +372,17 @@
 }
 
 @media (max-width: 375px) {
-  .summaryGrid,
-  .agentGrid {
+  .summaryGrid {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .section {
     padding: var(--space-4);
   }
+}
+
+.agentCaveat svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  margin-top: var(--space-1);
 }

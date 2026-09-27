@@ -372,6 +372,7 @@ function ResourceDetail({ resource }: { resource: ResourceDefinition }) {
 export function ResourceRequests({ project, onAction }: ResourceProps) {
   const resources = project.resources ?? [];
   const requests = [...(project.resourceRequests ?? [])].reverse();
+  const [formOpen, setFormOpen] = useState(false);
   const [resourceId, setResourceId] = useState("");
   const [kind, setKind] = useState<ResourceKind>("gpu");
   const [taskId, setTaskId] = useState("");
@@ -502,9 +503,18 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
             reports allocation and cleanup separately.
           </p>
         </div>
+        <button
+          className="button secondary"
+          type="button"
+          aria-expanded={formOpen}
+          aria-controls="resource-request-form"
+          onClick={() => setFormOpen((open) => !open)}
+        >
+          {formOpen ? "Close request form" : "New request"}
+        </button>
       </div>
-      <div className="resource-request-layout">
-        <form className="resource-form resource-panel" onSubmit={submit}>
+      <div className={`resource-request-layout${formOpen ? "" : " history-only"}`}>
+        {formOpen && <form id="resource-request-form" className="resource-form resource-panel" onSubmit={submit}>
           <div>
             <h3>New request</h3>
               <p className="resource-note">
@@ -513,7 +523,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
             </p>
           </div>
           <label>
-            <span className="visually-hidden">Catalog resource</span>
+            <span>Catalog resource</span>
             <Select
               value={resourceId}
               onChange={(event) => setResourceId(event.target.value)}
@@ -528,7 +538,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
           </label>
           {!resourceId && (
             <label>
-              <span className="visually-hidden">Resource type</span>
+              <span>Resource type</span>
               <Select
                 value={kind}
                 onChange={(event) =>
@@ -557,7 +567,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
                 </Select>
               </label>
               <label>
-                <span className="visually-hidden">Requested duration</span>
+                <span>Requested duration</span>
                 <Select
                   value={durationHours}
                   onChange={(event) =>
@@ -606,7 +616,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
             </div>
           )}
           <label>
-            <span className="visually-hidden">Task</span>
+            <span>Task</span>
             <Select
               value={taskId}
               onChange={(event) => setTaskId(event.target.value)}
@@ -620,7 +630,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
             </Select>
           </label>
           <label>
-            <span className="visually-hidden">Agent</span>
+            <span>Agent</span>
             <Select
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
@@ -648,7 +658,7 @@ export function ResourceRequests({ project, onAction }: ResourceProps) {
           <button className="button primary" type="submit" disabled={busy}>
             {busy ? "Saving request…" : "Save request"}
           </button>
-        </form>
+        </form>}
         <section
           className="resource-request-history"
           aria-label="Resource request history"

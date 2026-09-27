@@ -82,6 +82,10 @@
   min-width: 0;
 }
 
+.resource-request-layout.history-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .resource-list,
 .resource-request-history {
   display: flex;
