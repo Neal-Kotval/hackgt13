@@ -84,7 +84,7 @@ npm run build
 npm start
 ```
 
-The development and production scripts bind to loopback. This is a local organization-aware demo with employee login, but no production tenant isolation; do not expose it publicly as a multi-user service.
+The development and production scripts bind to loopback. This is a local organization-aware demo with employee login, but no production tenant isolation; do not expose it publicly as a multi-user service. [PUBLIC_DEPLOYMENT_BOUNDARY.md](PUBLIC_DEPLOYMENT_BOUNDARY.md) defines the blockers and required evidence before accepting unrelated organizations on a public service.
 
 ## Employee authentication (HAC-1)
 
@@ -202,6 +202,7 @@ The token check enforces the visual-system rules; it does not replace visual ins
 | [AWS_SETUP.md](AWS_SETUP.md) | Live AWS GPU demo preflight, Terraform workflow, spending policy, quota request, and launch gates |
 | [AWS_AUTH_STAGING.md](AWS_AUTH_STAGING.md) | Private EC2 staging deployment, SSM tunnel, and Better Auth verification workflow |
 | [ROADMAP.md](ROADMAP.md) | Dependency-ordered delivery phases and acceptance gates |
+| [PUBLIC_DEPLOYMENT_BOUNDARY.md](PUBLIC_DEPLOYMENT_BOUNDARY.md) | Public multi-organization threat model and launch gates; not an implemented deployment claim |
 | [VERIFICATION.md](VERIFICATION.md) | Recorded check results, remaining verification, and browser-tool limitations |
 | [AGENTS.md](AGENTS.md) | Contributor rules for design, testing, collaboration, and truthful capabilities |
 | `app/` | Next.js routes, UI, API handlers, and application styling |
