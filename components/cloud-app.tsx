@@ -292,7 +292,7 @@ export function CloudApp() {
             {environmentId ? (
               <EnvironmentDetail key={environmentId} projectId={project.id} jobId={environmentId} />
             ) : page === "environments" ? (
-              <div className="project-sections">
+              <div className="project-sections environment-sections">
                 <Environments project={project} />
                 {/* The Environments flow above is the primary path. Saved requests and
                     manual approvals stay available here for existing flows. */}
