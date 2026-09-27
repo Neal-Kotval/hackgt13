@@ -3,6 +3,7 @@
 import { getDatabase } from "../lib/auth.mjs";
 import { migrateRunBoxJobs, requestRunBoxStop } from "../lib/run-box-jobs.mjs";
 import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
+import { migrateAwsForceClose, processAwsForceCloses } from "../lib/aws-force-close.mjs";
 import { migrateAwsGpuEvidence } from "../lib/aws-gpu-evidence.mjs";
 import { createAwsGpuProvider, scopedWorkerAws } from "../lib/aws-gpu-provider.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
@@ -56,6 +57,11 @@ async function awsCycle() {
   migrateAwsCpuEnvironment(db);
   const cpuConnection = { keyFile: process.env.AGENTCLOUD_AWS_CPU_SSH_KEY_FILE, publicKey: process.env.AGENTCLOUD_AWS_CPU_SSH_PUBLIC_KEY };
   const cpuConfigured = Boolean(process.env.AGENTCLOUD_AWS_CPU_SSH_CIDR);
+  migrateAwsForceClose(db);
+  // HAC-166: platform-admin force-close requests, before reconciliation so a stuck job
+  // closes (or gets a normal stop) even while another job's cleanup is still retrying.
+  for (const item of await processAwsForceCloses(db, provider, { workerId, requestStop: requestRunBoxStop }))
+    console.log(`AWS force close ${item.jobId}: ${item.status}${item.error ? ` (${item.error})` : ""}`);
   const reconciled = await reconcileAwsRunBoxes(db, provider, { workerId, requestStop: requestRunBoxStop,
     cleanupAgent: cpuConfigured ? createAwsCpuAgentCleanup(db, cpuConnection) : null });
   if (reconciled.some((item) => item.status === "retry"))
