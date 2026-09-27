@@ -27,10 +27,15 @@ export default function App() {
   }, []);
   useEffect(() => {
     let cancelled = false;
+    let unsubscribe = () => {};
+    try {
     desktopApi().authStatus().then(status=>{if(!cancelled)setAuth(status);})
       .catch(cause=>{if(!cancelled)setBootError(cause instanceof Error ? cause.message : "Could not check your session.");});
-    const unsubscribe = desktopApi().onDeepLink(routeDeepLink);
+    unsubscribe = desktopApi().onDeepLink(routeDeepLink);
     void desktopApi().takePendingDeepLink().then(link=>{if(!cancelled && link)routeDeepLink(link);}).catch(()=>{});
+    } catch (cause) {
+      setBootError(cause instanceof Error ? cause.message : "Desktop bridge unavailable.");
+    }
     return ()=>{cancelled=true;unsubscribe();};
   }, [routeDeepLink]);
   async function signOut() {

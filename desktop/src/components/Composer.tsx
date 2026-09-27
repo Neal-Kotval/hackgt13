@@ -64,6 +64,7 @@ export function Composer({
               className="button danger composer-submit"
               aria-label="Stop response"
               title="Stop response"
+              disabled={disabled}
               onClick={onStop}
             >
               <Square weight="fill" aria-hidden="true" />

@@ -121,8 +121,9 @@ The normal project navigation is Overview, Environments, Runs, and Settings. Ove
 ## Local Docker Codex integration (HAC-116)
 
 The opt-in local Codex path initializes a real Codex app-server in a Docker CPU
-box from project Settings and lets desktop send turns to the same persistent
-thread. Employee membership gates reads and chat; owners control setup and
+box from project Settings and lets desktop **Project chat** send turns to the same
+persistent thread. Project and agent conversation selection live in the shared
+sidebar; there is no separate Codex agents tab. Employee membership gates reads and chat; owners control setup and
 lifecycle. SQLite stores bounded attributed session items, while the Docker
 volume retains Codex history and workspace files. This local implementation does
 not satisfy the AWS/GPU execution or public multi-tenant milestones above. See

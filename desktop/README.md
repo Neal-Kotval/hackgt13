@@ -4,13 +4,13 @@ Desktop shell for HackGT ([HAC-16](https://linear.app/startup-yc/issue/HAC-16/d1
 
 ## Information architecture (HAC-41 / HAC-105)
 
-One window, two primary sections:
+One window, three primary sections:
 
 | Section | Role |
 | --- | --- |
 | **Tasks** | Project/environment picker + task composer against the shared backend (`addTask`). Project chat is separate. |
 | **Environments** | Run boxes for a project (`GET /api/run-boxes`) with server states and an in-app SSH terminal for `ready` environments (HAC-90). |
-| **Project chat** | On-device threads (`threads.json`) that send turns to the selected project's agent via `POST /api/chat`. Does **not** create AgentCloud tasks. |
+| **Project chat** | Conversations with Codex sessions initialized on the website, including live replies, command output, interruption, and reconnect. Does **not** create AgentCloud tasks. |
 
 Machine-first journey: connect/verify a machine in the **web** app → return to desktop **Tasks** to author work against a ready environment → monitor on the web. Project chat is an optional agent conversation beside that flow.
 
@@ -21,7 +21,7 @@ Switching Tasks ↔ Project chat keeps in-memory chat drafts for the session.
 - Node.js 22 LTS
 - macOS (primary hackathon target)
 - Reachable AgentCloud web app for employee sign-in and chat (local `just dev` or the shared AWS URL)
-- Server-side `OPENAI_API_KEY` on that AgentCloud process (Doppler or local env) for real replies — **not** in `desktop/.env`
+- A Codex session initialized and authenticated through project Settings on the website; see [local Codex setup](../LOCAL_CODEX.md).
 
 ## Install and launch
 
@@ -56,14 +56,13 @@ Or set `AGENTCLOUD_DESKTOP_DEVTOOLS=1` in `desktop/.env`. DevTools are attached 
 ## Project chat loop
 
 1. Sign in with the same Better Auth employee email/password as the web app (web must be running at `AGENTCLOUD_URL`, default `http://127.0.0.1:3000`).
-2. Open **Project chat**. Select a project, then type and **Enter** to send — the first send auto-creates a thread (no mandatory **New chat** click).
-3. **Shift+Enter** inserts a newline. **New chat** still starts another empty thread while one is open.
-4. Replies stream from `POST /api/chat` using the server model key. If the project has no agents yet, the server provisions a `desktop-chat` identity (no plaintext token returned to desktop).
-5. If the server lacks `OPENAI_API_KEY`, the failed assistant turn explains server setup — Electron never invents a reply and never reads an OpenAI key.
-6. Create a second chat, switch between them or to **Tasks** and back — titles/messages reload from disk; drafts stay in memory for the session.
-7. **Sign out** clears the employee session; relaunch shows the sign-in screen again (revoked sessions are not silently restored).
+2. Open **Project chat**, select a project and its agent conversation in the sidebar. **Set up agent** opens that project's website Settings if initialization or sign-in is needed.
+3. Type and press **Enter** to send; **Shift+Enter** inserts a newline. Replies and expandable command output come from the real Codex Docker session.
+4. Use **Stop** while Codex is working, or **Reconnect** for stopped/failed sessions.
+5. Switch conversations or visit **Tasks** and return: each session keeps its unsent draft in memory. Server history reloads on relaunch; unsent drafts do not.
+6. **Sign out** clears the employee session.
 
-Unsent composer drafts are kept **per thread in memory** while the app runs (plus a landing draft when no thread is selected). They are cleared on send and are **not** restored after relaunch.
+Project chat now uses the server's Codex session history. Legacy `threads.json` files and the compatibility `/api/chat` transport remain intact, but this interface does not display or migrate those old threads into Codex. There is no separate Codex agents navigation item.
 
 ## Employee authentication (HAC-24)
 
@@ -187,9 +186,9 @@ primitive directly, including keyboard navigation and accessible names.
 
 ## Codex in a local Docker box
 
-The **Codex agents** section connects to sessions initialized on the AgentCloud website. Select the same project and session, send instructions, inspect attributed assistant and Docker command events, and stop generation or reconnect a stopped session. The website owns initialization and authentication setup. `agentcloud://open?projectId=…&codexSessionId=…` selects that session after employee sign-in; session data always comes from the authenticated server, never the link.
+**Project chat** connects to sessions initialized on the AgentCloud website. Select the same project and session, send instructions, inspect attributed assistant and Docker command events, and stop generation or reconnect a stopped session. The website owns initialization and authentication setup. `agentcloud://open?projectId=…&codexSessionId=…` selects that session after employee sign-in; session data always comes from the authenticated server, never the link.
 
-This view polls bounded event snapshots and replaces events by stable IDs. Unsent drafts survive navigation during the current app session; failed sends retain text and reuse the request ID when retried unchanged. If a turn start is ambiguous, the draft stays intact and ordinary send is disabled; inspect the recovered history, then explicitly choose **Send as a new turn** only if another execution is intended. Unavailable deep-link projects or sessions never select a different agent automatically. Project chat remains an independent local scratchpad. Docker provides a local execution box, not an AWS deployment or GPU verification. Authenticated renderer requests are restricted to the configured server origin and do not follow redirects.
+This view polls bounded event snapshots and replaces events by stable IDs. Unsent drafts survive navigation during the current app session; failed sends retain text and reuse the request ID when retried unchanged. If a turn start is ambiguous, the draft stays intact and ordinary send is disabled; inspect the recovered history, then explicitly choose **Send as a new turn** only if another execution is intended. Unavailable deep-link projects or sessions never select a different agent automatically. The existing chat composer and conversation layout are the Codex interaction surface. Docker provides a local execution box, not an AWS deployment or GPU verification. Authenticated renderer requests are restricted to the configured server origin and do not follow redirects.
 
 ### Project chat presentation
 
@@ -198,5 +197,5 @@ windows). New chats open with a centered greeting and composer; conversations us
 a restrained reading column, user bubbles, and unboxed assistant turns. Enter
 sends, Shift+Enter adds a line, and composing text with an IME does not send early.
 Send and Stop have accessible labels. Removed routine message counts and explanatory
-banners do not change storage or execution: chat history is still saved on this
-device, and missing configuration and failed turns remain visible.
+banners do not change execution: Codex history comes from the server, and missing
+configuration and failed turns remain visible. Legacy on-device files are retained.
