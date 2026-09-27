@@ -344,11 +344,6 @@ export function CloudApp() {
                       <SectionTitle label="Environments" />
                       <OverviewEnvironments projectId={project.id} base={base} />
                     </section>
-                    <section>
-                      <SectionTitle label="Task progress" number={project.tasks.length} />
-                      <p className="section-description">Monitor tasks here. The desktop app is the intended place to create tasks and send instructions; its integration is still in progress.</p>
-                      <TaskTable project={project} />
-                    </section>
                     <section className="workspace-card">
                       <SectionTitle label="Agent activity" number={project.agents.length} />
                       <p>See connection status, recorded activity, and command results reported by your agents.</p>
@@ -718,67 +713,6 @@ function StatusSelect({
     </Select>
   );
 }
-function TaskTable({ project }: { project: Project }) {
-  if (!project.tasks.length)
-    return (
-      <Empty
-        title="No tasks yet"
-        text="Tasks will appear here when they are added to this project."
-      />
-    );
-  return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>Task</th>
-            <th>Owner</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {project.tasks.map((t, i) => (
-            <tr key={t.id}>
-              <td>
-                <span className="task-number">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <span>{t.title}</span>
-                {t.instructions ? (
-                  <p className="muted">{t.instructions}</p>
-                ) : null}
-                {t.environmentId ? (
-                  <span className="dependency" title="Bound environment">
-                    env {t.environmentId.slice(0, 8)}
-                  </span>
-                ) : null}
-                {t.dependency && (
-                  <span
-                    className="dependency"
-                    title={`Depends on ${t.dependency}`}
-                  >
-                    <GitBranch />
-                  </span>
-                )}
-              </td>
-              <td>
-                <span
-                  className={`owner ${agentTone(ownerName(project, t.owner))}-text`}
-                >
-                  <span className="status-dot" />
-                  {ownerName(project, t.owner)}
-                </span>
-              </td>
-              <td>
-                <Tag tone={t.status === "done" ? "green" : t.status === "blocked" ? "yellow" : t.status === "in progress" ? "cyan" : "neutral"}>{t.status}</Tag>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 function Services({
   project,
   notify,
@@ -938,7 +872,7 @@ function WorkspaceSkeleton({ view }: { view: "projects" | "setup" | "overview" |
           <div className="project-meta"><Skeleton width="50" /></div>
           <div className="project-sections">
             <SkeletonPanel rows={2} icon={false} lines={1} action />
-            <SkeletonPanel rows={2} />
+            <SkeletonPanel rows={0} lines={1} action />
           </div>
         </>
       ) : (
