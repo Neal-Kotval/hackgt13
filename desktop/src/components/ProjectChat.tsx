@@ -143,6 +143,11 @@ export function ProjectChat({
             return;
           }
           blockAutoProject.current = false;
+          // Never fall back to the previous environment if this link cannot resolve.
+          setTargetChoice("");
+          targetChoiceRef.current = "";
+          setSessionId("");
+          setSnapshot(null);
           desiredSession.current = deepLink.target.codexSessionId || null;
           requestEnvironment(
             deepLink.target.runBoxId

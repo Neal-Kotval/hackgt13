@@ -25,6 +25,10 @@ try {
     await expect(picker).toContainText('cpu-workspace');
     await page.evaluate(()=>window.__test.deepLink({ok:true,target:{projectId:'p1',runBoxId:'box-2',panel:'codex'}}));
     await expect(picker).toContainText('second-workspace');
+    await page.evaluate(()=>window.__test.deepLink({ok:true,target:{projectId:'p1',runBoxId:'missing-box',panel:'codex'}}));
+    await expect(page.getByRole('alert')).toContainText('was not found');
+    await expect(picker).toContainText('Choose environment');
+    await expect(page.getByRole('button',{name:'Send message',exact:true})).toBeDisabled();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.close();
   }
