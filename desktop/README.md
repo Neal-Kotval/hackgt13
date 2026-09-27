@@ -68,3 +68,19 @@ Set `AGENTCLOUD_URL=http://127.0.0.1:3010` in `desktop/.env` (or the shell) befo
 The renderer consumes `app/tokens.css`, shared fonts, and the web Select primitive. The supplied design reference is preserved in `reference/desktop-project-chat/`; its Tasks navigation is intentionally omitted. Search and history live in the shared sidebar, with a focus-managed drawer on narrow windows. Empty conversations use centered context chips; active conversations use an uncluttered reading column, user bubbles, unboxed assistant turns, and a context toolbar in the composer. Errors and actual execution status remain visible.
 
 This local Docker/SSH client does not prove AWS allocation, GPU execution, or public tenant isolation. Desktop is not notarized or packaged for distribution.
+
+## macOS website links in development
+
+Run `npm run install:macos --prefix desktop` after installing dependencies. This
+builds desktop and installs **alto Development.app** in `~/Applications`, with
+the `agentcloud://` URL scheme declared in its bundle. Quit a running development
+Electron instance before installing so the new bundle can register itself.
+Website **Open in desktop** then launches alto even when it was closed.
+
+Plain `electron .` cannot register macOS URL links with its project argument;
+macOS otherwise launches Electron's welcome screen. Vite development launches
+therefore leave the dedicated bundle's registration alone. The local bundle
+links to this worktree's desktop directory: keep the worktree and rerun installation
+when moving to another checkout. This is a local, ad-hoc-signed development
+launcher, not a notarized distribution. It preserves the existing desktop
+account/session storage. `desktop/.env` supplies settings for Finder launches.
