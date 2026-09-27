@@ -22,6 +22,7 @@ import { LoopbackApiClient, LoopbackApiError } from "./api-client.ts";
 import { ChatStore, ChatStoreError } from "./chat-store.ts";
 import { SessionStore } from "./session-store.ts";
 import { DeviceKeyRegistrar, DeviceKeyStore } from "./device-key.ts";
+import { CliBridge } from "./cli-bridge.ts";
 import { TerminalSessions } from "./terminal-sessions.ts";
 import { CodexLoginTunnels, type LoginTunnelEvent } from "./codex-login-tunnel.ts";
 import { createIpv4Fetch, ensureEnvironmentAccess } from "./environment-access.ts";
@@ -121,6 +122,8 @@ let store: ChatStore;
 let authClient: DesktopAuthClient;
 let apiClient: LoopbackApiClient;
 let terminals: TerminalSessions | null = null;
+let cliBridge: CliBridge | null = null;
+let signingOut = false;
 let loginTunnels: CodexLoginTunnels | null = null;
 let assistant: AssistantAdapter;
 
@@ -370,7 +373,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: "#090b0f",
+    backgroundColor: process.env.ALTO_WINDOW_BACKGROUND,
     title: "alto",
     show: false,
     webPreferences: {
@@ -482,6 +485,8 @@ app.whenReady().then(async () => {
     },
   });
   terminals = terminalSessions;
+  cliBridge = new CliBridge({ terminals: terminalSessions, signedIn: () => !signingOut && authClient.hasLocalSession() });
+  await cliBridge.start().catch(() => console.error("[desktop] Could not start alto CLI bridge. Check ~/.alto permissions or quit other desktop instances."));
   const codexLoginTunnels = new CodexLoginTunnels({
     request: (requestPath, init) => authClient.fetchHuman(requestPath, init),
     ensureAccess,
@@ -505,10 +510,16 @@ app.whenReady().then(async () => {
     return { user, status: await authClient.status() };
   });
   wrapIpc("auth:signOut", async () => {
+    signingOut = true;
+    cliBridge?.disconnectAll();
     terminalSessions.closeAll();
     codexLoginTunnels.closeAll();
     registrar.reset();
-    await authClient.signOut();
+    try {
+      await authClient.signOut();
+    } finally {
+      signingOut = false;
+    }
     return authClient.status();
   });
   wrapIpc("deviceKey:status", async () => {
@@ -822,6 +833,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
+  void cliBridge?.stop();
   terminals?.closeAll();
   loginTunnels?.closeAll();
 });

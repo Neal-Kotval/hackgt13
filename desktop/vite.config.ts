@@ -2,12 +2,25 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron/simple";
 import path from "node:path";
+import { readFileSync } from "node:fs";
+
+// Electron cannot resolve CSS variables. Derive its initial canvas from the
+// shared light theme during bundling instead of maintaining a second palette.
+const tokens = readFileSync(path.resolve(__dirname, "../app/tokens.css"), "utf8");
+const lightTheme = tokens.match(/\.alto-web\s*\{([^}]+)\}/)?.[1];
+const canvasToken = lightTheme?.match(/--color-bg:\s*var\((--[\w-]+)\)/)?.[1];
+const windowBackground = canvasToken
+  ? tokens.match(new RegExp(`${canvasToken}:\\s*(#[\\da-fA-F]+)\\s*;`))?.[1]
+  : undefined;
+if (!windowBackground) throw new Error("The shared light canvas token is missing");
 
 let electronStarted = false;
 
 export default defineConfig({
   root: ".",
-  // Serve the same self-hosted font files Next uses so /fonts/* resolves in Electron.
+  // Packaged renderers load over file://; public font URLs must stay relative.
+  base: "./",
+  // Serve and package the same self-hosted fonts as the website.
   publicDir: path.resolve(__dirname, "../public"),
   resolve: {
     // Shared web primitives must use the renderer's React instance.
@@ -39,6 +52,9 @@ export default defineConfig({
           startup();
         },
         vite: {
+          define: {
+            "process.env.ALTO_WINDOW_BACKGROUND": JSON.stringify(windowBackground),
+          },
           build: {
             outDir: "dist-electron",
             rollupOptions: {

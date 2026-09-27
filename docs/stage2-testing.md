@@ -38,7 +38,7 @@ AGENTCLOUD_URL=http://127.0.0.1:3012 just desktop       # terminal 3
 
 1. Sign up at `/sign-up`. The verification link is in `.agentcloud/mail/*.json` (`text` field). Create an organization and a project with a public HTTPS repository.
 2. **Sign in to the desktop app first.** Environments → "Device key registered".
-3. On the web, open the project → **Environments** → **New environment** → **Local Docker sandbox** → **Create environment**. The environment reaches **Verified ready** in about 10 seconds. The card shows `agent.codex` ready (0.157.1).
+3. On the web, open the project → **Environments** → **New environment** → **Local** (free) → **Local Docker sandbox** → **Create environment**. The environment reaches **Verified ready** in about 10 seconds. The card shows `agent.codex` ready (0.157.1).
 4. Click **Open in desktop**. The terminal connects to `agentcloud@127.0.0.1:<port>`. Run `whoami` (should print `agentcloud`), `codex --version` (`codex-cli 0.157.1`) and `ls ~/workspace/repo`.
 5. **Outsider denial:** `ssh -i <some other key> -p <port> agentcloud@127.0.0.1` fails with `Permission denied (publickey)`.
 6. Click **Stop**. The container disappears (`docker ps --filter label=agentcloud.managed=docker-local`), and `run_box_cleanup_log` shows the Codex auth removal.
@@ -66,14 +66,14 @@ just runpod-watchdog 10          # terminal A: deletes managed pods 10 min after
 just worker-runpod-local         # terminal B: local-mode worker (allocates only while the watchdog heartbeats)
 ```
 
-Create a **Runpod budget GPU** environment on the web; the worker picks the cheapest in-stock listed GPU at or below $0.50/hr. Verified live on 2026-09-26: RTX 2000 Ada, ready in about 45 s, desktop terminal ran `nvidia-smi` and `cuda True`, and Stop and the watchdog both deleted the pod.
+The web picker no longer offers Runpod profiles; the API still accepts `profileId: "runpod-budget-gpu"` (for example from a script with a signed-in session), and existing Runpod jobs keep their labels. For a budget run the worker picks the cheapest in-stock listed GPU at or below $0.50/hr. Verified live on 2026-09-26: RTX 2000 Ada, ready in about 45 s, desktop terminal ran `nvidia-smi` and `cuda True`, and Stop and the watchdog both deleted the pod.
 
 ## 5. AWS CPU environment ⏳🔨
 
 HAC-125 delivers a plan-only Terraform change and `scripts/aws-cpu-smoke.mjs`. The owner has authorized apply and a real launch. Procedure:
 1. Review `terraform -chdir=infra/aws plan` (additive only), then apply.
 2. Run the smoke script. It allocates one CPU box through the worker, waits for ready, and runs `codex --version`, `whoami` and `tmux -V` over pinned SSH. It then terminates the instance and confirms it's gone, with a hard 20-minute self-destruct.
-3. Repeat sections 2–3 with the AWS CPU profile.
+3. Repeat sections 2–3 with **New environment** → **CPU** → **Small** (`aws-cpu`, t3.medium). The picker also lists CPU Medium and Large and GPU T4, L4 and A10G sizes from `lib/machine-catalog.mjs`, with a disk choice (GPU sizes start at 50 GiB) and a dated hourly estimate; each size needs its own backend and Terraform support before it can launch.
 
 Guards: the $25 per month budget action blocks worker launches (HAC-115), and the expiry Lambda terminates tagged instances at their deadline.
 

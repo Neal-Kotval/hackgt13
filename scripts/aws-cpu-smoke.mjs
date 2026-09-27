@@ -5,6 +5,8 @@
 //   node scripts/aws-cpu-smoke.mjs --key ~/.ssh/agentcloud_smoke_ed25519
 // Launch, verify over the desktop SSH path, then terminate:
 //   node scripts/aws-cpu-smoke.mjs --key ~/.ssh/agentcloud_smoke_ed25519 --launch
+// Another catalog machine (lib/machine-catalog.mjs), for example a GPU environment:
+//   node scripts/aws-cpu-smoke.mjs --key ~/.ssh/agentcloud_smoke_ed25519 --profile aws-gpu-t4
 //
 // It runs the real worker (workOneAwsCpuJob) and EC2 adapter against a throwaway SQLite
 // database, never the application database. AWS calls must use the scoped
@@ -27,6 +29,7 @@ import { getAwsCpuEnvironment, workOneAwsCpuJob } from "../lib/aws-cpu-worker.mj
 import { migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
 import { getRunBoxSshEndpoint, knownHostsLine, migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
 import { migrateSshKeys, normalizePublicKey, registerSshKey } from "../lib/ssh-keys.mjs";
+import { findMachine, resolveDiskGib } from "../lib/machine-catalog.mjs";
 
 const ACCOUNT = "662660921850";
 const CAP_MINUTES = 20;
@@ -36,12 +39,13 @@ const DEFAULT_REPO = "https://github.com/octocat/Hello-World.git";
 
 function usage(message) {
   if (message) console.error(message);
-  console.error("Usage: node scripts/aws-cpu-smoke.mjs --key <ed25519 private key> [--repo <https URL>] [--cidr auto|<ip>/32] [--subnet <id>] [--launch]");
+  console.error("Usage: node scripts/aws-cpu-smoke.mjs --key <ed25519 private key> [--repo <https URL>] [--cidr auto|<ip>/32] [--subnet <id>] [--profile <catalog id>] [--disk <GiB>] [--launch]");
   process.exit(2);
 }
 
 function parseArgs(argv) {
-  const options = { repo: DEFAULT_REPO, cidr: "auto", subnet: process.env.AGENTCLOUD_GPU_SUBNET_ID || DEFAULT_SUBNET, launch: false };
+  const options = { repo: DEFAULT_REPO, cidr: "auto", subnet: process.env.AGENTCLOUD_GPU_SUBNET_ID || DEFAULT_SUBNET, launch: false,
+    profile: "aws-cpu", disk: null };
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index];
     if (flag === "--launch") { options.launch = true; continue; }
@@ -51,9 +55,15 @@ function parseArgs(argv) {
     else if (flag === "--repo") options.repo = value;
     else if (flag === "--cidr") options.cidr = value;
     else if (flag === "--subnet") options.subnet = value;
+    else if (flag === "--profile") options.profile = value;
+    else if (flag === "--disk") options.disk = Number(value);
     else usage(`Unknown option ${flag}`);
   }
   if (!options.key) usage("--key is required");
+  const machine = findMachine(options.profile);
+  if (!machine) usage(`Unknown machine ${options.profile}`);
+  try { options.disk = resolveDiskGib(machine, options.disk); } catch (error) { usage(error.message); }
+  options.machine = machine;
   return options;
 }
 
@@ -69,7 +79,7 @@ async function workerAws() {
   return assumeGpuWorkerRole({ aws: cli, sessionName: `agentcloud-cpu-smoke-${process.pid}` });
 }
 
-function throwawayDatabase(directory, publicKey, repoUrl) {
+function throwawayDatabase(directory, publicKey, repoUrl, profileId, diskGb) {
   const db = new Database(path.join(directory, "smoke.sqlite"));
   db.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, emailVerified INTEGER NOT NULL);
     CREATE TABLE member (userId TEXT NOT NULL, organizationId TEXT NOT NULL, role TEXT NOT NULL);
@@ -86,7 +96,7 @@ function throwawayDatabase(directory, publicKey, repoUrl) {
   const { job } = saveRunBoxDecision(db, {
     idempotencyKey: `aws-cpu-smoke-${Date.now()}`, resourceRequestId: `smoke-request-${Date.now()}`,
     projectId: "smoke-project", employeeId: "smoke-operator", organizationId: "smoke-org", projectRole: "owner",
-    provider: "aws-ec2", profileId: "aws-cpu", maxDurationMinutes: 60, repoUrl,
+    provider: "aws-ec2", profileId, diskGb, maxDurationMinutes: 60, repoUrl,
   });
   return { db, job };
 }
@@ -128,11 +138,11 @@ async function main() {
   log(`Identity: ${await provider.identifyWorker()}`);
 
   const directory = mkdtempSync(path.join(os.tmpdir(), "agentcloud-cpu-smoke-"));
-  const { db, job } = throwawayDatabase(directory, publicKey, options.repo);
+  const { db, job } = throwawayDatabase(directory, publicKey, options.repo, options.machine.id, options.disk);
   const checked = await provider.preflight(job, { revokeStale: false });
   log(`Preflight passed: template ${checked.launchTemplateId}, ${checked.availabilityZone}, $${checked.hourlyComputeUsd}/h compute`);
   if (!options.launch) {
-    log("Dry run only. Re-run with --launch to allocate one t3.medium for at most 20 minutes.");
+    log(`Dry run only. Re-run with --launch to allocate one ${options.machine.instanceType} (${options.disk} GiB) for at most 20 minutes.`);
     db.close();
     rmSync(directory, { recursive: true, force: true });
     return;

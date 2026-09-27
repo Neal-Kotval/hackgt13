@@ -10,7 +10,7 @@ import {
   openShell,
   type ShellSession,
 } from "./ssh-terminal.ts";
-import { AWS_CPU_PROFILE_ID } from "./environment-access.ts";
+import { needsNetworkAccess } from "./environment-access.ts";
 
 const SESSION_ID = /^[A-Za-z0-9-]{8,64}$/;
 const MAX_WRITE = 64 * 1024;
@@ -55,7 +55,7 @@ export class TerminalSessions {
       await this.deps.beforeConnect?.();
       const connection = await fetchRunBoxConnection(this.deps.request, runBoxId);
       if (entry.closed) throw new Error("Terminal was closed before it connected.");
-      if (connection.profileId === AWS_CPU_PROFILE_ID && this.deps.ensureAccess) {
+      if (needsNetworkAccess(connection) && this.deps.ensureAccess) {
         await this.deps.ensureAccess(runBoxId, () => {
           if (!entry.closed) send({ type: "access", sessionId, state: "pending" });
         });

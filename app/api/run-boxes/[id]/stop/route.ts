@@ -1,8 +1,9 @@
 import { getDatabase } from "../../../../../lib/auth.mjs";
-import { requireEmployee, requireMembership } from "../../../../../lib/employee";
+import { requireEmployee } from "../../../../../lib/employee";
 import { body, failure, sameOrigin } from "../../../../../lib/http";
 import { InputError } from "../../../../../lib/store";
-import { getRunBoxJob, migrateRunBoxJobs, requestRunBoxStop } from "../../../../../lib/run-box-jobs.mjs";
+import { requestRunBoxStop } from "../../../../../lib/run-box-jobs.mjs";
+import { resolveJobAccess } from "../../../../../lib/run-box-access.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,12 +15,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const input = await body(request);
     const projectId = input.projectId;
     if (typeof projectId !== "string" || !projectId.trim()) throw new InputError("Invalid project ID");
-    const membership = requireMembership(employee, projectId);
-    if (membership.role !== "owner") throw new InputError("Project owner required to stop a run box", 403);
     const { id } = await context.params;
-    migrateRunBoxJobs(getDatabase());
-    const job = getRunBoxJob(getDatabase(), id);
-    if (!job || job.project_id !== projectId) throw new InputError("Run-box job not found", 404);
+    // Environment model: any member may stop a public job; only its creator a private one.
+    const { permissions } = resolveJobAccess(getDatabase(), employee, projectId, id);
+    if (!permissions.stop) throw new InputError("You cannot stop this environment", 403);
     return Response.json({ job: requestRunBoxStop(getDatabase(), id, employee.id) });
   } catch (error) {
     return failure(error);
