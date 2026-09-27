@@ -64,6 +64,24 @@ test('peer message is delivered once to the target Codex session with persistent
   f.service.close(); f.db.close();
 });
 
+test('box broadcast reaches every other agent once through the existing inbox', async () => {
+  const f = fixture();
+  const {a, b} = await agents(f);
+  const c = f.service.initialize({projectId: 'project', agentId: 'agent-c', createdBy: 'employee', runBoxId: 'box'});
+  await tick();
+  const input = {text: 'The API uses port 4000', requestId: randomUUID()};
+  const first = f.service.broadcastPeerMessage(a.id, input);
+  assert.deepEqual(new Set(first.map(message => message.toSessionId)), new Set([b.id,c.id]));
+  await tick();
+  assert(first.every(message => f.service.peerMessage(a.id,message.id).status === 'acknowledged'));
+  assert.equal(f.calls.filter(call => call.method === 'turn/start' && call.sessionId === a.id).length, 0);
+  for (const id of [b.id,c.id]) assert.equal(f.calls.filter(call => call.method === 'turn/start' && call.sessionId === id).length, 1);
+  assert.deepEqual(f.service.broadcastPeerMessage(a.id,input).map(message => message.id),first.map(message => message.id));
+  await tick();
+  assert.equal(f.calls.filter(call => call.method === 'turn/start').length, 2);
+  f.service.close(); f.db.close();
+});
+
 test('busy recipients retain ordered messages and dispatch the next after turn completion', async () => {
   const f = fixture();
   const {a, b} = await agents(f);

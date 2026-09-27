@@ -1,429 +1,107 @@
 "use client";
-
 import Link from "next/link";
-import { Skeleton, SkeletonRegion, SkeletonRows } from "@/components/ui/skeleton";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import {
-  ArrowSquareOut,
-  ChatText,
-  CheckCircle,
-  Circle,
-  FileText,
-  Lightbulb,
-  Terminal,
-  TerminalWindow,
-  Warning,
-  X,
-  XCircle,
-} from "@phosphor-icons/react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowClockwise, ArrowSquareOut, ChatText, CheckCircle, Circle, X, Warning } from "@phosphor-icons/react";
+import { SkeletonRegion, SkeletonRows } from "@/components/ui/skeleton";
+import { Select } from "@/components/ui/select";
 import type { Project } from "@/lib/types";
-import {
-  demoGpuProfile,
-  localDockerSandboxProfile,
-  runpodBudgetGpuProfile,
-  runpodGpuProfile,
-} from "@/lib/resource-profiles";
 import styles from "./agent-runs.module.css";
 
-type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
-export type AgentRun = {
-  id: string;
-  runBoxId: string;
-  projectId: string;
-  employeeId: string;
-  employeeName: string | null;
-  agent: string;
-  prompt: string;
-  status: RunStatus;
-  startedAt: string;
-  finishedAt: string | null;
-  exitCode: number | null;
-  environment: { provider: string; profileId: string | null; state: string } | null;
-  eventCount: number;
-};
-export type AgentRunEvent = {
-  seq: number;
-  kind: string;
-  actor: "codex" | "employee";
-  text: string | null;
-  command: string | null;
-  exitCode: number | null;
-  at: string;
-};
+import { groupChatConversations, type ChatRun, type ChatConversation, type ChatRunStatus as Status } from "@/lib/chat-conversations";
 
-const LIST_POLL_MS = 4000;
-const DETAIL_POLL_MS = 3000;
-
-const statusLabel: Record<RunStatus, string> = {
-  running: "Running",
-  succeeded: "Succeeded",
-  failed: "Failed",
-  cancelled: "Cancelled",
-};
-
-const profileLabels: Record<string, string> = {
-  [localDockerSandboxProfile.id]: localDockerSandboxProfile.label,
-  [runpodGpuProfile.id]: runpodGpuProfile.label,
-  [runpodBudgetGpuProfile.id]: runpodBudgetGpuProfile.label,
-  [demoGpuProfile.id]: demoGpuProfile.label,
-};
-
-function environmentLabel(run: AgentRun) {
-  const environment = run.environment;
-  if (!environment) return "Environment removed";
-  return (environment.profileId && profileLabels[environment.profileId]) || environment.profileId || environment.provider;
+const labels: Record<Status, string> = { running: "In progress", completed: "Completed", failed: "Needs attention", stopped: "Stopped", unknown: "Outcome unavailable" };
+const tones: Record<Status, string> = { running: "running", completed: "succeeded", failed: "failed", stopped: "cancelled", unknown: "cancelled" };
+function date(value: string) { return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); }
+function environment(run: ChatRun) {
+  const provider = run.environment?.provider;
+  const name = provider === "docker-local" ? "Docker environment" : provider === "aws" || provider === "aws-ec2" ? "AWS environment" : provider === "runpod" ? "Runpod environment" : "Environment";
+  return `${name} · ${run.runBoxId.slice(0, 8)}`;
 }
-
-function agentLabel(agent: string) {
-  return agent === "codex" ? "Codex" : agent;
+function Badge({ status }: { status: Status }) {
+  const Icon = status === "completed" ? CheckCircle : status === "running" ? Circle : Warning;
+  return <span className={`${styles.badge} ${styles[tones[status]]}`}><Icon aria-hidden="true" />{labels[status]}</span>;
 }
-
-function time(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return value;
-  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
-
-function clock(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return value;
-  return date.toLocaleTimeString(undefined, { timeStyle: "medium" });
-}
-
-function duration(run: AgentRun, now: number) {
-  const start = Date.parse(run.startedAt);
-  const end = run.finishedAt ? Date.parse(run.finishedAt) : now;
-  if (Number.isNaN(start) || Number.isNaN(end)) return "Unknown";
-  const seconds = Math.max(0, Math.round((end - start) / 1000));
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const rest = seconds % 60;
-  if (hours) return `${hours}h ${minutes}m`;
-  if (minutes) return `${minutes}m ${rest}s`;
-  return `${rest}s`;
-}
-
-function desktopLink(run: AgentRun) {
-  return `agentcloud://open?${new URLSearchParams({
-    projectId: run.projectId,
-    runBoxId: run.runBoxId,
-    panel: "codex",
-    runId: run.id,
-  })}`;
-}
-
-function StatusBadge({ run }: { run: AgentRun }) {
-  const Icon = run.status === "succeeded" ? CheckCircle : run.status === "running" ? Circle : XCircle;
-  return (
-    <span className={`${styles.badge} ${styles[run.status]}`}>
-      <Icon aria-hidden="true" weight={run.status === "running" ? "fill" : "regular"} />
-      {statusLabel[run.status]}
-      {run.exitCode !== null && run.status !== "running" ? ` · exit ${run.exitCode}` : ""}
-    </span>
-  );
-}
-
-function useNow(active: boolean) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!active) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [active]);
-  return now;
-}
-
-function EventItem({ event }: { event: AgentRunEvent }) {
-  const actor = event.actor === "employee" ? "Employee" : "Codex";
-  const meta = (label: string) => (
-    <div className={styles.eventMeta}>
-      <strong>{actor}</strong>
-      <span>{label}</span>
-      <time dateTime={event.at}>{clock(event.at)}</time>
-    </div>
-  );
-  switch (event.kind) {
-    case "command.start":
-    case "terminal.command":
-      return (
-        <li className={styles.event}>
-          <Terminal aria-hidden="true" className={styles.eventIcon} />
-          <div className={styles.eventBody}>
-            {meta(event.kind === "terminal.command" ? "terminal command" : "command started")}
-            <pre className={styles.command}>$ {event.command ?? event.text}</pre>
-          </div>
-        </li>
-      );
-    case "command.output":
-      return (
-        <li className={styles.event}>
-          <TerminalWindow aria-hidden="true" className={styles.eventIcon} />
-          <div className={styles.eventBody}>
-            {meta("output")}
-            {event.command && <p className={styles.eventCommand}>$ {event.command}</p>}
-            <pre className={styles.output}>{event.text ?? ""}</pre>
-          </div>
-        </li>
-      );
-    case "command.exit": {
-      const ok = event.exitCode === 0;
-      return (
-        <li className={styles.event}>
-          {ok ? <CheckCircle aria-hidden="true" className={`${styles.eventIcon} ${styles.okIcon}`} />
-            : <XCircle aria-hidden="true" className={`${styles.eventIcon} ${styles.errorIcon}`} />}
-          <div className={styles.eventBody}>
-            {meta("command finished")}
-            {event.command && <p className={styles.eventCommand}>$ {event.command}</p>}
-            <span className={`${styles.badge} ${ok ? styles.succeeded : styles.failed}`}>
-              {event.exitCode === null ? "Exit code not reported" : `Exit code ${event.exitCode}`}
-            </span>
-            {event.text && <pre className={styles.output}>{event.text}</pre>}
-          </div>
-        </li>
-      );
-    }
-    case "file.change":
-      return (
-        <li className={styles.event}>
-          <FileText aria-hidden="true" className={styles.eventIcon} />
-          <div className={styles.eventBody}>
-            {meta("file change")}
-            <pre className={styles.fileChange}>{event.text ?? ""}</pre>
-          </div>
-        </li>
-      );
-    case "error":
-      return (
-        <li className={`${styles.event} ${styles.errorEvent}`}>
-          <Warning aria-hidden="true" className={`${styles.eventIcon} ${styles.errorIcon}`} />
-          <div className={styles.eventBody}>
-            {meta("error")}
-            <p className={styles.errorText}>{event.text ?? "Error reported without detail."}</p>
-          </div>
-        </li>
-      );
-    case "reasoning":
-      return (
-        <li className={styles.event}>
-          <Lightbulb aria-hidden="true" className={styles.eventIcon} />
-          <div className={styles.eventBody}>
-            {meta("reasoning")}
-            <p className={styles.reasoning}>{event.text}</p>
-          </div>
-        </li>
-      );
-    case "status":
-      return (
-        <li className={`${styles.event} ${styles.statusEvent}`}>
-          <Circle aria-hidden="true" className={styles.eventIcon} />
-          <div className={styles.eventBody}>
-            {meta("status")}
-            {event.text && <p>{event.text}</p>}
-          </div>
-        </li>
-      );
-    default:
-      return (
-        <li className={styles.event}>
-          <ChatText aria-hidden="true" className={styles.eventIcon} />
-          <div className={styles.eventBody}>
-            {meta("message")}
-            <p className={styles.message}>{event.text}</p>
-          </div>
-        </li>
-      );
-  }
-}
-
-function RunDetail({ runId, closeHref }: { runId: string; closeHref: string }) {
-  const [run, setRun] = useState<AgentRun | null>(null);
-  const [events, setEvents] = useState<AgentRunEvent[]>([]);
-  const [error, setError] = useState("");
+function Details({ run, closeHref }: { run: ChatConversation; closeHref: string }) {
   const heading = useRef<HTMLHeadingElement>(null);
-  const now = useNow(run?.status === "running");
-
-  useEffect(() => {
-    let active = true;
-    let lastSeq = -1;
-    let finished = false;
-    let pollsAfterFinish = 0;
-    let timer = 0;
-    setRun(null);
-    setEvents([]);
-    setError("");
-    async function load() {
-      // Page through new events so a long run catches up in one poll.
-      for (;;) {
-        const response = await fetch(`/api/agent-runs/${encodeURIComponent(runId)}?afterSeq=${lastSeq}`);
-        if (!response.ok) {
-          const body = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(response.status === 404 ? "This run was not found." : body.error || "Could not load this run.");
-        }
-        const data = (await response.json()) as { run: AgentRun; events: AgentRunEvent[]; hasMore: boolean };
-        if (!active) return;
-        setRun(data.run);
-        if (data.events.length) {
-          lastSeq = data.events[data.events.length - 1].seq;
-          setEvents((current) => [...current, ...data.events]);
-        }
-        finished = data.run.status !== "running";
-        setError("");
-        if (!data.hasMore) return;
-      }
-    }
-    const tick = () => {
-      load()
-        .catch((caught: unknown) => {
-          if (active) setError(caught instanceof Error ? caught.message : "Could not load this run.");
-        })
-        .finally(() => {
-          // After a run finishes, poll once more for late-flushed events, then stop.
-          if (finished) pollsAfterFinish += 1;
-          if (active && pollsAfterFinish < 2) timer = window.setTimeout(tick, DETAIL_POLL_MS);
-        });
-    };
-    tick();
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [runId]);
-
-  useEffect(() => {
-    heading.current?.focus();
-  }, [runId]);
-
-  return (
-    <section className={styles.detail} aria-labelledby="run-detail-heading">
-      <div className={styles.detailTop}>
-        <div className={styles.detailTitle}>
-          <p className={styles.eyebrow}>Run detail</p>
-          <h3 id="run-detail-heading" ref={heading} tabIndex={-1}>
-            {run ? `${agentLabel(run.agent)} run` : <><span className="visually-hidden">Loading run</span><Skeleton variant="title" width="50" /></>}
-          </h3>
-        </div>
-        <Link className={styles.close} href={closeHref} scroll={false} aria-label="Close run detail">
-          <X aria-hidden="true" />
-        </Link>
-      </div>
-      {error && <p className={styles.error} role="alert">{error}</p>}
-      {!run && !error && <SkeletonRegion label="Loading run details"><Skeleton width="40" /><Skeleton variant="block" /><SkeletonRows count={2} icon={false} /></SkeletonRegion>}
-      {run && (
-        <>
-          <p className={styles.prompt}>{run.prompt}</p>
-          <dl className={styles.facts}>
-            <div><dt>Status</dt><dd><StatusBadge run={run} /></dd></div>
-            <div><dt>Employee</dt><dd>{run.employeeName ?? "Unknown employee"}</dd></div>
-            <div><dt>Environment</dt><dd>{environmentLabel(run)}</dd></div>
-            <div><dt>Started</dt><dd><time dateTime={run.startedAt}>{time(run.startedAt)}</time></dd></div>
-            <div><dt>Duration</dt><dd>{duration(run, now)}{run.status === "running" ? " so far" : ""}</dd></div>
-          </dl>
-          <div className={styles.detailActions}>
-            <a className="button secondary" href={desktopLink(run)}>
-              Open in desktop <ArrowSquareOut aria-hidden="true" />
-            </a>
-            <span className={styles.note}>Trusted shell access · events are reported by the employee&apos;s desktop app</span>
-          </div>
-          <h4 className={styles.eventsHeading}>
-            Events <span className={styles.count}>{events.length}</span>
-          </h4>
-          {events.length ? (
-            <ol className={styles.events} aria-live="polite" aria-relevant="additions">
-              {events.map((event) => <EventItem key={event.seq} event={event} />)}
-            </ol>
-          ) : (
-            <p className={styles.note}>
-              {run.status === "running" ? "No events reported yet. New events appear here as the desktop app reports them." : "This run reported no events."}
-            </p>
-          )}
-        </>
-      )}
-    </section>
-  );
+  useEffect(() => { heading.current?.focus({ preventScroll: true }); }, [run.id]);
+  const replies = run.events.filter(event => event.kind === "assistant" && event.text);
+  const steps = run.events.filter(event => ["command", "error", "reasoning", "file-change"].includes(event.kind));
+  const openChat = `agentcloud://open?${new URLSearchParams({ projectId: run.projectId, codexSessionId: run.sessionId, ...(typeof window !== "undefined" ? {serverUrl: window.location.origin} : {}) })}`;
+  return <section className={styles.detail} aria-labelledby="run-detail-heading">
+    <div className={styles.detailTop}>
+      <div className={styles.detailTitle}><h3 id="run-detail-heading" ref={heading} tabIndex={-1}>Conversation details</h3></div>
+      <Link className={styles.close} href={closeHref} scroll={false} aria-label="Close conversation details"><X aria-hidden="true" /></Link>
+    </div>
+    <Badge status={run.status} />
+    <div><h4 className={styles.label}>Latest request</h4><p className={styles.prompt}>{run.prompt}</p></div>
+    <dl className={styles.facts}>
+      <div><dt>Last message from</dt><dd>{run.actorName || "Project member"}</dd></div>
+      <div><dt>Environment</dt><dd>{environment(run)}</dd></div>
+      <div><dt>Last activity</dt><dd><time dateTime={run.updatedAt}>{date(run.updatedAt)}</time></dd></div>
+      <div><dt>Saved requests</dt><dd>{run.requests.length}</dd></div>
+    </dl>
+    <h4 className={styles.eventsHeading}>{run.status === "running" ? "Agent response so far" : "Agent response"}</h4>
+    {replies.length ? replies.map(event => <p className={styles.message} key={event.id}>{event.text}</p>) : <p className={styles.note}>{run.status === "running" ? "Your agent is working. Its response will appear here automatically." : "No response was saved for the latest request."}</p>}
+    {run.status === "unknown" && <p className={styles.note}>This chat has no saved completion for this request. Open the chat to review what happened.</p>}
+    {run.status === "stopped" && <p className={styles.note}>Work stopped before a completion was recorded.</p>}
+    {steps.length > 0 && <details className={styles.activity}><summary>Work details ({steps.length})</summary><ol className={styles.events}>{steps.map(event => <li className={styles.eventBody} key={event.id}><strong>{event.kind === "error" ? "Issue" : event.kind === "command" ? "Action" : event.kind === "file-change" ? "File update" : "Progress update"}</strong><p className={styles.message}>{event.text}</p></li>)}</ol></details>}
+    {run.requests.length > 1 && <details className={styles.activity}><summary>Earlier messages ({run.requests.length - 1})</summary><ol className={styles.events}>{run.requests.slice(0, -1).map(request => <li className={styles.eventBody} key={request.id}><div className={styles.runTop}><strong>{request.actorName || "Project member"}</strong><Badge status={request.status} /></div><p className={styles.message}>{request.prompt}</p>{request.events.filter(event => event.kind === "assistant").map(event => <p className={styles.message} key={event.id}><strong>Agent response</strong><br />{event.text}</p>)}</li>)}</ol></details>}
+    <div className={styles.detailActions}><a href={openChat} className="button primary">Open chat in desktop <ArrowSquareOut aria-hidden="true" /></a></div>
+  </section>;
 }
 
 export function AgentRuns({ project }: { project: Project }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const selected = searchParams.get("run");
-  const [runs, setRuns] = useState<AgentRun[] | null>(null);
+  const params = useSearchParams();
+  const selected = params.get("conversation") || params.get("run");
+  const [runs, setRuns] = useState<ChatConversation[] | null>(null);
   const [error, setError] = useState("");
-  const now = useNow(Boolean(runs?.some((run) => run.status === "running")));
-
+  const [updated, setUpdated] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = useRef<() => void>(() => {});
+  const refreshNow = useCallback(() => refresh.current(), []);
   useEffect(() => {
     let active = true;
-    async function refresh() {
-      const response = await fetch(`/api/agent-runs?projectId=${encodeURIComponent(project.id)}`);
-      if (!response.ok) throw new Error("Could not load agent runs.");
-      const data = (await response.json()) as { runs: AgentRun[] };
-      if (!active) return;
-      setRuns(data.runs);
-      setError("");
-    }
-    const report = (caught: unknown) => {
-      if (active) setError(caught instanceof Error ? caught.message : "Could not load agent runs.");
+    let busy = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const controller = new AbortController();
+    const load = async () => {
+      if (busy || !active) return;
+      clearTimeout(timer); busy = true; setRefreshing(true);
+      try {
+        const response = await fetch(`/api/chat-runs?projectId=${encodeURIComponent(project.id)}`, { cache: "no-store", signal: controller.signal });
+        if (!response.ok) throw new Error(response.status === 401 ? "Sign in again to see the latest conversations." : "We couldn’t update your conversations. Try Refresh or wait for the next update.");
+        const data = await response.json() as { runs: ChatRun[] };
+        if (active) { setRuns(groupChatConversations(data.runs)); setError(""); setUpdated(new Date().toLocaleTimeString(undefined, { timeStyle: "short" })); }
+      } catch (cause) { if (active) setError(cause instanceof Error ? cause.message : "We couldn’t update your conversations."); }
+      finally { busy = false; if (active) { setRefreshing(false); timer = setTimeout(load, 4000); } }
     };
-    refresh().catch(report);
-    const timer = window.setInterval(() => refresh().catch(report), LIST_POLL_MS);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
+    refresh.current = () => void load();
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    void load();
+    return () => { active = false; controller.abort(); clearTimeout(timer); window.removeEventListener("focus", onFocus); };
   }, [project.id]);
-
-  const runHref = (id: string) => `${pathname}?${new URLSearchParams({ run: id })}`;
-
-  return (
-    <section className={styles.root} aria-labelledby="agent-runs-heading">
-      <div className={styles.heading}>
-        <div>
-          <p className={styles.eyebrow}>Live · refreshes every few seconds</p>
-          <h2 id="agent-runs-heading">Reported runs</h2>
-        </div>
-        {runs === null && !error && <Skeleton variant="chip" />}
-        {runs && <span className={styles.count}>{runs.length} {runs.length === 1 ? "run" : "runs"}</span>}
+  const visible = runs?.filter(run => filter === "all" || run.status === filter);
+  const current = runs?.find(run => run.id === selected || run.requests.some(request => request.id === selected));
+  const runHref = (id: string) => `${pathname}?${new URLSearchParams({ conversation: id })}`;
+  return <section className={styles.root} aria-labelledby="recent-runs-heading">
+    <div className={styles.heading}>
+      <div><h3 id="recent-runs-heading">Conversations</h3><p className={styles.note}>{error ? "Updates paused — retrying automatically" : updated ? `Updates automatically · Last checked ${updated}` : "Checking for recent activity…"}</p></div>
+      <button className="button secondary" onClick={refreshNow} disabled={refreshing}><ArrowClockwise aria-hidden="true" />Refresh</button>
+    </div>
+    {error && <p className={styles.error} role="alert">{error}</p>}
+    <div className={styles.toolbar}><Select aria-label="Filter conversations by status" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All conversations</option>{Object.entries(labels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</Select>{runs && <span className={styles.count}>{visible?.length} {visible?.length === 1 ? "conversation" : "conversations"}</span>}</div>
+    {runs === null && !error && <SkeletonRegion label="Loading conversations"><SkeletonRows count={3} /></SkeletonRegion>}
+    <div className={`${styles.layout} ${selected ? styles.withDetail : ""}`}>
+      <div className={styles.listColumn}>
+        {runs && !runs.length && <div className={styles.empty}><ChatText aria-hidden="true" /><h3>Your conversations will appear here</h3><p>Start a chat with your agent in the desktop app. Follow-up messages stay together in one conversation here.</p><Link href={`/projects/${project.id}/environments`} className="button secondary">View environments</Link></div>}
+        {runs && runs.length > 0 && !visible?.length && <p className={styles.note}>No conversations match this status. Choose All conversations to see the rest.</p>}
+        <ul className={styles.list}>{visible?.map(run => <li key={run.id}><Link className={`${styles.runLink} ${current?.id === run.id ? styles.selected : ""}`} href={runHref(run.id)} scroll={false} aria-current={current?.id === run.id ? "true" : undefined}><div className={styles.runTop}><strong className={styles.runPrompt}>{run.title}</strong><Badge status={run.status} /></div><div className={styles.runMeta}><span>{run.actorName || "Project member"}</span><span>{environment(run)}</span><time dateTime={run.updatedAt}>{date(run.updatedAt)}</time></div></Link></li>)}</ul>
       </div>
-      {error && <p className={styles.error} role="alert">{error}</p>}
-      <div className={`${styles.layout} ${selected ? styles.withDetail : ""}`}>
-        <div className={styles.listColumn}>
-          {runs === null && !error && <SkeletonRegion label="Loading agent runs"><SkeletonRows count={3} /></SkeletonRegion>}
-          {runs && runs.length === 0 && (
-            <div className={styles.empty}>
-              <TerminalWindow aria-hidden="true" />
-              <h3>No agent runs yet</h3>
-              <p>Start one from the Codex panel in the desktop app with a ready environment. Its commands, output, and file changes will appear here as they are reported.</p>
-            </div>
-          )}
-          {runs && runs.length > 0 && (
-            <ul className={styles.list}>
-              {runs.map((run) => (
-                <li key={run.id}>
-                  <Link
-                    className={`${styles.runLink} ${run.id === selected ? styles.selected : ""}`}
-                    href={runHref(run.id)}
-                    scroll={false}
-                    aria-current={run.id === selected ? "true" : undefined}
-                  >
-                    <span className={styles.runTop}>
-                      <strong>{agentLabel(run.agent)}</strong>
-                      <StatusBadge run={run} />
-                    </span>
-                    <span className={styles.runPrompt}>{run.prompt}</span>
-                    <span className={styles.runMeta}>
-                      <span>{run.employeeName ?? "Unknown employee"}</span>
-                      <span>{environmentLabel(run)}</span>
-                      <time dateTime={run.startedAt}>{time(run.startedAt)}</time>
-                      <span>{duration(run, now)}</span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        {selected && <RunDetail runId={selected} closeHref={pathname} />}
-      </div>
-    </section>
-  );
+      {current ? <Details run={current} closeHref={pathname} /> : selected && runs && <section className={styles.detail}><h3>Conversation unavailable</h3><p className={styles.note}>This conversation is no longer in the available chat history.</p><Link href={pathname} className="button secondary">Back to conversations</Link></section>}
+    </div>
+  </section>;
 }

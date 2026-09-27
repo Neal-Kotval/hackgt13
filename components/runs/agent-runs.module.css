@@ -422,3 +422,18 @@
     padding: var(--space-4);
   }
 }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.heading h3 { margin: 0 0 var(--space-2); font-size: var(--text-xl); }
+.label { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--color-muted); }
+.message { margin: 0; overflow-wrap: anywhere; line-height: var(--leading-normal); }
+.activity { min-width: 0; }
+.activity summary { cursor: pointer; padding-block: var(--space-3); font-weight: var(--font-weight-semibold); }
+.activity summary:focus-visible { outline: var(--focus-width) solid var(--color-accent); outline-offset: var(--focus-offset); }
+@media (max-width: 768px) { .heading { align-items: flex-start; flex-wrap: wrap; } }
+.detail > .badge { justify-self: start; }

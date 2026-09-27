@@ -1,5 +1,20 @@
 # AgentCloud architecture
 
+## Bundled terminal helper
+
+The macOS desktop distribution includes `alto ssh <environment-id>`. The helper
+uses the app's bundled Electron runtime and connects to the running desktop
+through a local Unix socket. The desktop owns employee authentication, device-key
+registration, network-access refresh, and SSH host-key verification. Session
+cookies and private SSH keys stay inside the desktop process; the helper carries
+terminal input, output, and resize events only. Signing out or quitting closes
+these connections. This is trusted shell access under the same project access
+rules as the desktop terminal, not a command or filesystem sandbox.
+
+The socket is limited to the local OS user. Other processes running as that user
+share this trust boundary. The helper requires the desktop app to be running and
+signed in. See `desktop/README.md` for DMG packaging and command installation.
+
 ## Current executable boundary
 
 AgentCloud is a React / Next.js App Router application with Node.js route handlers, a durable JSON store, an SSE event stream, and a Node CLI. It is a **local organization-aware demo intended to bind to loopback**. Human dashboard/API access requires a Better Auth cookie session and project membership. Do not deploy this build as a public multi-user service.
@@ -44,7 +59,7 @@ flowchart LR
 | Remote runner | Start the actual agent and workload, emit bounded attributed events | Heartbeat and model execution are distinct |
 | Event stream | Snapshot plus replay cursor after reconnect | Current SSE sends whole local-state snapshots and has no durable cursor |
 
-For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU host remains the quickest proof path if it is available. Both paths must verify the execution identity, workspace, GPU operation, and stop result. AgentCloud AWS resources are defined and managed in [Terraform](infra/aws/); the current foundation has a launch template and expiry guard but no deployed run box or EC2 worker. AWS Systems Manager may provide management access without inbound SSH, but IAM access to the instance does not establish file or command restrictions inside an agent's shell. [AWS Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
+For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU host remains the quickest proof path if it is available. Both paths must verify the execution identity, workspace, GPU operation, and stop result. AgentCloud AWS resources are defined and managed in [Terraform](infra/aws/). AWS environments come in fixed sizes from `lib/machine-catalog.mjs`: three CPU sizes (`t3.medium`, `t3.xlarge`, `m7i.2xlarge`) and three single-GPU environments (`g4dn.xlarge` T4, `g6.xlarge` L4, `g5.xlarge` A10G, each 4 vCPU to fit the account's 4-vCPU G quota). All share one worker path, one active AWS environment at a time, and the budget and expiry guards; a GPU environment is ready only after `nvidia-smi` on the box shows its GPU. See [AWS_SETUP.md](AWS_SETUP.md#sized-environments-cpu-sizes-gpu-environments-disk); the GPU environment template and sized IAM policy are planned in Terraform but not yet applied, and no sized or GPU environment has launched. AWS Systems Manager may provide management access without inbound SSH, but IAM access to the instance does not establish file or command restrictions inside an agent's shell. [AWS Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
 
 ## Routes
 
@@ -55,10 +70,10 @@ For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU 
 | `POST /api/actions` | Alias of the human mutation endpoint |
 | `GET /api/events` | Default SSE messages containing complete state on state changes, including heartbeat expiry; comments keep connection alive |
 | `POST /api/agent` | Bearer-scoped `connect`, `heartbeat`, `context`, `task`, `service`, and `handoff` operations |
-| `GET/POST /api/run-boxes` | List a project's environments (state, `ssh`, `desktopUrl`, `workspacePath`, `agent.codex`) and imported local container `templates`, or create one in one step for a server-owned profile or an imported `local-template:<id>` profile (owner approved, member denied). `ssh` and `desktopUrl` are null once a stop is requested |
+| `GET/POST /api/run-boxes` | List a project's environments (state, `ssh`, `desktopUrl`, `workspacePath`, `agent.codex`, and for AWS catalog machines `machine` and `diskGb`) and imported local container `templates`, or create one in one step for a server-owned profile, an AWS machine from `lib/machine-catalog.mjs` with an optional `diskGb` (20, 50, or 100 GiB; GPU machines need 100), or an imported `local-template:<id>` profile (owner approved, member denied). `ssh` and `desktopUrl` are null once a stop is requested |
 | `POST /api/run-boxes/:id/stop` | Owner stop request; the worker tears the environment down |
-| `GET/POST /api/ssh-keys`, `DELETE /api/ssh-keys/:id` | The caller's device public keys (ed25519 only); private keys never reach the server. The docker-local, Runpod and aws-cpu workers reconcile running environments' authorized keys after a revocation |
-| `GET /api/run-boxes/:id/connection` | For a ready environment: host, port, user and pinned host key. 403 `no_authorized_key` when none of the caller's keys was injected |
+| `GET/POST /api/ssh-keys`, `DELETE /api/ssh-keys/:id` | The caller's device public keys (ed25519 only); private keys never reach the server. The docker-local, Runpod and aws-cpu (all AWS catalog machines) workers reconcile running environments' authorized keys after a revocation |
+| `GET /api/run-boxes/:id/connection` | For a ready environment: host, port, user and pinned host key, and `networkAccess: "requester-ipv4"` for AWS catalog machines (the desktop registers its IPv4 first). 403 `no_authorized_key` when none of the caller's keys was injected |
 | `POST /api/agent-runs`, `GET /api/agent-runs?projectId=`, `GET /api/agent-runs/:id`, `POST /api/agent-runs/:id/events`, `POST /api/agent-runs/:id/finish` | Agent run records and bounded, sequence-idempotent events, for the Runs page |
 | `POST /api/chat` | Employee session project chat; provisions/binds `desktop-chat` agent identity; streams model tokens server-side (`OPENAI_API_KEY`); never returns model or agent plaintext secrets |
 | `POST /api/resources` | Verified project-member catalog registrations, resource requests, and inference configuration drafts; requests record server-derived employee, organization, and project role at submission, with no allocation or policy approval |
@@ -73,7 +88,7 @@ The resource API accepts `registerResource`, `requestResource`, and `saveInferen
 
 Environments are run-box jobs in the auth SQLite database (`run_box_decision`, `run_box_job`, `run_box_transition`). A provider worker (`scripts/run-box-worker.mjs --loop docker-local|runpod`) claims approved jobs, allocates the machine, and marks it `ready` only after verifying SSH. Security properties:
 - **Host keys:** each environment gets an ed25519 host key generated by the worker and injected at creation, recorded in `run_box_ssh_endpoint`, and pinned by both the worker and the desktop app. There is no trust-on-first-use.
-- **Authorized keys:** set at allocation from the project members' registered device keys (`employee_ssh_key`) plus the install's Codex runner key. Either is enough to launch: a website-only owner with no device key gets an environment carrying only the runner key (HAC-166); with neither, the job fails with "No registered device SSH keys". The docker-local, Runpod, and aws-cpu workers then replace a ready box's member keys when registered keys or membership change; until that cycle runs, the connection API answers `403 no_authorized_key`.
+- **Authorized keys:** set at allocation from the project members' registered device keys (`employee_ssh_key`) plus the install's Codex runner key. Either is enough to launch: a website-only owner with no device key gets an environment carrying only the runner key (HAC-166); with neither, the job fails with "No registered device SSH keys". The docker-local, Runpod, and aws-cpu (all AWS catalog machines) workers then replace a ready box's member keys when registered keys or membership change; until that cycle runs, the connection API answers `403 no_authorized_key`.
 - **Account:** the box account is non-root (`agentcloud`). Access is trusted shell access.
 - **Runpod key pin override:** an operator pin in `known_hosts` (`scripts/runpod-pin-host-key.mjs`) overrides the injected key.
 - **Runpod local mode:** `AGENTCLOUD_RUNPOD_LOCAL=1` runs the worker from a developer machine, guarded by a separate watchdog process.
@@ -174,6 +189,9 @@ Project members can queue a peer message from one Codex session to another with
 `POST /api/codex-sessions/:id/peer-messages`; an agent bearer token can use
 `POST /api/agent-peer-messages` only for its own source identity. Both sessions
 must belong to different agents in the same project and ready run box. The
+same POST accepts `broadcast:true` with a UUID request ID to queue one message
+for each other agent identity on that box. SQLite stores the recipient-session
+snapshot with the request ID so retries cannot notify newly joined agents.
 backend sends the oldest queued message to the recipient's app-server when its
 thread is ready, then advances after that turn completes. Queued messages survive
 server restart. `delivered` records a delivery attempt, `acknowledged` records

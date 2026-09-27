@@ -13,6 +13,15 @@ import https from "node:https";
 import { ENVIRONMENT_ACCESS_PENDING } from "../src/lib/environment-access.ts";
 
 export const AWS_CPU_PROFILE_ID = "aws-cpu";
+
+/**
+ * Whether this environment admits SSH only from registered addresses. The server marks
+ * every sized AWS machine with `networkAccess: "requester-ipv4"`; `aws-cpu` is also
+ * recognized directly for servers that predate that field.
+ */
+export function needsNetworkAccess(connection: { profileId: string | null; networkAccess?: string | null }): boolean {
+  return connection.networkAccess === "requester-ipv4" || connection.profileId === AWS_CPU_PROFILE_ID;
+}
 export const ACCESS_WAIT_MS = 60_000;
 export const ACCESS_POLL_MS = 2_000;
 

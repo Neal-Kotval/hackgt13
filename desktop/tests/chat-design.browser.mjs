@@ -60,6 +60,21 @@ try {
   }
   await layout('empty');
   const input = page.getByRole('textbox', { name: 'Message', exact: true });
+  const notify = page.getByRole('button', { name: 'Notify agent', exact: true });
+  await expect(notify).toBeDisabled();
+  await input.fill('Coordinate the API integration.');
+  await notify.click();
+  await expect(page.getByText('Update queued for 1 other agent.', { exact: true })).toBeVisible();
+  await expect(input).toHaveValue('');
+  const broadcasts = await page.evaluate(() => window.__test.broadcasts);
+  expect(broadcasts).toHaveLength(1);
+  expect(broadcasts[0]).toMatchObject({ path: '/api/codex-sessions/s1/peer-messages', broadcast: true, text: 'Coordinate the API integration.' });
+  expect(broadcasts[0].requestId).toMatch(/^[a-f0-9-]{36}$/);
+  for (const width of [375, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(notify).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
   const longPrompt = 'For a local connection verification, inspect /home/node/workspace/agentcloud-connection-check.txt and report the exact contents without modifying files. '.repeat(3);
   await input.fill(longPrompt);
   await input.press('Shift+Enter');

@@ -1,7 +1,7 @@
 import { prepareAuth } from "./auth-fixture.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import ts from "typescript";
@@ -26,6 +26,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
     .outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'");
   await writeFile(path.join(temporary, `${name}.js`), output);
 }
+await copyFile(new URL("../lib/machine-catalog.mjs", import.meta.url), path.join(temporary, "machine-catalog.mjs"));
 const { action, resourceAction: rawResourceAction, getState } = await import(path.join(temporary, "store.js"));
 const authFixture = await prepareAuth(temporary);
 const testActor = {

@@ -148,3 +148,14 @@ Agent identity cards keep metadata labels and values start-aligned in one column
 use compact semantic status labels, and share one connectivity explanation below
 the grid. Cards wrap according to the available container width. Work is assigned
 through Project chat; these cards do not show legacy task assignments.
+
+## Platform administration
+
+The AWS admin page separates the cross-organization environment inventory from
+organization access. The inventory groups identifiers and age, shows refresh
+freshness, retains the last successful data during a refresh error, and keeps
+force-close policy in an expandable disclosure. Organization access uses status
+filters, name/slug search, and responsive two-column approval panels. Reservation
+meters describe reserved monthly hours, not measured usage. Approval, revocation,
+and force-close retain their existing authorization and confirmation behavior.
+All styling uses existing semantic tokens; no new visual primitives are added.
