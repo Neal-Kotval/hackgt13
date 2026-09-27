@@ -528,11 +528,8 @@ function EnvironmentCard({
   const command = job.ssh ? sshCommand(job.ssh) : "";
   const canStop = role === "owner" && job.state !== "stopped" && !job.stop_requested_at;
   const ready = job.state === "ready" && !job.stop_requested_at;
-  const taskUrl = ready && serverUrl
-    ? `agentcloud://open?${new URLSearchParams({ projectId, taskRunBoxId: job.id, serverUrl })}`
-    : "";
-  const terminalUrl = ready && serverUrl && job.ssh && job.desktopUrl
-    ? `${job.desktopUrl}&${new URLSearchParams({ serverUrl })}`
+  const chatUrl = ready && serverUrl
+    ? `agentcloud://open?${new URLSearchParams({ projectId, runBoxId: job.id, serverUrl })}`
     : "";
   const stopped = job.state === "stopped";
   const stopDetail =
@@ -617,14 +614,9 @@ function EnvironmentCard({
       </div>
 
       <div className="environment-actions">
-        {taskUrl && (
-          <a className="button primary" href={taskUrl}>
+        {chatUrl && (
+          <a className="button primary" href={chatUrl}>
             <Desktop aria-hidden="true" /> Continue in desktop
-          </a>
-        )}
-        {terminalUrl && (
-          <a className="button secondary" href={terminalUrl}>
-            <Desktop aria-hidden="true" /> Open terminal in desktop
           </a>
         )}
         {job.ssh && (
