@@ -18,7 +18,6 @@
 .marketing-header,
 .marketing-hero,
 .marketing-showcase,
-.marketing-statement,
 .marketing-platform,
 .marketing-flow,
 .marketing-roadmap,
@@ -71,7 +70,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding-block: var(--space-20) var(--space-24);
+  padding-block: var(--space-16);
   text-align: center;
 }
 .marketing-hero-copy { max-width: var(--marketing-hero-copy-width); }
@@ -83,7 +82,7 @@
   line-height: var(--leading-normal);
 }
 .marketing-hero h1 {
-  margin-block: var(--space-6) var(--space-8);
+  margin-block: var(--space-5) var(--space-6);
   font-size: var(--marketing-display-size);
   font-weight: var(--font-weight-bold);
   letter-spacing: var(--tracking-tight);
@@ -97,7 +96,7 @@
   font-size: var(--text-xl);
   line-height: var(--leading-normal);
 }
-.marketing-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
+.marketing-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-8); }
 .marketing-button {
   min-height: var(--space-12);
   display: inline-flex;
@@ -115,10 +114,10 @@
 .marketing-button-secondary:hover { border-color: var(--color-marketing-accent); color: var(--color-marketing-accent); }
 .marketing-showcase {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 2fr 3fr;
   align-items: center;
   gap: var(--space-16);
-  padding-block: var(--space-24);
+  padding-block: var(--space-16);
   background: var(--color-bg);
   color: var(--color-text);
 }
@@ -126,7 +125,6 @@
 .marketing-showcase .marketing-kicker,
 .marketing-roadmap .marketing-kicker { color: var(--color-accent); }
 .marketing-showcase h2,
-.marketing-statement h2,
 .marketing-section-heading h2,
 .marketing-flow h2,
 .marketing-roadmap h2 {
@@ -202,11 +200,8 @@
 .marketing-art-track span:nth-child(1) { top: 48%; transform: rotate(calc(-1 * var(--marketing-track-angle))); }
 .marketing-art-track span:nth-child(2) { top: 51%; }
 .marketing-art-track span:nth-child(3) { top: 53%; transform: rotate(var(--marketing-track-angle)); }
-.marketing-statement,
 .marketing-flow,
-.marketing-roadmap { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-16); padding-block: var(--space-24); }
-.marketing-statement .marketing-kicker { grid-column: 1 / -1; }
-.marketing-statement > p:last-child,
+.marketing-roadmap { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-12); padding-block: var(--space-16); }
 .marketing-flow-intro > p:last-child {
   align-self: end;
   max-width: var(--marketing-copy-width);
@@ -214,10 +209,11 @@
   font-size: var(--text-xl);
   line-height: var(--leading-normal);
 }
-.marketing-platform { padding-block: var(--space-24); border-top: var(--border-width) solid var(--color-marketing-line); }
+.marketing-platform { padding-block: var(--space-16); border-top: var(--border-width) solid var(--color-marketing-line); }
 .marketing-section-heading { max-width: var(--content-narrow); }
 .marketing-section-heading h2 { margin-top: var(--space-5); }
-.marketing-strengths { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-8); margin-top: var(--space-16); }
+.marketing-section-heading > p:last-child { margin-top: var(--space-6); color: var(--color-marketing-muted); font-size: var(--text-xl); line-height: var(--leading-normal); }
+.marketing-strengths { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-8); margin-top: var(--space-12); }
 .marketing-strength { padding-top: var(--space-6); border-top: var(--border-width) solid var(--color-marketing-line); }
 .marketing-strength-icon { color: var(--color-marketing-accent); margin-bottom: var(--space-8); }
 .marketing-strength-icon svg { width: var(--icon-xl); height: var(--icon-xl); }
@@ -243,7 +239,6 @@
   .marketing-header-action { padding-inline: var(--space-4); }
   .marketing-hero { min-height: var(--marketing-hero-height-mobile); padding-block: var(--space-16); }
   .marketing-showcase,
-  .marketing-statement,
   .marketing-flow,
   .marketing-roadmap { grid-template-columns: 1fr; gap: var(--space-12); padding-block: var(--space-16); }
   .marketing-hero-art { min-height: var(--marketing-visual-height-mobile); }
@@ -252,7 +247,6 @@
   .marketing-art-agent,
   .marketing-art-outcome { padding: var(--space-2); font-size: var(--text-xs); }
   .marketing-art-agent small { padding-left: 0; }
-  .marketing-statement .marketing-kicker { grid-column: 1; }
   .marketing-platform { padding-block: var(--space-16); }
   .marketing-strengths { grid-template-columns: 1fr; gap: var(--space-8); margin-top: var(--space-12); }
   .marketing-strength-icon { margin-bottom: var(--space-5); }

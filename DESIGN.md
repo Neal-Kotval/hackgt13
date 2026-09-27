@@ -8,7 +8,7 @@ The visual source is the supplied **AgentCloud Mockup v4.html**. The current des
 
 The visual emphasis is environment readiness and observable agent progress, supported by clear ownership and evidence. Keep the chrome quiet. Use blue for primary actions, focus indicators, and selected destinations; blue for informational states; steel-blue for secondary agent identity; sage for success; amber for attention; and coral for danger. Apply these colors to meaningful accents and status surfaces while keeping the main canvas neutral. Avoid decorative gradients, oversized metrics, and repeated decorative labels. Align content left. Borders define genuine panels and groups; spacing defines the hierarchy inside them.
 
-## Public Alto sales page
+## Public alto sales page
 
 The public `/` page uses a light editorial canvas with near-black type, restrained blue accents, and the same Hanken Grotesk and JetBrains Mono families as the application. Its semantic `--color-marketing-*` tokens live in `app/tokens.css`. The hero centers the product promise; a dark workspace diagram follows as an explanation of coordination, not as simulated live activity. The authenticated application keeps its dark operational palette.
 
