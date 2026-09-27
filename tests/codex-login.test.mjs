@@ -44,8 +44,8 @@ test('rejects other hosts, schemes, ports, paths and redirect targets', () => {
   assert.throws(() => parseBrowserLoginStart({ type: 'chatgpt', loginId: 'x', authUrl: authUrl('http://localhost:9999/auth/callback') }), /cannot use/);
 });
 
-test('login method defaults to device code for API compatibility', () => {
-  assert.equal(loginMethod(undefined), 'deviceCode');
+test('login method defaults to browser; legacy device code requires explicit selection', () => {
+  assert.equal(loginMethod(undefined), 'browser');
   assert.equal(loginMethod('deviceCode'), 'deviceCode');
   assert.equal(loginMethod('browser'), 'browser');
   assert.equal(loginMethod('password'), null);
@@ -111,12 +111,13 @@ test('browser login returns the URL and port, is never saved, and cancel is expl
   f.service.close(); f.db.close();
 });
 
-test('device code stays the default login method', async () => {
+test('browser is the default login method', async () => {
   const f = fixture();
   const { id } = f.service.initialize({ projectId: 'p', agentId: 'a', createdBy: 'u' });
   await tick();
   const { login } = await f.service.action(id, { action: 'login' });
-  assert.deepEqual(login, { verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234' });
+  assert.equal(login.method, 'browser');
+  assert.equal((await f.service.action(id, {action:'login', method:'deviceCode'})).login.userCode, 'ABCD-1234');
   await assert.rejects(f.service.action(id, { action: 'login', method: 'password' }), (error) => error.status === 400);
   f.service.close(); f.db.close();
 });

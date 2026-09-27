@@ -16,9 +16,9 @@ async function compile(source,name) {
 await compile('../lib/resource-profiles.ts','resource-profiles.js');await compile('../lib/store.ts','store.js');await compile('../lib/http.ts','http.js');
 const fixture=await prepareAuth(dir),store=await import(path.join(dir,'store.js'));
 // Stub only execution; all employee/session/organization checks use real Better Auth.
-await writeFile(path.join(dir,'codex-service.js'),`import {failure} from './http.js';
+await writeFile(path.join(dir,'codex-service.js'),`import {failure} from './http.js'; import {InputError} from './store.js';
 export const codexEnabled=()=>true;export const codexFailure=failure;
-let saved;export function codexService(){return {list:()=>saved?[saved]:[],initialize:({projectId,agentId,runBoxId,newChat})=>(saved={id:'s1',projectId,agentId,status:'auth_required',isSetupSession:!newChat,target:runBoxId?{kind:'runBox',runBoxId}:{kind:'local'}}),get:()=>saved,snapshot:()=>({session:saved,events:[]}),action:async()=>({session:saved})};}`);
+let saved;export function codexService(){return {validateEnvironment:(projectId,runBoxId)=>{if(runBoxId!=='ready-env')throw new InputError('Environment not found or not ready',409);},list:(projectId)=>saved&&saved.projectId===projectId?[saved]:[],initialize:({projectId,agentId,runBoxId,newChat})=>(saved={id:'s1',projectId,agentId,status:'auth_required',isSetupSession:!newChat,target:runBoxId?{kind:'runBox',runBoxId}:{kind:'local'}}),get:()=>saved,snapshot:()=>({session:saved,events:[]}),action:async()=>({session:saved})};}`);
 const routes=await compile('../app/api/codex-sessions/route.ts','sessions.js');
 const detail=await compile('../app/api/codex-sessions/[id]/route.ts','detail.js');
 const owner=fixture.users[0],member=fixture.users[1];
@@ -55,4 +55,35 @@ test('Codex setup is owner-scoped; session reads and messages require project me
  assert.equal((await detail.GET(request(null,member.cookie),ctx)).status,403);
  assert.equal((await detail.POST(request({action:'message'},member.cookie),ctx)).status,403);
  assert.equal((await routes.POST(request({...input,newChat:true,runBoxId:'rb-1',requestId:'test'},member.cookie))).status,403);
+});
+
+test('managed setup validates before persisting and reuses a tokenless identity and canonical session',async()=>{
+ const projectId=(await store.action({type:'createProject',name:'Managed setup',repo:'https://example.com/repo',compute:'Hosted Linux',template:'blank'})).id;
+ fixture.grantMembership(owner.id,projectId,'owner');fixture.grantMembership(member.id,projectId,'member');
+ const disk=async()=>JSON.parse(await readFile(path.join(process.env.AGENTCLOUD_DATA_DIR,'state.json'),'utf8'));
+ const input={projectId,runBoxId:'ready-env'};
+ const before=await disk();
+ assert.equal((await routes.POST(request(input,member.cookie))).status,403);
+ assert.equal((await routes.POST(request({...input,runBoxId:'mismatched-env'},owner.cookie))).status,409);
+ assert.equal((await routes.POST(request({projectId},owner.cookie))).status,400);
+ assert.deepEqual(await disk(),before,'denied or invalid targets do not write identities or credentials');
+ const response=await routes.POST(request(input,owner.cookie));assert.equal(response.status,202);
+ const first=await response.json();assert.equal('token' in first,false);
+ const after=await disk();assert.deepEqual(after.credentials,before.credentials);
+ const agents=after.state.projects.find(p=>p.id===projectId).agents;
+ assert.equal(agents.length,1);assert.equal(agents[0].client,'Codex');assert.equal(first.session.agentId,agents[0].id);
+ const duplicate=await routes.POST(request(input,owner.cookie));assert.equal(duplicate.status,202);
+ assert.equal((await duplicate.json()).session.agentId,first.session.agentId);
+ assert.deepEqual(await disk(),after);
+});
+
+test('managed setup preserves an existing Codex identity and legacy credential',async()=>{
+ const projectId=(await store.action({type:'createProject',name:'Existing Codex setup',repo:'https://example.com/repo',compute:'Hosted Linux',template:'blank'})).id;
+ fixture.grantMembership(owner.id,projectId,'owner');
+ const existing=(await store.action({type:'addAgent',projectId,name:'Existing Codex',client:'Codex',role:'Developer',branch:'agents/existing'})).agentId;
+ const before=JSON.parse(await readFile(path.join(process.env.AGENTCLOUD_DATA_DIR,'state.json'),'utf8'));
+ const results=await Promise.all([1,2].map(()=>routes.POST(request({projectId,runBoxId:'ready-env'},owner.cookie))));
+ for(const response of results){assert.equal(response.status,202);assert.equal((await response.json()).session.agentId,existing);}
+ const after=JSON.parse(await readFile(path.join(process.env.AGENTCLOUD_DATA_DIR,'state.json'),'utf8'));
+ assert.deepEqual(after,before);
 });
