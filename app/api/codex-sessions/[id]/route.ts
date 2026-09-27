@@ -21,7 +21,8 @@ export async function POST(request:Request,context:Context) {
     const service = codexService(), session = service.get(id);
     const membership = requireMembership(employee,session.projectId);
     const input = await body(request);
-    if(!['message','interrupt'].includes(String(input.action)) && membership.role!=='owner')throw new InputError('Project owner required for Codex setup and lifecycle controls.',403);
+    const memberReconnect=input.action==='resume' && session.target.kind==='runBox' && session.isSetupSession===false;
+    if(!['message','interrupt'].includes(String(input.action)) && !memberReconnect && membership.role!=='owner')throw new InputError('Project owner required for Codex setup and lifecycle controls.',403);
     return Response.json(await service.action(id,{...input,actor:{id:employee.id,name:employee.name}}));
   } catch(error) {return codexFailure(error);}
 }
