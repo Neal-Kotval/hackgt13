@@ -378,3 +378,23 @@ test("openPinnedShell: PTY over real SSH, resize, and pinned host key enforcemen
   await assert.rejects(openPinnedShell({ ...base, hostPublicKey: host.publicKey, privateKey: other.privateKey },
     { onData: () => {}, onClose: () => {} }), (error) => error.code === "ssh_failed" && /refused the server's SSH key/.test(error.message));
 });
+
+test("the periodic sweep closes sessions whose employee lost access", async () => {
+  const { db, id } = database({ minutes: 120 });
+  const fake = fakeShells();
+  let allowed = true;
+  const seen = [];
+  const { service: terminals } = service(db, { deps: { openShell: fake.openShell,
+    stillAllowed: (session) => { seen.push(session); return allowed; } } });
+  const { sessionId } = await terminals.open(openArgs(id));
+  const events = [];
+  terminals.attach(sessionId, ALICE, id, (event) => events.push(event));
+  terminals.sweep();
+  assert.equal(terminals.size, 1);
+  assert.deepEqual(seen[0], { employeeId: ALICE, projectId: PROJECT, jobId: id });
+  allowed = false;
+  terminals.sweep();
+  assert.equal(terminals.size, 0);
+  assert.equal(fake.shells[0].closed, true);
+  assert.equal(events.at(-1).reason, "access_revoked");
+});

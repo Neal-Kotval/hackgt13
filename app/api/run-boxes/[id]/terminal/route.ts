@@ -2,8 +2,7 @@ import { getDatabase } from "../../../../../lib/auth.mjs";
 import { requireEmployee } from "../../../../../lib/employee";
 import { body, sameOrigin } from "../../../../../lib/http";
 import { InputError } from "../../../../../lib/store";
-// TEMPORARY: switch to "../../../../../lib/run-box-access.mjs" when slice A merges.
-import { resolveJobAccess } from "../../../../../lib/run-box-access-shim";
+import { resolveJobAccess } from "../../../../../lib/run-box-access.mjs";
 import { terminalFailure, webTerminalService } from "../../../../../lib/web-terminal-service";
 
 export const runtime = "nodejs";

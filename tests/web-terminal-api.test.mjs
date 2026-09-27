@@ -13,9 +13,9 @@ await writeFile(path.join(directory, "package.json"), '{"type":"module"}');
 const transpile = (source) => ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
 }).outputText;
-const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "aws-organization-approval", "codex-runner-key", "web-terminal"];
+const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "aws-organization-approval", "codex-runner-key", "web-terminal", "run-box-access", "run-box-metadata", "machine-catalog"];
 const relink = (code) => code.replace(/from ["']\.\/([\w-]+)(?:\.mjs)?["']/g, (match, name) => `from './${name}${mjs.includes(name) ? ".mjs" : ".js"}'`);
-for (const name of ["store", "http", "resource-profiles", "run-box-access-shim", "web-terminal-service"]) {
+for (const name of ["store", "http", "resource-profiles", "web-terminal-service"]) {
   const source = await readFile(new URL(`../lib/${name}.ts`, import.meta.url), "utf8");
   await writeFile(path.join(directory, `${name}.js`), relink(transpile(source)));
 }
@@ -28,6 +28,7 @@ const jobs = await import(path.join(directory, "run-box-jobs.mjs"));
 const endpoints = await import(path.join(directory, "run-box-ssh.mjs"));
 const sshKeys = await import(path.join(directory, "ssh-keys.mjs"));
 const bridge = await import(path.join(directory, "web-terminal.mjs"));
+const metadata = await import(path.join(directory, "run-box-metadata.mjs"));
 async function route(sourcePath, outputName, depth) {
   const source = await readFile(new URL(sourcePath, import.meta.url), "utf8");
   await writeFile(path.join(directory, outputName), relink(transpile(source).replaceAll("../".repeat(depth) + "lib/", "./")));
@@ -164,4 +165,31 @@ test("session routes: another employee's session is a 404; its opener can stream
   await readUntil(/event: close/);
   assert.match(text, /"reason":"access_revoked"/);
   assert.equal(bridge.listTerminalEvents(db, job.id).at(-1).reason, "access_revoked");
+});
+
+test("a private environment's terminal is a 404 for everyone but its creator", async () => {
+  const projectId = (await store.action({ type: "createProject", name: "Private", repo: "https://example.com/private", compute: "Hosted Linux", template: "blank" })).id;
+  fixture.grantMembership(owner.id, projectId, "owner");
+  fixture.grantMembership(member.id, projectId, "member");
+  const job = await readyJob(projectId, "terminal-3");
+  metadata.createRunBoxMetadata(db, job.id, owner.id, { visibility: "private" });
+  makeReady(job);
+  const open = (cookie) => openRoute.POST(call(`/api/run-boxes/${job.id}/terminal`, { method: "POST", cookie, body: { projectId, cols: 80, rows: 24 } }), params(job.id));
+  const denied = await open(member.cookie);
+  assert.equal(denied.status, 404);
+  assert.equal((await denied.json()).error, "Run-box job not found");
+  const opened = await open(owner.cookie);
+  assert.equal(opened.status, 201);
+  const { sessionId } = await opened.json();
+  // Turning a public job private ends another member's open session on their next request.
+  metadata.updateRunBoxMetadata(db, job.id, owner.id, { visibility: "public" });
+  const memberOpened = await open(member.cookie);
+  assert.equal(memberOpened.status, 201);
+  const memberSession = (await memberOpened.json()).sessionId;
+  metadata.updateRunBoxMetadata(db, job.id, owner.id, { visibility: "private" });
+  const typed = await inputRoute.POST(call(`/api/run-boxes/${job.id}/terminal/${memberSession}/input`, { method: "POST", cookie: member.cookie, body: { data: "ls\r" } }), params(job.id, memberSession));
+  assert.equal(typed.status, 404);
+  assert.equal(shells.at(-1).closed, true);
+  assert.equal(bridge.listTerminalEvents(db, job.id).at(-1).reason, "access_revoked");
+  await sessionRoute.DELETE(call(`/api/run-boxes/${job.id}/terminal/${sessionId}`, { method: "DELETE", cookie: owner.cookie }), params(job.id, sessionId));
 });

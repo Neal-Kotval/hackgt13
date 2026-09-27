@@ -1,9 +1,8 @@
-import { getDatabase } from "./auth.mjs";
+import { getDatabase, memberships } from "./auth.mjs";
 import { createWebTerminalService, WebTerminalError } from "./web-terminal.mjs";
-import { failure } from "./http";
-import { requireEmployee } from "./employee";
-// TEMPORARY: switch to "./run-box-access.mjs" when slice A merges (see run-box-access-shim.ts).
-import { resolveJobAccess } from "./run-box-access-shim";
+import { exposedError, failure } from "./http";
+import { requireEmployee, type Employee } from "./employee";
+import { resolveJobAccess } from "./run-box-access.mjs";
 import { InputError } from "./store";
 
 // One bridge per server process. Sessions live in memory, so the stream and the input
@@ -11,13 +10,26 @@ import { InputError } from "./store";
 // instance and for local `next dev` / `next start`).
 const shared = globalThis as typeof globalThis & { agentcloudWebTerminal?: ReturnType<typeof createWebTerminalService> };
 export function webTerminalService() {
-  return shared.agentcloudWebTerminal ??= createWebTerminalService({ db: getDatabase() });
+  return shared.agentcloudWebTerminal ??= (() => {
+    const db = getDatabase();
+    return createWebTerminalService({
+      db,
+      // Periodic re-check without a request: the employee's current project memberships
+      // and the job's visibility, through the same policy as every route.
+      stillAllowed: ({ employeeId, projectId, jobId }) => {
+        const current = (memberships(employeeId) as Employee["memberships"]).filter((item) => item.projectId === projectId);
+        if (!current.length) return false;
+        const employee = { id: employeeId, memberships: current } as Employee;
+        return resolveJobAccess(db, employee, projectId, jobId).permissions.open === true;
+      },
+    });
+  })();
 }
 
 export function terminalFailure(error: unknown) {
   if (error instanceof WebTerminalError)
     return Response.json({ error: error.message, ...(error.code ? { code: error.code } : {}) }, { status: error.status });
-  if (error instanceof InputError) return failure(error);
+  if (error instanceof InputError || exposedError(error)) return failure(error);
   // Never echo or log raw SSH errors: they can carry provider text.
   return Response.json({ error: "Terminal operation failed." }, { status: 500 });
 }
