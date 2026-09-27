@@ -29,17 +29,20 @@ try {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       expect(await page.locator('.conversation').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
       const composer = await page.locator('.composer-row').boundingBox();
+      expect(composer.x + composer.width).toBeLessThanOrEqual(width);
+      expect(composer.x).toBeGreaterThanOrEqual(0);
       expect(composer.y + composer.height).toBeLessThanOrEqual(900);
       await page.screenshot({ path: path.join(artifacts, `${state}-${width}.png`) });
     }
   }
   await layout('empty');
   const input = page.getByRole('textbox', { name: 'Message', exact: true });
-  await input.fill('Review notes');
+  const longPrompt = 'For a local connection verification, inspect /home/node/workspace/agentcloud-connection-check.txt and report the exact contents without modifying files. '.repeat(3);
+  await input.fill(longPrompt);
   await input.press('Shift+Enter');
   await input.pressSequentially('Keep the API stable.');
   await input.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true });
-  await expect(input).toHaveValue('Review notes\nKeep the API stable.');
+  await expect(input).toHaveValue(`${longPrompt}\nKeep the API stable.`);
   await page.getByLabel('Choose text context files').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('Use cursor pagination.') });
   await expect(page.getByRole('button', { name: 'Remove notes.md' })).toBeVisible();
   await page.getByRole('button', { name: 'Remove notes.md' }).click();
