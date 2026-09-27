@@ -19,6 +19,8 @@ export interface Task {
   instructions?: string;
   /** Verified resource/environment bound at create time; optional. */
   environmentId?: string;
+  /** Ready project run-box job bound at create time; optional for legacy tasks. */
+  runBoxId?: string;
 }
 export interface Service {
   id: string;
