@@ -28,7 +28,11 @@ export default function App() {
   const [environmentLink, setEnvironmentLink] =
     useState<DeepLinkParseResult | null>(null);
   const [environmentsMounted, setEnvironmentsMounted] = useState(false);
-  const clearCodexLink = useCallback(() => setCodexLink(null), []);
+  // An older project fetch can finish in the same batch as a new startup link.
+  // Acknowledge only the link that render received, never a newer destination.
+  const clearCodexLink = useCallback(() => {
+    setCodexLink((current) => current === codexLink ? null : current);
+  }, [codexLink]);
   const clearEnvironmentLink = useCallback(() => setEnvironmentLink(null), []);
   const routeDeepLink = useCallback(async (result: DeepLinkParseResult) => {
     if (result.ok) {

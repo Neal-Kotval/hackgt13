@@ -90,3 +90,7 @@ switching an already-open app. Codex readiness does not determine selection: an
 unavailable environment stays selected with its status and a link to manage it.
 The startup handoff is retained across renderer effect initialization; newer live
 links take precedence over an outstanding startup link.
+
+Startup link acknowledgements are scoped to the destination a renderer received.
+An older project-loading request cannot clear a newer environment link while
+authentication and project data are loading concurrently.
