@@ -135,7 +135,7 @@
   .button.icon-button.chat-history-create { min-width: var(--control-height-touch); }
 }
 
-.chat-history-row { min-width: 0; }
+.chat-history-row { position: relative; min-width: 0; }
 .chat-history-row-main { display: flex; align-items: center; border-radius: var(--radius-navigation); }
 .chat-history-row-main[data-selected="true"] { background: var(--color-glass-selected); }
 .chat-history-row-main .chat-history-item { flex: 1; width: auto; }
@@ -207,4 +207,9 @@
   font-family: var(--font-heading);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
+}
+
+.chat-history-action-panel { width: 100%; }
+.chat-history-actions button, .chat-history-edit input, .chat-history-edit-buttons .button {
+  transition: color var(--duration-normal) var(--ease-standard), background-color var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard), opacity var(--duration-normal) var(--ease-standard);
 }

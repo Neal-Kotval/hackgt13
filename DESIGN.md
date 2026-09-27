@@ -202,3 +202,5 @@ and agent. Only the first send creates a persisted chat. Sidebar rows expose Ren
 and Delete through an accessible ellipsis menu, with inline name editing and a
 delete confirmation. Failed history actions remain visible inside the navigation
 drawer; deleting a saved chat preserves its environment and workspace files.
+
+Chat history action dots transition their foreground accent without a hover surface. Menus, rename forms, and delete confirmations use the shared short motion tokens for entry and exit; removed history rows fade out. Exiting panels are inert and hidden from assistive technology, keyboard focus restores immediately, and reduced motion disables the transitions.
