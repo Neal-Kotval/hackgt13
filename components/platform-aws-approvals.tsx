@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Select } from "@/components/ui/select";
+import { PlatformAwsEnvironments } from "@/components/platform-aws-environments";
 
 type Organization = {
   id: string;
@@ -60,8 +61,9 @@ export function PlatformAwsApprovals() {
     }
   }
 
-  return <main className="organization-page">
+  return <main className="organization-page organization-page--wide">
     <header className="section-heading"><div><p className="eyebrow">Platform administration</p><h1>Managed AWS access</h1></div></header>
+    <PlatformAwsEnvironments />
     <p>Approve organizations and set limits before they can request alto funded AWS runs. Approval does not start a machine.</p>
     {error && <p className="auth-error" role="alert">{error}</p>}
     {notice && <p className="auth-success" role="status">{notice}</p>}
