@@ -130,7 +130,7 @@ The proposed backend uses one provider-neutral run-box contract: attach an exist
 - **Project dashboard:** agent roster, assigned tasks, services, handoffs, and activity.
 - **Agent setup:** create an identity and obtain a scoped connection token.
 - **Review:** inspect and accept handoffs; Changes and Checks describe pending infrastructure.
-- **Desktop:** CLI connection workflow in the web app; a separate Electron shell for Tasks + Local chat lives in [`desktop/`](desktop/) (`just desktop`). See [`desktop/README.md`](desktop/README.md).
+- **Desktop:** CLI connection workflow in the web app; a separate Electron shell for Tasks, Environments, and Project chat lives in [`desktop/`](desktop/) (`just desktop`). See [`desktop/README.md`](desktop/README.md).
 - **Environments:** request a time-limited environment in one step, follow its verified state, copy the SSH command, open it in the desktop app, and stop it.
 - **Resources:** register and inspect intended resource metadata and its unverified availability.
 - **Requests:** save resource requests and inspect the explicit unavailable policy decision.
@@ -203,7 +203,7 @@ The token check enforces the visual-system rules; it does not replace visual ins
 | `app/` | Next.js routes, UI, API handlers, and application styling |
 | `lib/` | Shared types, initial empty state, and persisted coordination state |
 | `cli/` | Node.js agent coordination client |
-| `desktop/` | Electron Tasks + Local chat shell (see desktop/README.md) |
+| `desktop/` | Electron Tasks + Project chat shell (see desktop/README.md) |
 | `scripts/` | Repository checks, including token enforcement |
 | `tests/` | Backend behavior and authorization verification |
 | `reference/` | Original supplied prototype exports |

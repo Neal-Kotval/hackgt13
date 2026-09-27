@@ -44,7 +44,7 @@ export type ChatStoreSnapshot = {
 
 export type CredentialStatus = {
   configured: boolean;
-  source: "env" | "none";
+  source: "agentcloud" | "env" | "none";
   model: string;
   message: string;
 };
@@ -165,6 +165,7 @@ export type DesktopApi = {
   sendAssistant: (
     threadId: string,
     userMessageId: string,
+    options: { projectId: string; agentId?: string },
   ) => Promise<{ assistantMessageId: string }>;
   cancelAssistant: (threadId: string) => Promise<void>;
   onAssistantEvent: (

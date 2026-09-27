@@ -1,8 +1,8 @@
 # AgentCloud desktop
 
-Desktop shell for HackGT ([HAC-16](https://linear.app/startup-yc/issue/HAC-16/d1-desktop-ship-codex-like-core-chat) chat scaffold + [HAC-29](https://linear.app/startup-yc/issue/HAC-29/d2-desktop-task-authoring-against-shared-backend-machine-first) task authoring). Separate from the Next.js coordination app. It does **not** provision run boxes or claim remote GPU execution.
+Desktop shell for HackGT ([HAC-16](https://linear.app/startup-yc/issue/HAC-16/d1-desktop-ship-codex-like-core-chat) chat scaffold + [HAC-29](https://linear.app/startup-yc/issue/HAC-29/d2-desktop-task-authoring-against-shared-backend-machine-first) task authoring + [HAC-102](https://linear.app/startup-yc/issue/HAC-102/epic-desktop-chat-talks-to-project-agent-not-openai) project-agent chat). Separate from the Next.js coordination app. It does **not** provision run boxes or claim remote GPU execution.
 
-## Information architecture (HAC-41)
+## Information architecture (HAC-41 / HAC-105)
 
 One window, two primary sections:
 
@@ -10,9 +10,9 @@ One window, two primary sections:
 | --- | --- |
 | **Tasks** | Project/environment picker + task composer against the shared backend (`addTask`). Project chat is separate. |
 | **Environments** | Run boxes for a project (`GET /api/run-boxes`) with server states and an in-app SSH terminal for `ready` environments (HAC-90). |
-| **Project chat** | Codex-like on-device threads (`threads.json`). Does **not** create AgentCloud tasks and does **not** sync to the web dashboard. |
+| **Project chat** | On-device threads (`threads.json`) that send turns to the selected project's agent via `POST /api/chat`. Does **not** create AgentCloud tasks. |
 
-Machine-first journey: connect/verify a machine in the **web** app → return to desktop **Tasks** to author work against a ready environment → monitor on the web. Project chat remains an optional scratchpad beside that flow.
+Machine-first journey: connect/verify a machine in the **web** app → return to desktop **Tasks** to author work against a ready environment → monitor on the web. Project chat is an optional agent conversation beside that flow.
 
 Switching Tasks ↔ Project chat keeps in-memory chat drafts for the session.
 
@@ -20,8 +20,8 @@ Switching Tasks ↔ Project chat keeps in-memory chat drafts for the session.
 
 - Node.js 22 LTS
 - macOS (primary hackathon target)
-- Reachable AgentCloud web app for employee sign-in (local `just dev` or the shared AWS URL)
-- Optional: `OPENAI_API_KEY` for real assistant replies in Project chat
+- Reachable AgentCloud web app for employee sign-in and chat (local `just dev` or the shared AWS URL)
+- Server-side `OPENAI_API_KEY` on that AgentCloud process (Doppler or local env) for real replies — **not** in `desktop/.env`
 
 ## Install and launch
 
@@ -56,10 +56,10 @@ Or set `AGENTCLOUD_DESKTOP_DEVTOOLS=1` in `desktop/.env`. DevTools are attached 
 ## Project chat loop
 
 1. Sign in with the same Better Auth employee email/password as the web app (web must be running at `AGENTCLOUD_URL`, default `http://127.0.0.1:3000`).
-2. Open **Project chat**. Type and **Enter** to send — the first send auto-creates a thread (no mandatory **New chat** click).
+2. Open **Project chat**. Select a project, then type and **Enter** to send — the first send auto-creates a thread (no mandatory **New chat** click).
 3. **Shift+Enter** inserts a newline. **New chat** still starts another empty thread while one is open.
-4. With `OPENAI_API_KEY` set, the assistant streams a real reply into the thread.
-5. Without credentials, the failed assistant turn explains how to configure `.env` — it does not invent a successful reply.
+4. Replies stream from `POST /api/chat` using the server model key. If the project has no agents yet, the server provisions a `desktop-chat` identity (no plaintext token returned to desktop).
+5. If the server lacks `OPENAI_API_KEY`, the failed assistant turn explains server setup — Electron never invents a reply and never reads an OpenAI key.
 6. Create a second chat, switch between them or to **Tasks** and back — titles/messages reload from disk; drafts stay in memory for the session.
 7. **Sign out** clears the employee session; relaunch shows the sign-in screen again (revoked sessions are not silently restored).
 
@@ -110,7 +110,7 @@ On **Tasks**, pick a project, then use **Create task** (title, instructions, age
 
 ### Start agent (HAC-35)
 
-The Tasks panel includes a **Start agent** control that selects a created task + verified environment. It stays **disabled** with an explicit reason: “Agent start requires remote runner — not implemented.” Desktop does not call Project chat / OpenAI as a substitute, and it never marks a task running without server evidence. When a start endpoint lands, wire it here with `taskId` + `environmentId` + agent owner and surface the server decision only.
+The Tasks panel includes a **Start agent** control that selects a created task + verified environment. It stays **disabled** with an explicit reason: “Agent start requires remote runner — not implemented.” Desktop does not call Project chat as a substitute for agent start, and it never marks a task running without server evidence. When a start endpoint lands, wire it here with `taskId` + `environmentId` + agent owner and surface the server decision only.
 
 ## Deep links (HAC-54)
 
@@ -162,7 +162,7 @@ just desktop-verify  # check + tokens + test + build
 - **Tasks** is a labeled empty state until the composer ([HAC-33](https://linear.app/startup-yc/issue/HAC-33/d23-desktop-task-composer-ui-instructions-agent-environment)) and shared API create path ([HAC-34](https://linear.app/startup-yc/issue/HAC-34/d24-desktop-create-task-via-shared-backend-api)) land.
 - Employee sign-in reuses Better Auth from the running web app ([HAC-24](https://linear.app/startup-yc/issue/HAC-24/d2-desktop-reuse-better-auth-employee-sessions-from-the-web-app)); SSO beyond HAC-1 is out of scope.
 - No AgentCloud project sync, multi-agent handoffs, worktrees, or remote run-box control yet.
-- Assistant path is an isolated OpenAI Chat Completions adapter; it can be replaced later without rewriting the chat UI.
+- Assistant path is `ProjectAgentChatAdapter` → `POST /api/chat`; Electron never holds model API keys.
 - Plain-text message rendering only (markdown deferred).
 - Not notarized / packaged for distribution.
 

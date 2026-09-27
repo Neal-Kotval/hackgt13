@@ -37,8 +37,13 @@ const api: DesktopApi = {
     ) as Promise<ChatMessage>,
   credentialStatus: () =>
     ipcRenderer.invoke("assistant:credentialStatus") as Promise<CredentialStatus>,
-  sendAssistant: (threadId, userMessageId) =>
-    ipcRenderer.invoke("assistant:send", threadId, userMessageId) as Promise<{
+  sendAssistant: (threadId, userMessageId, options) =>
+    ipcRenderer.invoke(
+      "assistant:send",
+      threadId,
+      userMessageId,
+      options,
+    ) as Promise<{
       assistantMessageId: string;
     }>,
   cancelAssistant: (threadId) =>
