@@ -21,6 +21,8 @@ Access over SSH is **trusted shell access** to the environment. It is not a file
 | `runpod-rtx-4090` | `runpod` | Runpod Secure Cloud Pod | RTX 4090, verified by probe |
 | `aws-g6-demo` | `aws-ec2` | Existing EC2 path (SSM only; no desktop SSH yet) | Verified by probe |
 | `aws-cpu` | `aws-ec2` | EC2 `t3.medium`; direct SSH to its public IPv4 from the requester's /32 only; host key generated on the box and read back over SSM (HAC-125, planned, not yet launched) | None. Never label as GPU |
+| `aws-cpu-medium`, `aws-cpu-large` | `aws-ec2` | EC2 `t3.xlarge` / `m7i.2xlarge` through the same path as `aws-cpu` (sized environments; Terraform planned, not applied, never launched) | None. Never label as GPU |
+| `aws-gpu-t4`, `aws-gpu-l4`, `aws-gpu-a10g` | `aws-ec2` | EC2 `g4dn.xlarge` / `g6.xlarge` / `g5.xlarge` from the `agentcloud-demo-gpu-env` template (Deep Learning Base OSS Nvidia Driver AMI), same SSH path as `aws-cpu` (planned, not applied, never launched) | One NVIDIA T4 / L4 / A10G, claimed only after `nvidia-smi` on the box shows it |
 
 ## Device SSH keys
 
