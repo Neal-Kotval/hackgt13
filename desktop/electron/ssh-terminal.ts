@@ -25,6 +25,8 @@ export type RunBoxConnection = {
   hostPublicKey: string;
   knownHostsLine: string;
   access: string;
+  /** Environment profile (e.g. "aws-cpu"); null when the server does not report one. */
+  profileId: string | null;
 };
 
 export class ConnectionError extends Error {
@@ -108,6 +110,7 @@ export function parseConnectionResponse(
     knownHostsLine:
       typeof record.knownHostsLine === "string" ? record.knownHostsLine : "",
     access: typeof record.access === "string" ? record.access : "trusted-shell",
+    profileId: typeof record.profileId === "string" ? record.profileId : null,
   };
 }
 

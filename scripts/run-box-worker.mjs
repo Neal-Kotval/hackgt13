@@ -7,6 +7,7 @@ import { migrateAwsGpuEvidence } from "../lib/aws-gpu-evidence.mjs";
 import { createAwsGpuProvider, scopedWorkerAws } from "../lib/aws-gpu-provider.mjs";
 import { workOneAwsGpuJob } from "../lib/aws-gpu-worker.mjs";
 import { createAwsCpuProvider, discoverPublicIpv4, scanPublicHostKey } from "../lib/aws-cpu-provider.mjs";
+import { applyReadyAwsCpuSshAccess } from "../lib/aws-cpu-ssh-access.mjs";
 import { createAwsCpuAgentCleanup, migrateAwsCpuEnvironment, reconcileAwsCpuSshAccess, workOneAwsCpuJob } from "../lib/aws-cpu-worker.mjs";
 import { createRunpodProvider } from "../lib/runpod-provider.mjs";
 import { verifyRunpodSsh } from "../lib/runpod-ssh-proof.mjs";
@@ -65,6 +66,9 @@ async function awsCycle() {
   const runner = await runnerKey();
   for (const item of await reconcileAwsCpuSshAccess(db, cpuConnection, { runnerKey: runner }))
     console.log(`Reconciled AWS CPU SSH access ${item.jobId}: ${item.status}`);
+  // HAC-166: requester addresses registered after a box became ready (desktop app).
+  for (const item of await applyReadyAwsCpuSshAccess(db, provider))
+    console.log(`AWS CPU requester SSH access ${item.jobId}: ${item.status}`);
   if (result) return result;
   const configured = process.env.AGENTCLOUD_AWS_CPU_SSH_CIDR;
   const cpu = await workOneAwsCpuJob(db, provider, { workerId,

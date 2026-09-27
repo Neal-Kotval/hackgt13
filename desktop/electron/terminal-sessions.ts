@@ -10,6 +10,7 @@ import {
   openShell,
   type ShellSession,
 } from "./ssh-terminal.ts";
+import { AWS_CPU_PROFILE_ID } from "./environment-access.ts";
 
 const SESSION_ID = /^[A-Za-z0-9-]{8,64}$/;
 const MAX_WRITE = 64 * 1024;
@@ -20,6 +21,11 @@ export type TerminalDeps = {
   /** Called before connecting so a newly signed-in device key is registered. */
   beforeConnect?: () => Promise<void>;
   open?: typeof openShell;
+  /**
+   * HAC-166: admits this device's network to an aws-cpu environment before SSH.
+   * `onPending` runs while the worker adds the rule.
+   */
+  ensureAccess?: (runBoxId: string, onPending: () => void) => Promise<unknown>;
 };
 
 type Entry = { ownerId: number; session: ShellSession | null; closed: boolean };
@@ -49,6 +55,12 @@ export class TerminalSessions {
       await this.deps.beforeConnect?.();
       const connection = await fetchRunBoxConnection(this.deps.request, runBoxId);
       if (entry.closed) throw new Error("Terminal was closed before it connected.");
+      if (connection.profileId === AWS_CPU_PROFILE_ID && this.deps.ensureAccess) {
+        await this.deps.ensureAccess(runBoxId, () => {
+          if (!entry.closed) send({ type: "access", sessionId, state: "pending" });
+        });
+        if (entry.closed) throw new Error("Terminal was closed before it connected.");
+      }
       const session = await (this.deps.open ?? openShell)(
         {
           host: connection.host,

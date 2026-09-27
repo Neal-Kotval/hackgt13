@@ -3,6 +3,7 @@ export type MessageRole = "user" | "assistant";
 export type { DeepLinkParseResult, DeepLinkTarget } from "./deep-link";
 import type { DeepLinkParseResult } from "./deep-link";
 import type { RunBoxSummary } from "./run-boxes";
+import type { EnvironmentAccessState } from "./environment-access";
 export type { RunBoxSummary, RunBoxState } from "./run-boxes";
 
 export type MessageStatus =
@@ -142,10 +143,17 @@ export type DeviceKeyStatus = {
 
 export type TerminalEvent =
   | { type: "data"; sessionId: string; data: string }
-  | { type: "closed"; sessionId: string; error?: string };
+  | { type: "closed"; sessionId: string; error?: string }
+  /** HAC-166: waiting for an aws-cpu environment to admit this Mac's network. */
+  | { type: "access"; sessionId: string; state: EnvironmentAccessState };
 
-/** HAC-161: the browser sign-in tunnel closed without being asked to (timeout or SSH drop). */
-export type CodexSignInEvent = { type: "closed"; sessionId: string; error?: string };
+/**
+ * HAC-161: the browser sign-in tunnel closed without being asked to (timeout or SSH drop).
+ * HAC-166: `access` while waiting for an aws-cpu environment to admit this Mac's network.
+ */
+export type CodexSignInEvent =
+  | { type: "closed"; sessionId: string; error?: string }
+  | { type: "access"; sessionId: string; state: EnvironmentAccessState };
 
 export type DesktopApi = {
   listThreads: () => Promise<ChatThreadSummary[]>;
