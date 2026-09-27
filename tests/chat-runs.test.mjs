@@ -54,3 +54,19 @@ test('list uses safe snapshots, filters project, returns newest first and exclud
   assert.equal(runs[0].prompt, '[redacted]');
   assert.equal(JSON.stringify(runs).includes('hidden'), false);
 });
+
+
+test('retired standalone local sessions with saved prompts are excluded', () => {
+  const local = { ...session, id: 'local', target: { kind: 'local' } };
+  const missingEnvironment = { ...session, id: 'missing', target: { kind: 'runBox', runBoxId: null } };
+  const service = {
+    list: () => [local, missingEnvironment, session],
+    snapshot: id => {
+      assert.equal(id, session.id, 'only environment-backed conversations are read');
+      return { session, events: [user(1)] };
+    },
+  };
+  const runs = listChatRuns(service, 'project');
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].runBoxId, 'box');
+});
