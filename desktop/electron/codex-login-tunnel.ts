@@ -18,6 +18,7 @@ import net from "node:net";
 import type { Duplex } from "node:stream";
 import ssh2 from "ssh2";
 import { browserLoginCallbackPort, CODEX_CALLBACK_PORTS } from "../src/lib/chatgpt-sign-in.ts";
+import { AWS_CPU_PROFILE_ID } from "./environment-access.ts";
 import {
   fetchRunBoxConnection,
   HOST_KEY_MISMATCH_MESSAGE,
@@ -233,7 +234,10 @@ export async function openLoginTunnel(options: {
   return { port, close: () => close() };
 }
 
-export type LoginTunnelEvent = { type: "closed"; sessionId: string; error?: string };
+export type LoginTunnelEvent =
+  | { type: "closed"; sessionId: string; error?: string }
+  /** HAC-166: waiting for an aws-cpu environment to admit this Mac's network. */
+  | { type: "access"; sessionId: string; state: "pending" };
 
 export type LoginTunnelDeps = {
   request: (path: string, init?: RequestInit) => Promise<Response>;
@@ -241,6 +245,8 @@ export type LoginTunnelDeps = {
   /** Called before connecting so a newly signed-in device key is registered. */
   beforeConnect?: () => Promise<void>;
   openExternal: (url: string) => Promise<void>;
+  /** HAC-166: admits this device's network to an aws-cpu environment before SSH. */
+  ensureAccess?: (runBoxId: string, onPending: () => void) => Promise<unknown>;
   connect?: (options: PinnedConnectOptions) => Promise<SshForwarder>;
   timeoutMs?: number;
 };
@@ -291,6 +297,12 @@ export class CodexLoginTunnels {
       await this.deps.beforeConnect?.();
       const connection = await fetchRunBoxConnection(this.deps.request, runBoxId);
       if (entry.cancelled) throw new LoginTunnelError("Sign-in was cancelled.");
+      if (connection.profileId === AWS_CPU_PROFILE_ID && this.deps.ensureAccess) {
+        await this.deps.ensureAccess(runBoxId, () => {
+          if (!entry.cancelled) send({ type: "access", sessionId, state: "pending" });
+        });
+        if (entry.cancelled) throw new LoginTunnelError("Sign-in was cancelled.");
+      }
       const tunnel = await openLoginTunnel({
         connection: {
           host: connection.host,

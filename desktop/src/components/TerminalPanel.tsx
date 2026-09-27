@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { desktopApi } from "../lib/desktop-api";
+import { environmentAccessLabel, type EnvironmentAccessState } from "../lib/environment-access";
 import {
   ipcErrorMessage,
   terminalFontFrom,
@@ -11,6 +12,7 @@ import {
 
 type TerminalStatus =
   | { kind: "connecting" }
+  | { kind: "access"; state: EnvironmentAccessState }
   | { kind: "connected"; target: string }
   | { kind: "closed"; message?: string }
   | { kind: "error"; message: string };
@@ -99,6 +101,10 @@ export function TerminalPanel({ runBoxId, title, onClose }: TerminalPanelProps) 
         terminal.write(event.data);
         return;
       }
+      if (event.type === "access") {
+        if (active) setStatus({ kind: "access", state: event.state });
+        return;
+      }
       sessionRef.current = null;
       if (!active) return;
       setStatus(
@@ -144,6 +150,8 @@ export function TerminalPanel({ runBoxId, title, onClose }: TerminalPanelProps) 
   const statusLabel =
     status.kind === "connecting"
       ? "Connecting…"
+      : status.kind === "access"
+        ? environmentAccessLabel(status.state)
       : status.kind === "connected"
         ? `Connected · ${status.target}`
         : status.kind === "closed"
