@@ -32,12 +32,12 @@ This repository is the web application and a local coordination foundation. New 
 | Dashboard and review | Human coordination views and functional handoffs; Changes and Checks are explicit empty future-state panels |
 | Employee login and resource policy | Local Better Auth verified accounts, organization invitations/roles, and project memberships; human routes require authentication. Resource decisions remain unevaluated; no allocation approval or SSH enforcement |
 | Resource graph and inference | Graph of persisted coordination relationships and configuration drafts only; no GPU allocation, private endpoint, or serving process |
-| SSH / hosted compute | Setup intent and metadata only until a workspace provider is implemented |
+| SSH / hosted compute | Local Docker sandbox and Runpod providers bring an environment to `ready` only after SSH verification against a per-environment pinned host key. Employees reach it with a per-device ed25519 key through the desktop terminal. AWS EC2 CPU environments are in progress (HAC-125) |
 | Run boxes and artifact homes | The Environments page records a request and owner decision in one step and queues a run-box job for a server-owned profile; a separate worker must allocate and verify it before it is shown as ready. Artifact homes remain planned |
 | Repository import / worktrees | Repository and branch metadata in the app; an isolated local Git provider exists but is not connected to project actions, so no project clone or Git isolation is claimed |
-| Codex / Claude execution | Agent identities and protocol foundation; real tool adapters and remote execution remain to build |
+| Codex / Claude execution | Environments install pinned Codex CLI 0.157.1 and record a per-environment agent check (`agent.codex.state`). Signed-in Codex state is removed at teardown. Agent runs and their events are recorded through `/api/agent-runs` and shown on the Runs page. The desktop Codex panel (HAC-122) is in progress. Claude remains planned |
 | Merge / test execution | Planned operations; no live diff, merge, or test execution |
-| Access control | Scope checks on agent API operations; no filesystem or shell sandbox claim |
+| Access control | Scope checks on agent API operations. SSH to an environment is **trusted shell access** for keys injected at allocation, and a key that was not injected is denied by sshd. There is no filesystem or command sandbox claim |
 
 See [ROADMAP.md](ROADMAP.md) for acceptance gates before claiming the remote demo is complete.
 
