@@ -192,15 +192,15 @@ export async function GET(request: Request) {
     const db = getDatabase();
     migrateRunBoxJobs(db);
     migrateRunBoxSsh(db);
-    const jobs = (listRunBoxJobs(db, projectId) as { id: string; state: string; profile_id: string | null }[])
+    const jobs = (listRunBoxJobs(db, projectId) as { id: string; state: string; profile_id: string | null; stop_requested_at: string | null }[])
       .map((job) => {
-        const ready = job.state === "ready";
+        const ready = job.state === "ready" && !job.stop_requested_at;
         const endpoint = ready ? getRunBoxSshEndpoint(db, job.id) : null;
         return {
           ...job,
           profileId: job.profile_id,
           ssh: endpoint ? { host: endpoint.host, port: endpoint.port, username: endpoint.username } : null,
-          desktopUrl: ready
+          desktopUrl: endpoint
             ? `agentcloud://open?${new URLSearchParams({ projectId, runBoxId: job.id })}`
             : null,
           access: "trusted-shell",
