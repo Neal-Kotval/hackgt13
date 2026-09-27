@@ -1,4 +1,5 @@
 "use client";
+import { SkeletonRegion, SkeletonRows } from "@/components/ui/skeleton";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -502,7 +503,7 @@ export function Environments({ project }: { project: Project }) {
         </form>
       )}
 
-      {jobs === null && !loadError && <p className="resource-note">Loading environments…</p>}
+      {jobs === null && !loadError && <SkeletonRegion label="Loading environments"><SkeletonRows count={2} /></SkeletonRegion>}
 
       {jobs && jobs.length > 0 && (
         <section className="environment-list-section" aria-labelledby="environment-list-title">
