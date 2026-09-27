@@ -4,7 +4,6 @@ import { Select } from "@/components/ui/select";
 import { Suspense, useState } from "react";
 import {
   Pulse as ActivityIcon,
-  Clock,
   Command,
   Info,
   PlugsConnected,
@@ -38,9 +37,7 @@ function actorName(project: Project, actor: string) {
   return project.agents.find((agent) => agent.id === actor)?.name ?? actor;
 }
 
-function AgentCard({ agent, project }: { agent: Agent; project: Project }) {
-  const assigned = project.tasks.filter((task) => task.owner === agent.id);
-  const active = assigned.find((task) => task.status === "in progress");
+function AgentCard({ agent }: { agent: Agent }) {
   const connected = agent.status === "connected";
   return (
     <article className={styles.agentCard}>
@@ -63,12 +60,7 @@ function AgentCard({ agent, project }: { agent: Agent; project: Project }) {
           <dt>Last heartbeat</dt>
           <dd>{agent.lastSeen ? <time dateTime={agent.lastSeen}>{timestamp(agent.lastSeen)}</time> : "None recorded"}</dd>
         </div>
-        <div>
-          <dt>Task</dt>
-          <dd>{active ? `${active.title} · in progress` : assigned.length ? `${assigned.length} assigned; none in progress` : "No task assigned"}</dd>
-        </div>
       </dl>
-      <p className={styles.agentCaveat}>A heartbeat confirms the coordination client is reachable. It does not confirm a model session or remote shell.</p>
     </article>
   );
 }
@@ -130,14 +122,6 @@ export function RunControl({ project }: { project: Project }) {
             <p>{executionEvents.length ? "Events reported by the connected runner." : "No coordination client reported execution. Desktop agent runs appear above."}</p>
           </div>
         </section>
-        <section className={styles.summaryCard} aria-labelledby="task-heading">
-          <Clock aria-hidden="true" />
-          <div>
-            <h2 id="task-heading">Task progress</h2>
-            <strong>{project.tasks.filter((task) => task.status === "in progress").length} in progress</strong>
-            <p>Task status is a coordination record, not command evidence.</p>
-          </div>
-        </section>
       </div>
 
       <section className={styles.section} aria-labelledby="identities-heading">
@@ -150,15 +134,16 @@ export function RunControl({ project }: { project: Project }) {
         </div>
         {project.agents.length ? (
           <div className={styles.agentGrid}>
-            {project.agents.map((agent) => <AgentCard key={agent.id} agent={agent} project={project} />)}
+            {project.agents.map((agent) => <AgentCard key={agent.id} agent={agent} />)}
           </div>
         ) : (
           <div className={styles.empty}>
             <PlugsConnected aria-hidden="true" />
             <h3>No agent identities yet</h3>
-            <p>Connect an agent identity to this project to see its transport status and assigned work.</p>
+            <p>Connect an agent identity to this project to see its transport status.</p>
           </div>
         )}
+        <p className={styles.agentCaveat}><Info aria-hidden="true" /> <span>Heartbeats show client connectivity, not model execution or remote shell access.</span></p>
       </section>
 
       <div className={styles.lowerGrid}>
