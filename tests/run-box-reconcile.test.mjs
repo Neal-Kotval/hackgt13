@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { claimRunBoxJob, migrateRunBoxJobs, recordRunBoxAllocation, recordRunBoxRevision, saveRunBoxDecision, requestRunBoxStop, transitionRunBoxJob } from "../lib/run-box-jobs.mjs";
-import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
+import { claimRunBoxJob, migrateRunBoxJobs, releaseDeadWorkerLeases, recordRunBoxAllocation, recordRunBoxRevision, saveRunBoxDecision, requestRunBoxStop, transitionRunBoxJob } from "../lib/run-box-jobs.mjs";
+import { cleanupGate, migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
 import { setAwsApproval } from "../lib/aws-organization-approval.mjs";
 
 function approve(db) {
@@ -550,5 +550,60 @@ test("termination in progress keeps the job stopping, then closes once terminate
     const third = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
     assert.equal(third[0].status, "stopped");
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
+  } finally { db.close(); }
+});
+
+// The worker cycle used to abort on any unconfirmed cleanup, so a normal shutdown kept a new
+// environment in plain "Queued" with no reason. Pending shutdown now lets catalog-machine
+// launches reach preflight (which waits while the old instance is shutting down); the legacy
+// profile-less GPU path, whose preflight ignores shutting-down instances, still pauses.
+test("cleanupGate: pending shutdown pauses only the legacy GPU path; real failures block all launches", async () => {
+  assert.deepEqual(cleanupGate([]), { block: false, pauseLegacyGpu: false });
+  assert.deepEqual(cleanupGate([{ status: "stopped" }]), { block: false, pauseLegacyGpu: false });
+  assert.deepEqual(cleanupGate([{ status: "retry", pending: true }]), { block: false, pauseLegacyGpu: true });
+  assert.deepEqual(cleanupGate([{ status: "retry", pending: true }, { status: "retry" }]), { block: true, pauseLegacyGpu: true });
+  const { db, job } = setup();
+  try {
+    requestStop(db, job.id, "owner");
+    const service = provider([instance(job.id)]);
+    service.terminateInstance = async (id) => ({ state: "shutting-down", instanceId: id });
+    const outcomes = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
+    assert.equal(outcomes[0].pending, true);
+    assert.deepEqual(cleanupGate(outcomes), { block: false, pauseLegacyGpu: true });
+    const broken = await reconcileAwsRunBoxes(db, provider([instance(job.id)], { failTermination: true }), { workerId: "worker", requestStop });
+    assert.equal(cleanupGate(broken).block, true);
+  } finally { db.close(); }
+});
+
+test("a job whose termination AWS accepted is not reclaimed ahead of a newer queued job", async () => {
+  const { db, job } = setup();
+  try {
+    requestStop(db, job.id, "owner");
+    const service = provider([instance(job.id)]);
+    service.terminateInstance = async (id) => ({ state: "shutting-down", instanceId: id });
+    await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
+    db.prepare("UPDATE run_box_job SET lease_expires_at = NULL WHERE id = ?").run(job.id);
+    const next = nextAwsDecision(db).job;
+    const claimed = claimRunBoxJob(db, "worker-2", new Date(), 60_000, "aws-ec2");
+    assert.equal(claimed.id, next.id);
+  } finally { db.close(); }
+});
+
+// A deploy restarts the worker under a new PID-based ID; the old process's 10-minute lease
+// used to hold a terminated job in `stopping` (live: 5 extra minutes after a deploy).
+test("releaseDeadWorkerLeases frees leases held by a dead worker process on this host only", async () => {
+  const { db, job } = setup();
+  try {
+    const later = new Date(Date.now() + 10 * 60_000).toISOString();
+    db.prepare("UPDATE run_box_job SET worker_id = 'aws-ec2-worker-5921', lease_expires_at = ? WHERE id = ?").run(later, job.id);
+    assert.equal(releaseDeadWorkerLeases(db, { isAlive: () => true }), 0);
+    assert.equal(db.prepare("SELECT lease_expires_at FROM run_box_job WHERE id = ?").get(job.id).lease_expires_at, later);
+    db.prepare("UPDATE run_box_job SET worker_id = 'aws-cpu-access-reconciler' WHERE id = ?").run(job.id);
+    assert.equal(releaseDeadWorkerLeases(db, { isAlive: () => false }), 0, "non-process worker IDs are never touched");
+    db.prepare("UPDATE run_box_job SET worker_id = 'aws-ec2-worker-5921' WHERE id = ?").run(job.id);
+    const checked = [];
+    assert.equal(releaseDeadWorkerLeases(db, { isAlive: (pid) => { checked.push(pid); return false; } }), 1);
+    assert.deepEqual(checked, [5921]);
+    assert.ok(db.prepare("SELECT lease_expires_at FROM run_box_job WHERE id = ?").get(job.id).lease_expires_at <= new Date().toISOString());
   } finally { db.close(); }
 });
