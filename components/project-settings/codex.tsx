@@ -8,6 +8,7 @@ import { profileLabel, type EnvironmentJob } from "@/components/environments";
 import { CodexEnvironmentSetup } from "@/components/environments/codex-setup";
 import "../resources/resources.css";
 import "../environments/environments.css";
+import { readJson } from "@/lib/read-json";
 
 /** Name is added by the environment model (slice A); older job JSON has none. */
 export type NamedJob = EnvironmentJob & { name?: string | null };
@@ -32,7 +33,7 @@ export function useProjectJobs(projectId: string) {
       try {
         const response = await fetch(`/api/run-boxes?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" });
         if (!response.ok) throw new Error("Could not load this project's environments.");
-        const data = await response.json();
+        const data = await readJson<{ jobs: NamedJob[] }>(response);
         if (!active) return;
         setJobs(data.jobs);
         setError("");

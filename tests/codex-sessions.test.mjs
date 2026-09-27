@@ -192,3 +192,29 @@ test('session creator display names come from the injected employee resolver',as
  await tick();assert.equal(f.service.get(known.id).createdByName,'Sam');assert.equal(f.service.get(unknown.id).createdByName,null);
  f.service.close();f.db.close();
 });
+
+// Live (staging, fresh GPU environment): the SSH + app-server connection took 41 s. The
+// desktop's sign-in request queued behind it, CloudFront cut the request at 30 s and returned
+// its HTML error page ("Unexpected token '<'"). Requests must not wait on a pending connection.
+function slowFixture() {
+ const db=new Database(':memory:');let release;const gate=new Promise(r=>{release=r;});
+ const runtime={async request(method){if(method==='account/read')return {account:null};if(method==='thread/start')return {thread:{id:'t',turns:[]}};return {};},close(){},async stop(){}};
+ const service=createCodexSessionService({db,dataDir:'/tmp/codex-test',runtimeFactory:async()=>{await gate;return runtime;}});
+ return {service,release};
+}
+const within=(promise,ms=500)=>Promise.race([promise,new Promise(r=>setTimeout(()=>r('blocked'),ms))]);
+test('sign-in while Codex is still connecting answers at once instead of queueing', async()=>{
+ const f=slowFixture();const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ assert.equal(f.service.get(s.id).status,'initializing');
+ const outcome=await within(f.service.action(s.id,{action:'login',method:'deviceCode'}).then(()=>'resolved',e=>e));
+ f.release();
+ assert.notEqual(outcome,'blocked');
+ assert.equal(outcome.code,'connecting');assert.equal(outcome.status,409);
+});
+test('background resume returns at once while a connection is still pending', async()=>{
+ const f=slowFixture();const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ const result=await within(f.service.action(s.id,{action:'resume',background:true}));
+ f.release();
+ assert.notEqual(result,'blocked');
+ assert.equal(result.session.status,'initializing');
+});

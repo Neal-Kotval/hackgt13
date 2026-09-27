@@ -269,8 +269,11 @@ resource "aws_cloudfront_distribution" "app" {
     origin_id   = "agentcloud-app"
 
     custom_origin_config {
-      http_port              = 3000
-      https_port             = 443
+      http_port  = 3000
+      https_port = 443
+      # Codex setup can wait tens of seconds on a fresh environment's SSH + app-server; the
+      # 30 s default returned CloudFront's HTML 504 to JSON clients. 60 s is the default maximum.
+      origin_read_timeout    = 60
       origin_protocol_policy = "http-only"
       origin_ssl_protocols   = ["TLSv1.2"]
     }

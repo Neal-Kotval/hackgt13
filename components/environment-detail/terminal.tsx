@@ -6,6 +6,7 @@ import type { ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import type { RunBoxJob } from "./types";
 import "./terminal.css";
+import { readJson } from "@/lib/read-json";
 
 // Web terminal for one environment (environment model, slice C). The Next server
 // holds the SSH connection and the runner key; the browser only exchanges text with
@@ -79,7 +80,7 @@ function decodeBase64(value: string): Uint8Array {
 
 async function errorMessage(response: Response, fallback: string) {
   try {
-    const payload = (await response.json()) as { error?: unknown; code?: unknown };
+    const payload = (await readJson(response)) as { error?: unknown; code?: unknown };
     return { message: typeof payload.error === "string" ? payload.error : fallback, code: typeof payload.code === "string" ? payload.code : undefined };
   } catch {
     return { message: fallback, code: undefined };
@@ -252,7 +253,7 @@ export function EnvironmentTerminal({ projectId, job }: { projectId: string; job
         else setStatus({ kind: "disconnected", message });
         return;
       }
-      const opened = (await response.json()) as { sessionId: string; expiresAt: string | null };
+      const opened = (await readJson(response)) as { sessionId: string; expiresAt: string | null };
       const source = new EventSource(`${base}/${encodeURIComponent(opened.sessionId)}/stream`);
       const session: Session = { id: opened.sessionId, source, closed: false };
       if (!active) {
