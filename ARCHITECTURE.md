@@ -186,3 +186,14 @@ Chats share the environment filesystem and account, but have separate model
 threads, message history, titles and request IDs. Existing remote chats survive
 the migration. Project owners prepare/authenticate environments; project members
 may create chats in authenticated environments and reconnect those chats.
+
+## Settings-owned Codex browser login (HAC-169)
+
+This supersedes the HAC-163 environment-card onboarding UI. Environment creation
+and readiness live in Environments. After allocation, Settings adds Codex using
+a tokenless managed identity and standard ChatGPT browser login. Desktop provides
+the pinned SSH callback tunnel for this website-initiated flow, then opens the
+environment's chats. No device codes or connection-token generator are exposed
+in the supported setup path. Legacy coordination credentials remain validated
+for compatibility; they are not used to authenticate Codex. A running, signed-in
+desktop client on the same website is required for the browser callback bridge.
