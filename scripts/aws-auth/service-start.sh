@@ -7,9 +7,10 @@ MODE="${1:-}"
 : "${AGENTCLOUD_AUTH_SECRET_ID:?Missing auth secret identifier}"
 SECRET="$(aws secretsmanager get-secret-value \
   --secret-id "$AGENTCLOUD_AUTH_SECRET_ID" --query SecretString --output text)"
-(( ${#SECRET} >= 32 )) || { echo 'Staging auth secret is not initialized.' >&2; exit 1; }
-export BETTER_AUTH_SECRET="$SECRET"
+# A plain string is the auth secret. JSON may also set BACKBOARD_API_KEY for the hosted app.
+eval "$(printf '%s' "$SECRET" | /usr/bin/node-22 /usr/local/lib/agentcloud/runtime-secret.mjs)"
 unset SECRET
+: "${BETTER_AUTH_SECRET:?Staging auth secret is not initialized.}"
 : "${AGENTCLOUD_PUBLIC_ORIGIN:?Missing public application origin}"
 export BETTER_AUTH_URL="$AGENTCLOUD_PUBLIC_ORIGIN"
 export AGENTCLOUD_DATA_DIR=/var/lib/agentcloud

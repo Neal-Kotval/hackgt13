@@ -55,6 +55,7 @@ export type EnvironmentJob = {
   ssh?: { host: string; port: number; username?: string } | null;
   desktopUrl?: string | null;
   access?: "trusted-shell";
+  memory?: { enabled: boolean; available: boolean };
 };
 
 type Role = "owner" | "member" | null;
@@ -197,6 +198,7 @@ export function Environments({ project }: { project: Project }) {
   const [actionError, setActionError] = useState("");
   const [confirmingStop, setConfirmingStop] = useState("");
   const [stopBusy, setStopBusy] = useState("");
+  const [memoryBusy, setMemoryBusy] = useState("");
   const [serverUrl, setServerUrl] = useState("");
   const formHeading = useRef<HTMLHeadingElement>(null);
   const focusedEnvironment = useRef(false);
@@ -244,6 +246,25 @@ export function Environments({ project }: { project: Project }) {
   useEffect(() => {
     if (showForm) formHeading.current?.focus();
   }, [showForm]);
+
+  async function setMemory(job: EnvironmentJob, enabled: boolean) {
+    setMemoryBusy(job.id);
+    setActionError("");
+    try {
+      const response = await fetch(`/api/run-boxes/${encodeURIComponent(job.id)}/memory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, enabled }),
+      });
+      const data = (await response.json()) as { error?: string; memory?: EnvironmentJob["memory"] };
+      if (!response.ok || !data.memory) throw new Error(data.error || "Could not update shared memory.");
+      setJobs((current) => current?.map((item) => item.id === job.id ? { ...item, memory: data.memory } : item) ?? current);
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Could not update shared memory.");
+    } finally {
+      setMemoryBusy("");
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -488,12 +509,59 @@ export function Environments({ project }: { project: Project }) {
                 onCancel={() => setConfirmingStop("")}
                 onStop={() => void stop(job)}
                 onCopy={(command) => void copy(command)}
+                memoryBusy={memoryBusy === job.id}
+                onMemory={(enabled) => void setMemory(job, enabled)}
               />
             ))}
           </ul>
         </section>
       )}
     </section>
+  );
+}
+
+function EnvironmentMemory({
+  job,
+  owner,
+  busy,
+  onMemory,
+}: {
+  job: EnvironmentJob;
+  owner: boolean;
+  busy: boolean;
+  onMemory: (enabled: boolean) => void;
+}) {
+  const enabled = job.memory?.enabled === true;
+  const available = job.memory?.available === true;
+  const stopped = job.state === "stopped";
+  const titleId = `environment-${job.id}-memory`;
+  const reason = stopped
+    ? "This environment is stopped."
+    : !owner
+      ? "Only a project owner can change shared memory."
+      : !available
+        ? "This server has no Backboard key yet. The choice is saved and notes start once the key is set."
+        : enabled
+          ? "Agents on this environment share notes. They still cannot see each other's computers."
+          : "Turn this on so agents on this environment can hand work to each other.";
+  return (
+    <div className="environment-memory">
+      <div className="environment-memory-copy">
+        <p id={titleId} className="environment-memory-title">Shared memory</p>
+        <p className="resource-note">{reason}</p>
+      </div>
+      <button
+        className="environment-switch"
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        aria-labelledby={titleId}
+        disabled={!owner || stopped || busy}
+        onClick={() => onMemory(!enabled)}
+      >
+        {busy ? "Saving…" : enabled ? "On" : "Off"}
+      </button>
+    </div>
   );
 }
 
@@ -510,6 +578,8 @@ function EnvironmentCard({
   onCancel,
   onStop,
   onCopy,
+  memoryBusy,
+  onMemory,
 }: {
   job: EnvironmentJob;
   templates: ContainerTemplate[];
@@ -523,6 +593,8 @@ function EnvironmentCard({
   onCancel: () => void;
   onStop: () => void;
   onCopy: (command: string) => void;
+  memoryBusy: boolean;
+  onMemory: (enabled: boolean) => void;
 }) {
   const copy = stateCopy[job.state] ?? stateCopy.failed;
   const confirmButton = useRef<HTMLButtonElement>(null);
@@ -600,6 +672,13 @@ function EnvironmentCard({
           </div>
         )}
       </dl>
+
+      <EnvironmentMemory
+        job={job}
+        owner={role === "owner"}
+        busy={memoryBusy}
+        onMemory={onMemory}
+      />
 
       <div className="environment-access">
         <p className="environment-trust">

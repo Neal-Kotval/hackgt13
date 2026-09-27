@@ -16,7 +16,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access"])
+for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
 const db = fixture.getDatabase();
@@ -27,7 +27,7 @@ async function route(sourcePath, outputName, depth) {
   const code = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replaceAll(prefix, "./").replace(/from ["']\.\/([\w-]+)["']/g, (match, name) =>
-    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access"].includes(name) ? ".mjs" : ".js"}'`);
+    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"].includes(name) ? ".mjs" : ".js"}'`);
   await writeFile(path.join(directory, outputName), code);
   return import(path.join(directory, outputName));
 }
@@ -37,6 +37,7 @@ approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved
   maxRunMinutes: 120, monthlyMinutes: 1200, actorId: fixture.users[0].id });
 const admin = await route("../app/api/admin/aws-approvals/route.ts", "aws-approvals-route.js", 4);
 const stop = await route("../app/api/run-boxes/[id]/stop/route.ts", "stop-route.js", 5);
+const memory = await route("../app/api/run-boxes/[id]/memory/route.ts", "memory-route.js", 5);
 const owner = fixture.users[0];
 const member = fixture.users[1];
 
@@ -304,4 +305,18 @@ test("HAC-166: aws-cpu creation records the requester's CloudFront viewer IPv4 o
   } finally {
     delete process.env.AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER;
   }
+});
+
+test("shared memory stays off until the project owner enables that environment", async () => {
+  const job = db.prepare("SELECT id FROM run_box_job WHERE project_id = ? AND provider = 'docker-local'").get(projectId);
+  assert.ok(job);
+  const context = { params: Promise.resolve({ id: job.id }) };
+  const listed = await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, member.cookie))).json();
+  assert.equal(listed.jobs.find((item) => item.id === job.id).memory.enabled, false);
+  assert.equal((await memory.POST(request(`/api/run-boxes/${job.id}/memory`, { projectId, enabled: true }, member.cookie), context)).status, 403);
+  const enabled = await memory.POST(request(`/api/run-boxes/${job.id}/memory`, { projectId, enabled: true }, owner.cookie), context);
+  assert.equal(enabled.status, 200);
+  assert.equal((await enabled.json()).memory.enabled, true);
+  const again = await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, owner.cookie))).json();
+  assert.equal(again.jobs.find((item) => item.id === job.id).memory.enabled, true);
 });
