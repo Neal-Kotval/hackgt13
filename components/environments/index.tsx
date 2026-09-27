@@ -774,7 +774,7 @@ function EnvironmentCard({
       {ready && (
         <details className="resource-note">
           <summary>Desktop didn’t open?</summary>
-          <p>Start the desktop app with <code>just desktop</code>, then select this project and environment.</p>
+          <p><Link href="/download">Download the desktop app</Link>, open it and sign in, then select this project and environment.</p>
           <p>Project ID: <code>{projectId}</code><br />Environment ID: <code>{job.id}</code></p>
         </details>
       )}
