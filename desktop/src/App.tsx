@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { CodexBrowserLogin } from "./components/CodexBrowserLogin";
+import type { LoginTarget } from "./lib/browser-login-flow";
 import { ShellNav, type AppSection } from "./components/ShellNav";
 import { SignInScreen } from "./components/SignInScreen";
 import { EnvironmentsPanel } from "./components/EnvironmentsPanel";
@@ -9,6 +11,7 @@ import { deepLinkDestination, deepLinkServerError } from "./lib/deep-link";
 import type { AuthStatus, DeepLinkParseResult } from "./lib/types";
 
 export default function App() {
+  const [loginTarget, setLoginTarget] = useState<LoginTarget | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +52,11 @@ export default function App() {
       return;
     }
     const destination = deepLinkDestination(result.target);
+    if (destination === "codex-browser-login" && result.target.runBoxId && result.target.codexSessionId) {
+      setLoginTarget({ projectId: result.target.projectId, runBoxId: result.target.runBoxId, codexSessionId: result.target.codexSessionId });
+      setSection("local-chat");
+      return;
+    }
     if (
       destination === "project-chat-session" ||
       destination === "project-chat-environment-codex"
@@ -127,6 +135,13 @@ export default function App() {
       unsubscribe();
     };
   }, [routeDeepLink]);
+  const finishLogin = useCallback(() => {
+    if (!loginTarget) return;
+    setCodexLink({ ok: true, target: { projectId: loginTarget.projectId, runBoxId: loginTarget.runBoxId, panel: "codex" } });
+    setChatRunBox(null);
+    setLoginTarget(null);
+    setSection("local-chat");
+  }, [loginTarget]);
   async function signOut() {
     setSigningOut(true);
     setError(null);
@@ -136,6 +151,7 @@ export default function App() {
       setEnvironmentsMounted(false);
       setSection("local-chat");
       setCodexLink(null);
+      setLoginTarget(null);
       setEnvironmentLink(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sign-out failed.");
@@ -198,13 +214,14 @@ export default function App() {
               {error}
             </p>
           )}
+          {loginTarget && <CodexBrowserLogin target={loginTarget} onComplete={finishLogin} onClose={() => setLoginTarget(null)} />}
           <div
             className="section-host"
-            hidden={section !== "local-chat" || Boolean(chatRunBox)}
+            hidden={Boolean(loginTarget) || section !== "local-chat" || Boolean(chatRunBox)}
           >
             {chat.content}
           </div>
-          {chatRunBox && (
+          {chatRunBox && !loginTarget && (
             <div className="section-host" hidden={section !== "local-chat"}>
               <div className="app-shell">
                 <main className="main">
@@ -221,7 +238,7 @@ export default function App() {
               </div>
             </div>
           )}
-          {environmentsMounted && (
+          {environmentsMounted && !loginTarget && (
             <div className="section-host" hidden={section !== "environments"}>
               <EnvironmentsPanel
                 webBaseUrl={auth.baseUrl}

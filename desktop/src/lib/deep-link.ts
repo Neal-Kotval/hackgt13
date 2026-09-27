@@ -12,7 +12,7 @@ export type DeepLinkTarget = {
   serverUrl?: string;
 };
 
-export type DeepLinkPanel = "codex" | "terminal";
+export type DeepLinkPanel = "codex" | "terminal" | "codex-login";
 
 export type DeepLinkParseResult =
   | { ok: true; target: DeepLinkTarget }
@@ -63,8 +63,8 @@ export function parseAgentCloudDeepLink(raw: string): DeepLinkParseResult {
     return { ok: false, error: "Deep link runBoxId is malformed." };
   }
   const panelRaw = url.searchParams.get("panel")?.trim().toLowerCase() || undefined;
-  if (panelRaw && panelRaw !== "codex" && panelRaw !== "terminal") {
-    return { ok: false, error: "Deep link panel must be codex or terminal." };
+  if (panelRaw && panelRaw !== "codex" && panelRaw !== "terminal" && panelRaw !== "codex-login") {
+    return { ok: false, error: "Deep link panel must be codex, codex-login or terminal." };
   }
   if (panelRaw && !runBoxId) {
     return { ok: false, error: "Deep link panel needs a runBoxId." };
@@ -88,7 +88,8 @@ export function parseAgentCloudDeepLink(raw: string): DeepLinkParseResult {
   }
   const codexSessionId = url.searchParams.get("codexSessionId")?.trim() || undefined;
   if (codexSessionId && !/^[A-Za-z0-9_-]{1,128}$/.test(codexSessionId)) return { ok: false, error: "Deep link codexSessionId is malformed." };
-  if ([codexSessionId, runBoxId, taskRunBoxId, environmentId].filter(Boolean).length > 1) return { ok: false, error: "Deep link contains conflicting destinations." };
+  if (panel === "codex-login" && (!codexSessionId || !runBoxId || !/^[A-Za-z0-9_-]{1,128}$/.test(projectId))) return { ok: false, error: "Codex sign-in needs valid project, environment and session identifiers." };
+  if ([panel === "codex-login" ? undefined : codexSessionId, runBoxId, taskRunBoxId, environmentId].filter(Boolean).length > 1) return { ok: false, error: "Deep link contains conflicting destinations." };
   return {
     ok: true,
     target: {
@@ -105,12 +106,14 @@ export function parseAgentCloudDeepLink(raw: string): DeepLinkParseResult {
 
 /** Where a parsed link opens. Pure so routing is unit-testable. */
 export type DeepLinkDestination =
+  | "codex-browser-login"
   | "project-chat-session"
   | "project-chat-environment-codex"
   | "project-chat-environment-terminal"
   | "tasks";
 
 export function deepLinkDestination(target: DeepLinkTarget): DeepLinkDestination {
+  if (target.panel === "codex-login") return "codex-browser-login";
   if (target.codexSessionId) return "project-chat-session";
   if (target.runBoxId) {
     return target.panel === "terminal"

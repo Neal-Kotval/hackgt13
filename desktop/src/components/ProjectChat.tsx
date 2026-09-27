@@ -535,7 +535,7 @@ export function ProjectChat({
     stopped: "Stopped",
   };
   const environmentsUrl = projectId
-    ? `${webBaseUrl}/projects/${encodeURIComponent(projectId)}/environments`
+    ? `${webBaseUrl}/projects/${encodeURIComponent(projectId)}/settings#agent-setup`
     : webBaseUrl;
   const messages = session ? (snapshot?.events ?? []) : [];
   const hasConversation = messages.some(
@@ -765,7 +765,7 @@ export function ProjectChat({
             <section className="codex-sign-in" aria-labelledby="environment-setup-title">
               <h2 id="environment-setup-title">Finish setup on the website</h2>
               <p>Connect Codex and sign in on the environment’s web page. Return here to create chats when it is ready.</p>
-              <a className="button primary" href={`${environmentsUrl}?environment=${encodeURIComponent(currentTarget.slice("runBox:".length))}`} target="_blank" rel="noreferrer">Set up environment on web</a>
+              <a className="button primary" href={environmentsUrl} target="_blank" rel="noreferrer">Add Codex in Settings</a>
             </section>
           )}
           {!sessions.length && !loading && !pendingEnvironment && (
@@ -775,7 +775,7 @@ export function ProjectChat({
               target="_blank"
               rel="noreferrer"
             >
-              Manage environments
+              Project settings
             </a>
           )}
           {ambiguous[sessionId] && (

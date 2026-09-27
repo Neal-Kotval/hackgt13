@@ -1,0 +1,77 @@
+import { parseBrowserLogin } from "./chatgpt-sign-in.ts";
+import { parseCodexSession } from "./codex-targets.ts";
+import type { DesktopApi } from "./types";
+
+export type LoginTarget = { projectId: string; runBoxId: string; codexSessionId: string };
+export type LoginBridge = Pick<DesktopApi, "fetchHuman" | "startChatGptBrowserSignIn" | "stopChatGptBrowserSignIn" | "onChatGptSignInEvent">;
+
+/** Identifiers are untrusted until resolved through the authenticated API. */
+export function validateLoginSession(value: unknown, target: LoginTarget) {
+  const session = parseCodexSession(value);
+  if (!session || session.id !== target.codexSessionId || session.projectId !== target.projectId || session.target.kind !== "runBox" || session.target.runBoxId !== target.runBoxId)
+    throw new Error("This Codex session does not belong to the selected project environment. Open sign-in again from Settings.");
+  return session;
+}
+
+const activeFlows = new Map<string, { done: Promise<void>; cancel: () => Promise<void> }>();
+
+/** One web-initiated login owns its tunnel, polling, and cancellation. */
+export function beginBrowserLogin(bridge: LoginBridge, target: LoginTarget, notify: (message: string) => void, complete: () => void, failed: (error: string) => void, pollMs = 1500) {
+  const prior = activeFlows.get(target.codexSessionId);
+  void prior?.cancel();
+  let cancelled = false, finished = false, loginStarted = false;
+  let wake: (() => void) | undefined;
+  const path = `/api/codex-sessions/${encodeURIComponent(target.codexSessionId)}`;
+  async function request(body?: object) {
+    const response = await bridge.fetchHuman(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : undefined);
+    const data = JSON.parse(response.body);
+    if (!response.ok) throw new Error(data.error || "Codex sign-in request failed.");
+    return data;
+  }
+  let unsubscribe = () => {};
+  const subscribe = () => bridge.onChatGptSignInEvent(event => {
+    if (event.sessionId !== target.codexSessionId || cancelled || finished) return;
+    if (event.type === "closed") {
+      failed(event.error || "The sign-in connection closed. Retry from project Settings.");
+      cancelled = true;
+      wake?.();
+    } else notify("Preparing secure access to your environment…");
+  });
+  const done = (async () => {
+    try {
+      await prior?.done;
+      if (cancelled) return;
+      unsubscribe = subscribe();
+      const initial = validateLoginSession((await request()).session, target);
+      if (cancelled) return;
+      if (initial.status === "ready" || initial.status === "running") { finished = true; return; }
+      notify("Opening ChatGPT sign-in in your browser…");
+      loginStarted = true;
+      const result = await request({ action: "login", method: "browser" });
+      if (cancelled) return;
+      const login = parseBrowserLogin(result.login);
+      if (!login) throw new Error("The environment did not return a valid browser sign-in. Retry from Settings.");
+      await bridge.startChatGptBrowserSignIn({ sessionId: target.codexSessionId, runBoxId: target.runBoxId, authUrl: login.authUrl, callbackPort: login.callbackPort });
+      if (cancelled) return;
+      notify("Finish signing in to ChatGPT in your browser. This window will continue automatically.");
+      while (!cancelled) {
+        const session = validateLoginSession((await request()).session, target);
+        if (cancelled) return;
+        if (session.status === "ready" || session.status === "running") { finished = true; break; }
+        if (session.status === "error" || session.status === "stopped") throw new Error(session.error || "Codex sign-in stopped. Retry from project Settings.");
+        await new Promise<void>(resolve => { const timer = setTimeout(resolve, pollMs); wake = () => { clearTimeout(timer); resolve(); }; });
+      }
+    } catch (error) {
+      if (!cancelled) failed(error instanceof Error ? error.message : "Could not sign in to Codex.");
+    } finally {
+      unsubscribe();
+      await bridge.stopChatGptBrowserSignIn(target.codexSessionId).catch(() => {});
+      if (loginStarted && !finished) await request({ action: "cancelLogin" }).catch(() => {});
+      if (finished && !cancelled) complete();
+    }
+  })();
+  const flow = { done, cancel() { cancelled = true; wake?.(); return done; } };
+  activeFlows.set(target.codexSessionId, flow);
+  void done.finally(() => { if (activeFlows.get(target.codexSessionId) === flow) activeFlows.delete(target.codexSessionId); });
+  return flow;
+}
