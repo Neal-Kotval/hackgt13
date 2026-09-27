@@ -62,7 +62,7 @@ export function PlatformAwsApprovals() {
 
   return <main className="organization-page">
     <header className="section-heading"><div><p className="eyebrow">Platform administration</p><h1>Managed AWS access</h1></div></header>
-    <p>Approve organizations and set limits before they can request AgentCloud funded AWS runs. Approval does not start a machine.</p>
+    <p>Approve organizations and set limits before they can request alto funded AWS runs. Approval does not start a machine.</p>
     {error && <p className="auth-error" role="alert">{error}</p>}
     {notice && <p className="auth-success" role="status">{notice}</p>}
     {organizations === null ? <p role="status">Loading organizations…</p> : organizations.length === 0 ?
