@@ -16,6 +16,8 @@ export type CodexSession = {
   id: string;
   projectId: string;
   agentId: string;
+  createdBy?: string;
+  createdByName?: string | null;
   status: CodexSessionStatus;
   error: string | null;
   title?: string;
@@ -62,6 +64,8 @@ export function parseCodexSession(value: unknown): CodexSession | null {
     id,
     projectId: text(record.projectId) ?? "",
     agentId: text(record.agentId) ?? "",
+    ...(text(record.createdBy) ? { createdBy: text(record.createdBy)! } : {}),
+    ...(typeof record.createdByName === "string" || record.createdByName === null ? { createdByName: text(record.createdByName) } : {}),
     status,
     error: typeof record.error === "string" ? record.error : null,
     target: parseSessionTarget(record.target),

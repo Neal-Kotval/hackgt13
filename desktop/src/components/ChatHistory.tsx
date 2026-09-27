@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MagnifyingGlass, NotePencil } from "@phosphor-icons/react";
-import { groupChatHistory, type HistoryThread } from "../lib/chat-history";
+import { groupChatHistoryByCreator, chatStatusLabel, type HistoryThread } from "../lib/chat-history";
 import "./ChatHistory.css";
 
 type ChatHistoryProps = {
@@ -11,12 +11,13 @@ type ChatHistoryProps = {
   onCreate: () => void;
   setupUrl?: string;
   loading: boolean;
+  viewerId?: string;
 };
 
-export function ChatHistory({ threads, selectedId, busy, onSelect, onCreate, setupUrl, loading }: ChatHistoryProps) {
+export function ChatHistory({ threads, selectedId, busy, onSelect, onCreate, setupUrl, loading, viewerId }: ChatHistoryProps) {
   const [query, setQuery] = useState("");
   const input = useRef<HTMLInputElement>(null);
-  const groups = groupChatHistory(threads, query);
+  const owners = groupChatHistoryByCreator(threads, query, viewerId);
 
   useEffect(() => {
     let frame = 0;
@@ -46,24 +47,28 @@ export function ChatHistory({ threads, selectedId, busy, onSelect, onCreate, set
       <label className="chat-history-search">
         <MagnifyingGlass aria-hidden="true" />
         <span className="visually-hidden">Search chats</span>
-        <input ref={input} type="search" placeholder="Search chats" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <input ref={input} type="search" placeholder="Search chats, people, agents" value={query} onChange={(event) => setQuery(event.target.value)} />
         <kbd aria-hidden="true">⌘K</kbd>
       </label>
-      {groups.length ? (
+      {owners.length ? (
         <div className="chat-history-groups">
-          {groups.map((group) => (
-            <section className="chat-history-group" key={group.label} aria-label={group.label}>
-              <h3>{group.label}</h3>
-              <ul>
-                {group.threads.map((thread) => (
-                  <li key={thread.id}>
-                    <button type="button" className="chat-history-item" data-selected={thread.id === selectedId} aria-current={thread.id === selectedId ? "true" : undefined} onClick={() => onSelect(thread.id)} title={thread.title}>
-                      <span className="thread-title">{thread.title}</span>
-                      {thread.status === "running" && <span className="chat-history-responding" title="Responding"><span className="visually-hidden">Responding</span></span>}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+          {owners.map(owner => (
+            <section className="chat-history-owner" key={owner.id} aria-label={owner.label}>
+              <h3 className="chat-history-owner-heading"><span>{owner.label}</span><span className="chat-history-owner-count" aria-label={`${owner.count} chats`}>{owner.count}</span></h3>
+              {owner.groups.map(group => (
+                <div className="chat-history-group" key={group.label}>
+                  <h4>{group.label}</h4>
+                  <ul>
+                    {group.threads.map(thread => (
+                      <li key={thread.id}>
+                        <button type="button" className="chat-history-item" data-selected={thread.id === selectedId} aria-current={thread.id === selectedId ? "true" : undefined} onClick={() => onSelect(thread.id)} title={thread.title}>
+                          <span className="chat-history-item-text"><span className="thread-title">{thread.title}</span><span className="chat-history-item-meta"><span>{thread.agentName || "Codex"}</span><span className="chat-history-session-status" data-status={thread.status}>{chatStatusLabel(thread.status)}</span></span></span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </section>
           ))}
         </div>

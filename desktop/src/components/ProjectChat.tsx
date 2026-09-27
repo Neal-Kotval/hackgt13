@@ -1,3 +1,5 @@
+import { AgentNotifications } from "./AgentNotifications";
+import { ChatWorkspace } from "./ChatWorkspace";
 import { MotionSurface } from "./SurfaceMotion";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, GearSix, Robot, Plus } from "@phosphor-icons/react";
@@ -23,6 +25,7 @@ import { Select } from "./ui/Select";
 import { ChatHistory } from "./ChatHistory";
 import {
   canTargetCodex,
+  canOpenTerminal,
   codexBlockedReason,
   isTransitional,
   runBoxStateLabel,
@@ -61,6 +64,7 @@ async function request<T>(path: string, body?: object): Promise<T> {
 
 export function ProjectChat({
   webBaseUrl,
+  viewerId,
   deepLink,
   onDeepLinkHandled,
   onSelectConversation,
@@ -68,6 +72,7 @@ export function ProjectChat({
   children,
 }: {
   webBaseUrl: string;
+  viewerId?: string;
   deepLink: DeepLinkParseResult | null;
   onDeepLinkHandled: () => void;
   onSelectConversation?: () => void;
@@ -590,7 +595,7 @@ export function ProjectChat({
     try {
       const result = await request<{ messages: unknown[] }>(
         `/api/codex-sessions/${encodeURIComponent(id)}/peer-messages`,
-        { broadcast: true, ...message },
+        { broadcast: true, audience: "conversations", ...message },
       );
       delete pendingBroadcast.current[id];
       setBroadcastNotice(`Update queued for ${result.messages.length} other ${result.messages.length === 1 ? "agent" : "agents"}.`);
@@ -723,9 +728,8 @@ export function ProjectChat({
   const targetAgents = sessions.filter(
     (item) => targetKey(item.target) === currentTarget,
   );
-  const otherAgentCount = new Set(targetAgents
-    .filter((item) => item.agentId !== selectedSession?.agentId && item.status !== "stopped")
-    .map((item) => item.agentId)).size;
+  const notificationPeers = targetAgents.filter(item => item.id !== sessionId && item.isSetupSession !== true && item.status !== "stopped");
+  const otherAgentCount = notificationPeers.length;
   const environmentName = selectedSession
     ? sessionTargetLabel(selectedSession.target)
     : "Environment";
@@ -755,6 +759,7 @@ export function ProjectChat({
     : "New chat";
   const sidebar = (close: () => void) => (
     <ChatHistory
+      viewerId={viewerId}
       threads={sessions.filter((item) => targetKey(item.target) === currentTarget).map((item) => ({
         id: item.id,
         title:
@@ -764,6 +769,9 @@ export function ProjectChat({
             : agentName(item)),
         updatedAt: item.updatedAt,
         status: item.status,
+        createdBy: item.createdBy,
+        createdByName: item.createdByName,
+        agentName: agentName(item),
       }))}
       selectedId={sessionId}
       busy={busy || attaching || !currentTarget || !targetAgents.some((item) => item.status === "ready" || item.status === "running")}
@@ -817,6 +825,7 @@ export function ProjectChat({
             )}
           </div>
         </header>
+        <ChatWorkspace key={`${projectId}:${currentTarget}`} projectId={projectId} runBoxId={currentTarget.startsWith("runBox:") ? currentTarget.slice(7) : undefined} shellEnabled={Boolean(selectedBox && canOpenTerminal(selectedBox))} events={messages}>
         <CodexConversation
           key={sessionId || "empty"}
           events={messages}
@@ -978,7 +987,9 @@ export function ProjectChat({
             </div>
           )}
           {broadcastNotice && <p className="project-chat-broadcast-notice" role="status">{broadcastNotice}</p>}
+          {session && <AgentNotifications sessionId={session.id} enabled={!attaching && !selectedBoxUnavailable && ["ready", "running"].includes(session.status)} peers={notificationPeers.map(item => ({ id: item.id, title: titles[item.id] || item.title || agentName(item), agentName: agentName(item), createdByName: item.createdByName, status: item.status }))} />}
         </div>
+        </ChatWorkspace>
       </main>
     </MotionSurface>
   );

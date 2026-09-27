@@ -163,3 +163,21 @@ Run `node desktop/tests/navigation-motion.browser.mjs` against an isolated deskt
 renderer preview (`DESKTOP_TEST_URL`, default `http://127.0.0.1:5174`) to verify
 navigation, draft preservation, reduced motion, and environment filtering. The
 test installs only browser-local bridge fixtures and never provisions resources.
+
+## Shared environment chats
+
+Chats in the selected environment are grouped by their creator. Search also
+matches owner and agent names. A shared conversation still records each human
+message's author; the sections are organization aids, not private workspaces.
+
+Open **Agent notifications** to send a finding or request to a particular peer
+conversation or all other eligible conversations. The panel preserves delivery
+history and offers an idempotent retry after an uncertain response. “Accepted by
+agent” means the request was accepted as a turn, not that the task completed.
+See [the API contract](../docs/multiplayer-contract.md).
+
+Use **Files** for the latest recorded edit per path in the current conversation.
+Use **Shell** for the selected environment's SSH terminal, or **Chat + shell** on
+wide screens to work alongside the agent. View switches keep the terminal alive;
+**Close terminal** disconnects it. Changing environments or signing out also
+closes its mounted terminal. Normal device-key and pinned-host checks still apply.

@@ -31,10 +31,12 @@ export async function POST(request: Request) {
       throw new InputError('Token cannot send for another project or agent', 403);
     if (input.broadcast !== undefined && input.broadcast !== true)
       throw new InputError('Invalid broadcast option', 400);
+    if (input.audience !== undefined && (input.broadcast !== true || (input.audience !== 'agents' && input.audience !== 'conversations')))
+      throw new InputError('Invalid broadcast audience',400);
     if (input.broadcast === true) {
       if (input.toSessionId !== undefined) throw new InputError('Choose a recipient or broadcast, not both', 400);
       const messages = service.broadcastPeerMessage(source.id, {
-        text: input.text, requestId: input.requestId,
+        text: input.text, requestId: input.requestId, audience: typeof input.audience === 'string' ? input.audience : undefined,
         actor: {id:identity.agentId,name:'Connected agent'},
       });
       return Response.json({ messages }, { status: 202 });

@@ -38,3 +38,45 @@ test("yesterday uses calendar dates across daylight saving changes", () => {
     else process.env.TZ = original;
   }
 });
+
+test("creator groups are stable, viewer first, and preserve date subdivisions", async () => {
+  const { groupChatHistoryByCreator } = await import("../src/lib/chat-history.ts");
+  const now = new Date(2026, 8, 26, 12);
+  const source = [
+    { ...thread("other"), createdBy: "other", createdByName: "Alex" },
+    { ...thread("mine", now.toISOString()), createdBy: "viewer", createdByName: "Zoe" },
+    { ...thread("older"), createdBy: "viewer", createdByName: "Zoe" },
+  ];
+  const groups = groupChatHistoryByCreator(source, "", "viewer", now);
+  assert.deepEqual(groups.map(group => group.label), ["You · Zoe", "Alex"]);
+  assert.deepEqual(groups[0].groups.map(group => group.label), ["Today", "Older"]);
+  assert.equal(groups[0].count, 2);
+  assert.equal(source[0].id, "other");
+});
+
+test("duplicate names and missing names never combine different creators", async () => {
+  const { groupChatHistoryByCreator } = await import("../src/lib/chat-history.ts");
+  const groups = groupChatHistoryByCreator([
+    { ...thread("a"), createdBy: "12345678-one", createdByName: "Alex" },
+    { ...thread("b"), createdBy: "12345678-two", createdByName: "Alex" },
+    { ...thread("c"), createdBy: "deleted", createdByName: null },
+    thread("legacy"),
+  ], "");
+  assert.equal(groups.length, 4);
+  assert.equal(new Set(groups.map(group => group.label)).size, 4);
+  assert.ok(groups.some(group => group.label === "Member · deleted"));
+  assert.ok(groups.some(group => group.label === "Unknown creator"));
+});
+
+test("search matches creator, agent and title across owner sections", async () => {
+  const { groupChatHistoryByCreator } = await import("../src/lib/chat-history.ts");
+  const threads = [
+    { ...thread("Fix login"), createdBy: "a", createdByName: "Alex", agentName: "Reviewer" },
+    { ...thread("Build docs"), createdBy: "a", createdByName: "Alex", agentName: "Coder" },
+    { ...thread("Review auth"), createdBy: "b", createdByName: "Blake", agentName: "Reviewer" },
+  ];
+  assert.equal(groupChatHistoryByCreator(threads, " ALEX ")[0].count, 2);
+  assert.equal(groupChatHistoryByCreator(threads, "reviewer").length, 2);
+  assert.equal(groupChatHistoryByCreator(threads, "login")[0].count, 1);
+  assert.deepEqual(groupChatHistoryByCreator(threads, "missing"), []);
+});

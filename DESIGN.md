@@ -180,3 +180,19 @@ line numbers. Diff additions use success roles, deletions danger roles, and hunk
 headers information roles; their text markers preserve meaning without color.
 Missing, empty, legacy, and truncated evidence have distinct explanations. Counts
 refer to the displayed diff, not a claim about the complete repository state.
+
+Desktop conversations expose Chat, Files, Chat + shell, and Shell views. Files
+shows the latest recorded change per path in the selected conversation, with
+line numbers and semantic addition/deletion colors; it does not imply a live
+filesystem listing. A newly added/deleted file reported as plain text is shown
+with addition/deletion markers. The desktop shell can sit beside chat; at 768px
+and below it occupies the workspace to retain usable terminal width. Switching
+views keeps the terminal mounted; Close terminal ends its connection.
+
+Chat history groups conversations by stable creator identity, with the current
+viewer first, then other people and unknown historical creators. Date groups,
+agent labels, and execution status remain within each person's section. Duplicate
+names include a distinguishing identity suffix. These labels describe ownership
+and model session status, not live human presence. Agent notifications provide
+recipient selection and durable incoming/outgoing delivery history in a compact
+disclosure using existing semantic tokens.

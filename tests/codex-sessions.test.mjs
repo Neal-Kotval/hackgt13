@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import {randomUUID} from 'node:crypto';
 import {createCodexSessionService} from '../lib/codex-sessions.mjs';
 const tick=()=>new Promise(r=>setImmediate(r));
-function fixture({signedIn=true,turns=[]}={}) {
+function fixture({signedIn=true,turns=[],creatorName=()=>null}={}) {
  const db=new Database(':memory:');let callbacks;const calls=[];const connections=new Map();
  const runtime={async request(method,params){calls.push({method,params});
   if(method==='account/read')return {account:signedIn?{type:'chatgpt'}:null};
@@ -13,7 +13,7 @@ function fixture({signedIn=true,turns=[]}={}) {
   if(method==='turn/start'){callbacks.onNotification('turn/started',{turn:{id:'turn-1'}});return {turn:{id:'turn-1'}};}
   return {};
  },close(){},async stop(){}};
- const service=createCodexSessionService({db,dataDir:'/tmp/codex-test',runtimeFactory:async options=>{callbacks=options;connections.set(options.sessionId,options);return runtime;}});
+ const service=createCodexSessionService({db,dataDir:'/tmp/codex-test',creatorName,runtimeFactory:async options=>{callbacks=options;connections.set(options.sessionId,options);return runtime;}});
  return {db,service,calls,notifySession:(id,m,p)=>connections.get(id).onNotification(m,p),exit:()=>callbacks.onExit(),notify:(m,p)=>callbacks.onNotification(m,p)};
 }
 test('initialization is idempotent and waits for actual account/thread',async()=>{
@@ -182,5 +182,13 @@ test('closing one session preserves the other session output stream',async()=>{
  f.notifySession(second.id,'turn/completed',{turn:{id:'t',status:'interrupted'}});
  f.notifySession(first.id,'item/commandExecution/outputDelta',{itemId:'shared-item-id',delta:'second part\n'});
  assert.equal(f.service.snapshot(first.id).events.find(e=>e.id==='shared-item-id').details.output,'first part second part\n');
+ f.service.close();f.db.close();
+});
+
+test('session creator display names come from the injected employee resolver',async()=>{
+ const f=fixture({creatorName:id=>id==='known'?'Sam':null});
+ const known=f.service.initialize({projectId:'p',agentId:'a',createdBy:'known'});
+ const unknown=f.service.initialize({projectId:'p',agentId:'b',createdBy:'removed'});
+ await tick();assert.equal(f.service.get(known.id).createdByName,'Sam');assert.equal(f.service.get(unknown.id).createdByName,null);
  f.service.close();f.db.close();
 });

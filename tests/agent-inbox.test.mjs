@@ -113,14 +113,72 @@ test('project and recipient boundaries deny reads and state changes', () => {
   } finally { db.close(); }
 });
 
-test('agents must be distinct and share a non-null run box', () => {
+test('conversations must be distinct and share a non-null run box', () => {
   const {db, inbox} = fixture();
   try {
-    assert.throws(() => inbox.send(message('self', 'a')), code('same_agent'));
-    assert.throws(() => inbox.send(message('same-agent', 'same-agent')), code('same_agent'));
+    assert.throws(() => inbox.send(message('self', 'a')), code('same_session'));
+    assert.equal(inbox.send(message('same-agent', 'same-agent')).toSessionId,'same-agent');
     assert.throws(() => inbox.send(message('other-box', 'other-box')), code('run_box_mismatch'));
     assert.throws(() => inbox.send(message('local', 'local')), code('run_box_mismatch'));
     assert.throws(() => inbox.send(message('missing', 'missing')), code('session_not_found'));
-    assert.equal(db.prepare('SELECT count(*) AS n FROM agent_inbox_message').get().n, 0);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM agent_inbox_message').get().n, 1);
   } finally { db.close(); }
+});
+
+test('conversation broadcast reaches same-agent independent chats and freezes its audience', () => {
+ const {db,inbox}=fixture();
+ try {
+  const input={projectId:'p',fromSessionId:'a',requestId:randomUUID(),text:'Please coordinate',audience:'conversations',actor:{id:'human',name:'Alex'}};
+  const first=inbox.broadcast(input);
+  assert.deepEqual(first.map(row=>row.toSessionId).sort(),['b-chat','same-agent']);
+  assert(first.every(row=>row.actorId==='human'&&row.actorName==='Alex'));
+  db.prepare("UPDATE codex_session SET status='stopped' WHERE id='b-chat'").run();
+  assert.deepEqual(inbox.broadcast(input).map(row=>row.id),first.map(row=>row.id));
+  assert.throws(()=>inbox.broadcast({...input,audience:'agents'}),code('request_conflict'));
+  assert.throws(()=>inbox.broadcast({...input,requestId:randomUUID(),audience:'everyone'}),code('invalid_inbox_request'));
+  const next=inbox.broadcast({...input,requestId:randomUUID()});
+  assert.deepEqual(next.map(row=>row.toSessionId),['same-agent']);
+ } finally {db.close();}
+});
+
+test('durable history includes acknowledged incoming and outgoing messages with safe cursors', () => {
+ const {db,inbox}=fixture();
+ try {
+  const one=inbox.send({...message('history-one'),actor:{id:'human',name:'Alex'}});
+  const two=inbox.send({...message('history-two'),fromSessionId:'b',toSessionId:'a'});
+  const three=inbox.send(message('history-three'));
+  inbox.markAcknowledged({projectId:'p',toSessionId:'b',messageId:one.id});
+  const newest=inbox.history({projectId:'p',sessionId:'a',limit:2});
+  assert.deepEqual(newest.messages.map(row=>[row.id,row.direction]),[[two.id,'incoming'],[three.id,'outgoing']]);
+  assert.equal(newest.nextBeforeSequence,two.sequence);
+  const older=inbox.history({projectId:'p',sessionId:'a',beforeSequence:newest.nextBeforeSequence,limit:2});
+  assert.equal(older.messages[0].status,'acknowledged');assert.equal(older.messages[0].actorName,'Alex');
+  assert.equal(older.nextBeforeSequence,null);
+  assert.deepEqual(createAgentInbox(db).history({projectId:'p',sessionId:'a',limit:2}),newest);
+  assert.throws(()=>inbox.history({projectId:'q',sessionId:'a'}),code('project_mismatch'));
+  for(const value of [0,-1,1.5,NaN,Infinity])assert.throws(()=>inbox.history({projectId:'p',sessionId:'a',beforeSequence:value}),code('invalid_inbox_request'));
+  assert.throws(()=>inbox.history({projectId:'p',sessionId:'a',limit:101}),code('invalid_inbox_request'));
+ } finally {db.close();}
+});
+
+test('inbox persistence redacts credentials while original hashes protect retries', () => {
+ const {db,inbox}=fixture();
+ try {
+  const input={...message('secret'),text:'TOKEN=first-secret',actor:{id:'human',name:'Alex'}};
+  assert.throws(()=>inbox.send({...input,text:'x'.repeat(15001)}),code('invalid_inbox_text'));
+  const sent=inbox.send(input);
+  assert.equal(sent.text,'TOKEN=[redacted]');assert.equal(inbox.send(input).id,sent.id);
+  assert.throws(()=>inbox.send({...input,text:'TOKEN=second-secret'}),code('request_conflict'));
+  assert.throws(()=>inbox.send({...input,actor:{id:'someone-else',name:'Blair'}}),code('request_conflict'));
+  const broadcast={projectId:'p',fromSessionId:'a',requestId:randomUUID(),text:'--password broadcast-secret',actor:input.actor};
+  assert(inbox.broadcast(broadcast).every(row=>row.text==='--password [redacted]'));
+  assert.throws(()=>inbox.broadcast({...broadcast,text:'--password other-secret'}),code('request_conflict'));
+  const persisted=JSON.stringify([db.prepare('SELECT * FROM agent_inbox_message').all(),db.prepare('SELECT * FROM agent_inbox_broadcast').all()]);
+  for(const secret of ['first-secret','second-secret','broadcast-secret','other-secret'])assert(!persisted.includes(secret));
+  // Simulate rows from the old schema, whose text hashes and attribution were absent.
+  db.prepare('UPDATE agent_inbox_message SET text=?,text_hash=NULL,actor_id=NULL,actor_name=NULL WHERE id=?').run('TOKEN=legacy-secret',sent.id);
+  createAgentInbox(db);
+  assert.equal(inbox.get({projectId:'p',messageId:sent.id}).text,'TOKEN=[redacted]');
+  assert.equal(inbox.send({...input,text:'TOKEN=legacy-secret',actor:input.actor}).id,sent.id);
+ } finally {db.close();}
 });

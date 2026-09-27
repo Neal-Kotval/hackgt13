@@ -21,6 +21,10 @@ export function codexService() {
     const db = getDatabase();
     return createCodexSessionService({
       db,
+      creatorName: (userId: string) => {
+        const user = db.prepare('SELECT name FROM "user" WHERE id=?').get(userId) as {name: string} | undefined;
+        return user?.name || null;
+      },
       runtimeFactory: (options: RuntimeOptions) => {
         if (options.runBoxId) return createCodexSshRuntime({ ...options, runBoxId: options.runBoxId }, { db });
         if (!codexEnabled()) throw Object.assign(new CodexSessionError(LOCAL_DISABLED, 503), { publicMessage: LOCAL_DISABLED });

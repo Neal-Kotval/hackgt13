@@ -8,7 +8,7 @@ const desktop = fileURLToPath(new URL('..', import.meta.url));
 const root = path.dirname(desktop.replace(/\/$/, ''));
 const artifacts = path.join(root, 'artifacts/hac-165');
 await mkdir(artifacts, { recursive: true });
-const server = await createServer({ configFile: false, root: desktop, publicDir: path.join(root, 'public'), resolve: { dedupe: ['react', 'react-dom', '@radix-ui/react-select', '@phosphor-icons/react'], alias: { '@agentcloud-tokens': path.join(root, 'app/tokens.css') } }, server: { host: '127.0.0.1', port: 0, fs: { allow: [root, await realpath(path.join(root, 'node_modules'))] } }, esbuild: { jsx: 'automatic' } });
+const server = await createServer({ configFile: false, root: desktop, publicDir: path.join(root, 'public'), resolve: { dedupe: ['react', 'react-dom', '@radix-ui/react-select', '@phosphor-icons/react'], alias: { '@agentcloud-tokens': path.join(root, 'app/tokens.css') } }, server: { host: '127.0.0.1', port: 0, fs: { allow: [root, await realpath(path.join(root, 'node_modules')), await realpath(path.join(desktop, 'node_modules'))] } }, esbuild: { jsx: 'automatic' } });
 let browser;
 try {
   await server.listen();
@@ -132,13 +132,13 @@ try {
     id: 'detailed-files', kind: 'command', text: 'File changes completed.', updatedAt: new Date().toISOString(),
     details: { type: 'fileChange', status: 'completed', changes: [{ path: 'src/long-path/'.repeat(12) + 'main.ts', kind: 'update', diff: '--- a/main.ts\n+++ b/main.ts\n@@ -1,2 +1,2 @@\n-old\n+new\n kept' }] },
   }));
-  const commandEvidence = page.locator('.codex-evidence').filter({ hasText: 'npm test -- --runInBand' });
+  const commandEvidence = page.locator('.chat-workspace-chat .codex-evidence').filter({ hasText: 'npm test -- --runInBand' });
   await commandEvidence.locator('summary').first().click();
   await expect(commandEvidence).toContainText('/workspace/project');
   await expect(commandEvidence).toContainText('2 tests passed');
   await commandEvidence.getByRole('button', { name: 'Copy command', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npm test -- --runInBand');
-  const fileEvidence = page.locator('.codex-evidence').filter({ hasText: '1 file change' });
+  const fileEvidence = page.locator('.chat-workspace-chat .codex-evidence').filter({ hasText: '1 file change' });
   await fileEvidence.locator('summary').first().click();
   await expect(fileEvidence.locator('.evidence-diff-line[data-kind="addition"]')).toContainText('+new');
   await expect(fileEvidence.locator('.evidence-diff-line[data-kind="deletion"]')).toContainText('-old');
@@ -153,8 +153,8 @@ try {
   await expect(page.locator('.codex-streaming-cursor')).toHaveCount(1);
   await expect(input).toHaveValue('Unrelated unsent draft');
   await layout('streaming');
-  await page.locator('.codex-evidence summary').click();
-  await expect(page.locator('.codex-evidence')).toHaveAttribute('open', '');
+  await page.locator('.chat-workspace-chat .codex-evidence summary').click();
+  await expect(page.locator('.chat-workspace-chat .codex-evidence')).toHaveAttribute('open', '');
   await page.getByRole('button', { name: 'Stop response' }).click();
   await expect(page.getByText('Turn interrupted', { exact: true })).toBeVisible();
   await expect(input).toHaveValue('Unrelated unsent draft');
