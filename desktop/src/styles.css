@@ -896,6 +896,8 @@ pre {
   min-width: 0;
   max-width: calc(var(--content-narrow) + var(--page-gutter) * 2);
   justify-self: center;
+  align-self: center;
+  margin-inline: auto;
   padding: 0 var(--page-gutter) var(--space-6);
 }
 .chat-compose-area > .credential-banner {
