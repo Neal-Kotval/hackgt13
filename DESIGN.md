@@ -137,3 +137,8 @@ HAC-154 follows the supplied chat reference with searchable, date-grouped histor
 agent identity, Markdown/code blocks, and compact context controls. The Tasks
 destination is removed. Display branding is lowercase `alto`. Status colors use
 existing semantic roles; execution and SSH terminal choices stay distinguishable.
+
+Agent identity cards keep metadata labels and values start-aligned in one column,
+use compact semantic status labels, and share one connectivity explanation below
+the grid. Cards wrap according to the available container width. Work is assigned
+through Project chat; these cards do not show legacy task assignments.
