@@ -62,6 +62,7 @@
   color: var(--color-marketing-canvas);
 }
 .marketing-header-action:hover { background: var(--color-marketing-accent); }
+.marketing-header-action:active { color: var(--color-marketing-canvas); }
 .marketing-header-action svg,
 .marketing-button svg,
 .marketing-roadmap a svg { width: var(--icon-md); height: var(--icon-md); }
@@ -111,6 +112,7 @@
 }
 .marketing-button-primary { background: var(--color-marketing-text); color: var(--color-marketing-canvas); }
 .marketing-button-primary:hover { background: var(--color-marketing-accent); border-color: var(--color-marketing-accent); }
+.marketing-button-primary:active { color: var(--color-marketing-canvas); }
 .marketing-button-secondary:hover { border-color: var(--color-marketing-accent); color: var(--color-marketing-accent); }
 .marketing-showcase {
   display: grid;
@@ -230,6 +232,7 @@
 .marketing-roadmap { background: var(--color-bg); color: var(--color-text); }
 .marketing-roadmap h2 { margin-top: var(--space-5); }
 .marketing-roadmap a { display: inline-flex; align-items: center; gap: var(--space-3); margin-top: var(--space-8); color: var(--color-accent); font-size: var(--text-lg); font-weight: var(--font-weight-semibold); }
+.marketing-roadmap a:active { color: var(--color-accent); }
 .marketing-footer { min-height: var(--space-24); display: flex; align-items: center; gap: var(--space-8); border-top: var(--border-width) solid var(--color-marketing-line); }
 .marketing-footer p { color: var(--color-marketing-muted); font-size: var(--text-lg); }
 .marketing-footer > div { margin-left: auto; }
