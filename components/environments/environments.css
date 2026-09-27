@@ -179,6 +179,11 @@
   gap: var(--space-3);
   min-width: 0;
 }
+.environment-codex-peers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
 .environment-codex {
   padding: var(--space-4);
   background: var(--color-surface);
@@ -188,4 +193,19 @@
 .environment-signin p {
   font-size: var(--text-sm);
   color: var(--color-muted);
+}
+/* HAC-166: short environment ID (first 8 characters) with a copy-full-ID action. */
+.environment-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.environment-id code {
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+.button.environment-id-copy {
+  font-size: var(--text-sm);
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { desktopApi } from "../lib/desktop-api";
 import {
   deriveChatTargets,
+  environmentLabel,
   parseCodexSession,
   parseCodexSessions,
   sessionForTarget,
@@ -617,7 +618,7 @@ export function ProjectChat({
   if (pendingEnvironment && !codexTargets.some((t) => t.value === currentTarget))
     codexTargets.push({
       value: currentTarget,
-      label: `Environment ${pendingEnvironment.slice(0, 8)}`,
+      label: environmentLabel(pendingEnvironment, null, null),
       status: "Waiting",
       disabled: true,
     });

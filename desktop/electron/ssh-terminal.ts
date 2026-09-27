@@ -13,7 +13,7 @@ import type { ClientChannel, ConnectConfig } from "ssh2";
 export const HOST_KEY_MISMATCH_MESSAGE =
   "Host key does not match the pinned key for this environment";
 export const NO_AUTHORIZED_KEY_MESSAGE =
-  "This device's key was registered after the environment was created. Create a new environment to include it.";
+  "This device's SSH key is not installed on this environment. It may have been created on the web before this device registered its key. Keep the desktop app signed in and retry in a minute; if it is still missing, create a new environment.";
 
 const HOST_KEY_PATTERN = /^(ssh-ed25519) ([A-Za-z0-9+/]+={0,2})$/;
 

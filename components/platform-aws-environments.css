@@ -1,0 +1,85 @@
+/* HAC-166: platform-admin table of active AWS environments on /admin/aws. */
+.organization-page.organization-page--wide {
+  max-width: none;
+}
+.organization-page--wide > :not(.aws-environments) {
+  width: 100%;
+  max-width: var(--content-narrow);
+}
+.aws-environments-notice:empty {
+  display: none;
+}
+.aws-environments td {
+  vertical-align: top;
+}
+.aws-environments td:first-child {
+  min-width: 0;
+}
+.aws-environments-id,
+.aws-environments-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.aws-environments code {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.button.aws-environments-copy {
+  font-size: var(--text-sm);
+}
+.aws-environments-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.aws-environments-action {
+  align-items: flex-end;
+}
+.aws-environments-stack small,
+.aws-environments-confirm small {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+.aws-environments-age {
+  white-space: nowrap;
+}
+.aws-environments-reason {
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+.aws-environments-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-soft);
+  text-align: left;
+}
+
+@media (max-width: 768px) {
+  .aws-environments .table-scroll tr {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .aws-environments .table-scroll td {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    text-align: left;
+  }
+  .aws-environments .table-scroll td::before {
+    content: attr(data-label);
+    color: var(--color-subtle);
+    font-size: var(--text-xs);
+  }
+  .aws-environments-action {
+    align-items: flex-start;
+  }
+}

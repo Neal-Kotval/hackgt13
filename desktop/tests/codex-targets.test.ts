@@ -73,6 +73,11 @@ describe("deriveChatTargets", () => {
     assert.equal(environmentLabel("x1", "custom", "big"), "custom big · x1");
     assert.equal(environmentLabel("x1", null, null), "Environment · x1");
   });
+
+  it("uses the same short environment ID as the web card (HAC-166)", () => {
+    assert.equal(environmentLabel("20554bea-1111-2222-3333-444444444444", "aws-ec2", "aws-cpu"), "AWS EC2 CPU · 20554bea");
+    assert.equal(environmentLabel("20554bea-1111-2222-3333-444444444444", null, null), "Environment · 20554bea");
+  });
 });
 
 describe("legacy codex session API shape", () => {

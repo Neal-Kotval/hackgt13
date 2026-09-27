@@ -12,6 +12,7 @@ import {
   terminalBlockedReason,
 } from "../lib/run-boxes";
 import { getState } from "../lib/server-api";
+import { environmentLabel } from "../lib/codex-targets";
 import { ipcErrorMessage } from "../lib/terminal-theme";
 import type {
   AgentCloudStateSummary,
@@ -40,9 +41,9 @@ type EnvironmentsPanelProps = {
   onOpenCodex?: (projectId: string, runBoxId: string) => void;
 };
 
+// Same "AWS EC2 CPU · 20554bea" label as the Project chat picker and the web card (HAC-166).
 function providerLabel(job: RunBoxSummary): string {
-  const profile = job.profileId ? ` · ${job.profileId}` : "";
-  return `${job.provider}${profile}`;
+  return environmentLabel(job.id, job.provider, job.profileId);
 }
 
 function formatTime(value: string | null): string | null {
@@ -433,7 +434,7 @@ export function EnvironmentsPanel({
         <TerminalPanel
           key={terminalFor.id}
           runBoxId={terminalFor.id}
-          title={`${providerLabel(terminalFor)} · ${terminalFor.id}`}
+          title={providerLabel(terminalFor)}
           onClose={() => setTerminalFor(null)}
         />
       ) : null}

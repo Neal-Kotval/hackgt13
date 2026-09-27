@@ -18,7 +18,7 @@ const fixture=await prepareAuth(dir),store=await import(path.join(dir,'store.js'
 // Stub only execution; all employee/session/organization checks use real Better Auth.
 await writeFile(path.join(dir,'codex-service.js'),`import {failure} from './http.js'; import {InputError} from './store.js';
 export const codexEnabled=()=>true;export const codexFailure=failure;
-let saved;export function codexService(){return {validateEnvironment:(projectId,runBoxId)=>{if(runBoxId!=='ready-env')throw new InputError('Environment not found or not ready',409);},list:(projectId)=>saved&&saved.projectId===projectId?[saved]:[],initialize:({projectId,agentId,runBoxId,newChat})=>(saved={id:'s1',projectId,agentId,status:'auth_required',isSetupSession:!newChat,target:runBoxId?{kind:'runBox',runBoxId}:{kind:'local'}}),get:()=>saved,snapshot:()=>({session:saved,events:[]}),action:async()=>({session:saved})};}`);
+let saved=[];export function codexService(){return {validateEnvironment:(projectId,runBoxId)=>{if(runBoxId!=='ready-env')throw new InputError('Environment not found or not ready',409);},list:(projectId)=>saved.filter(session=>session.projectId===projectId),initialize:({projectId,agentId,runBoxId,newChat})=>{let session=saved.find(row=>row.projectId===projectId&&row.agentId===agentId&&!newChat);if(session)return session;session={id:saved.length?'s'+(saved.length+1):'s1',projectId,agentId,status:'ready',isSetupSession:!newChat,target:runBoxId?{kind:'runBox',runBoxId}:{kind:'local'}};saved.push(session);return session;},get:(id)=>saved.find(row=>row.id===id),snapshot:(id)=>({session:saved.find(row=>row.id===id),events:[]}),action:async({id})=>({session:saved.find(row=>row.id===id)})};}`);
 const routes=await compile('../app/api/codex-sessions/route.ts','sessions.js');
 const detail=await compile('../app/api/codex-sessions/[id]/route.ts','detail.js');
 const owner=fixture.users[0],member=fixture.users[1];
@@ -45,8 +45,10 @@ test('Codex setup is owner-scoped; session reads and messages require project me
  assert.equal((await detail.POST(request({action:'resume'},member.cookie),ctx)).status,403);
  assert.equal((await routes.POST(request({...input,newChat:'yes'},member.cookie))).status,400);
  assert.equal((await routes.POST(request({...input,newChat:true},member.cookie))).status,400);
- assert.equal((await routes.POST(request({...input,newChat:true,runBoxId:'rb-1',requestId:'test'},member.cookie))).status,202);
- assert.equal((await detail.POST(request({action:'resume'},member.cookie),ctx)).status,200);
+ const chatResponse=await routes.POST(request({...input,newChat:true,runBoxId:'rb-1',requestId:'test'},member.cookie));
+ assert.equal(chatResponse.status,202);
+ const chat=await chatResponse.json();
+ assert.equal((await detail.POST(request({action:'resume'},member.cookie),{params:Promise.resolve({id:chat.session.id})})).status,200);
  assert.equal((await detail.POST(request({action:'login'},member.cookie),ctx)).status,403);
  assert.equal((await detail.POST(request({action:'stop'},member.cookie),ctx)).status,403);
  const cross=request({action:'message'},owner.cookie);cross.headers.set('origin','https://other.example');
@@ -86,4 +88,26 @@ test('managed setup preserves an existing Codex identity and legacy credential',
  for(const response of results){assert.equal(response.status,202);assert.equal((await response.json()).session.agentId,existing);}
  const after=JSON.parse(await readFile(path.join(process.env.AGENTCLOUD_DATA_DIR,'state.json'),'utf8'));
  assert.deepEqual(after,before);
+});
+
+test('a second managed agent requires ready same-box setup and is idempotent',async()=>{
+ const projectId=(await store.action({type:'createProject',name:'Peer setup',repo:'https://example.com/repo',compute:'Hosted Linux',template:'blank'})).id;
+ fixture.grantMembership(owner.id,projectId,'owner');fixture.grantMembership(member.id,projectId,'member');
+ const requestId='ce0f89c0-0fb6-4707-bcc6-6d330bcfe395';
+ const input={projectId,runBoxId:'ready-env',newAgent:true,requestId};
+ assert.equal((await routes.POST(request(input,owner.cookie))).status,409);
+ assert.equal((await routes.POST(request({projectId,runBoxId:'ready-env'},owner.cookie))).status,202);
+ assert.equal((await routes.POST(request(input,member.cookie))).status,403);
+ assert.equal((await routes.POST(request({...input,agentId:'existing'},owner.cookie))).status,400);
+ assert.equal((await routes.POST(request({...input,requestId:'bad'},owner.cookie))).status,400);
+ const response=await routes.POST(request(input,owner.cookie));assert.equal(response.status,202);
+ const first=await response.json();assert.equal('token' in first,false);
+ const again=await routes.POST(request(input,owner.cookie));assert.equal(again.status,202);
+ assert.equal((await again.json()).session.agentId,first.session.agentId);
+ const disk=JSON.parse(await readFile(path.join(process.env.AGENTCLOUD_DATA_DIR,'state.json'),'utf8'));
+ const agents=disk.state.projects.find(p=>p.id===projectId).agents;
+ assert.equal(agents.length,2);
+ assert.equal(agents[1].name,'Codex 2');
+ assert.equal(agents[1].setupRequestId,requestId);
+ assert.equal(agents[1].branch,`agent/${agents[1].id}`);
 });
