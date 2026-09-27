@@ -19,7 +19,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
   const source = await readFile(new URL(`../lib/${name}.ts`, import.meta.url), "utf8");
   await writeFile(path.join(directory, `${name}.js`), transpile(source).replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-const mjs = ["auth", "machine-catalog", "run-box-jobs", "run-box-ssh", "ssh-keys", "agent-check", "container-templates", "aws-organization-approval",
+const mjs = ["environment-settings", "auth", "machine-catalog", "run-box-jobs", "run-box-ssh", "ssh-keys", "agent-check", "container-templates", "aws-organization-approval",
   "aws-cpu-ssh-access", "backboard", "backboard-memory", "run-box-metadata", "run-box-access", "chat-runs"];
 for (const name of mjs.filter((item) => item !== "auth"))
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));

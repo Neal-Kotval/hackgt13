@@ -16,6 +16,7 @@ export async function prepareAuth(directory, { mailModuleSource } = {}) {
     new URL("../lib/auth.mjs", import.meta.url),
     path.join(directory, "auth.mjs"),
   );
+  await copyFile(new URL("../lib/environment-settings.mjs", import.meta.url), path.join(directory, "environment-settings.mjs"));
   // lib/store.ts and lib/run-box-jobs.mjs import the dependency-free machine catalog.
   await copyFile(new URL("../lib/machine-catalog.mjs", import.meta.url), path.join(directory, "machine-catalog.mjs"));
   if (mailModuleSource) {

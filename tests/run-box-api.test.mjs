@@ -161,6 +161,8 @@ test("one-step environment path validates the body before recording anything", a
 });
 
 test("one-step owner path records the request with server-derived requester and queues one approved job idempotently", async () => {
+  // Cloud capacity now spans providers; simulate confirmed cleanup of the prior AWS fixture.
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
   const before = await requestCount();
   const created = await boxes.POST(request("/api/run-boxes", environment(), owner.cookie));
   assert.equal(created.status, 201);
@@ -186,7 +188,7 @@ test("one-step owner path records the request with server-derived requester and 
   assert.equal((await boxes.POST(request("/api/run-boxes", environment({ durationHours: 1 }), owner.cookie))).status, 409);
   const second = await boxes.POST(request("/api/run-boxes", environment({ idempotencyKey: "env-runpod-2" }), owner.cookie));
   assert.equal(second.status, 409);
-  assert.match((await second.json()).error, /Runpod run box is already active/);
+  assert.match((await second.json()).error, /active cloud environment limit/);
   assert.equal(await requestCount(), before + 1);
   const listed = await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, owner.cookie))).json();
   assert.ok(listed.jobs.some((item) => item.id === job.id && item.resource_request_id === decision.resource_request_id));
@@ -305,6 +307,7 @@ test("Runpod approval is owner scoped, profile pinned, and duplicate allocation 
     projectId, resourceRequestId: next.id, idempotencyKey: "runpod-approval-2",
   }, owner.cookie));
   assert.equal(duplicate.status, 409);
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE id = ?").run(job.id);
 });
 
 test("HAC-166: aws-cpu creation records the requester's CloudFront viewer IPv4 only when trusted", async () => {
@@ -355,9 +358,7 @@ test("shared memory stays off until the project owner enables that environment",
   assert.equal(again.jobs.find((item) => item.id === job.id).memory.enabled, true);
 });
 
-// HAC-168: the single-active guard is global per provider, so a stuck job in a project
-// the caller cannot see blocked them with no explanation and no way to clear it.
-test("HAC-168: the active-box conflict names only a visible blocker, and its owner can force stop it", async () => {
+test("users have independent cloud capacity and force stop releases only the owner's slot", async () => {
   db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
   // The organization owner sees every project; the member sees only their own.
   const hidden = await store.action({ type: "createProject", name: "Hidden project",
@@ -373,15 +374,11 @@ test("HAC-168: the active-box conflict names only a visible blocker, and its own
   const job = (await blocker.json()).job;
   db.prepare("UPDATE run_box_job SET state = 'stopping', stop_requested_at = ? WHERE id = ?").run(new Date().toISOString(), job.id);
 
-  const refused = await create(member, mine.id, "hac-168-refused");
-  assert.equal(refused.status, 409);
-  const refusedMessage = (await refused.json()).error;
-  assert.match(refusedMessage, /AWS run box is already active in another project/);
-  assert.match(refusedMessage, /force stop/i);
-  assert.doesNotMatch(refusedMessage, /Hidden project/);
-  const visible = await create(owner, projectId, "hac-168-visible");
+  const independent = await create(member, mine.id, "independent-user");
+  assert.equal(independent.status, 201);
+  const visible = await create(owner, projectId, "owner-still-full");
   assert.equal(visible.status, 409);
-  assert.match((await visible.json()).error, /in "Hidden project" \(stopping\).*force stop/is);
+  assert.match((await visible.json()).error, /active cloud environment limit/);
 
   const call = (user, project, id = job.id) => forceStop.POST(request(`/api/run-boxes/${id}/force-stop`, { projectId: project }, user.cookie),
     { params: Promise.resolve({ id }) });
@@ -395,7 +392,8 @@ test("HAC-168: the active-box conflict names only a visible blocker, and its own
   assert.equal(result.outcome, "stopped");
   assert.equal(result.job.state, "stopped");
   assert.equal(result.job.force_stop_requested_by, owner.id);
-  assert.equal((await create(member, mine.id, "hac-168-after")).status, 201);
+  assert.equal((await create(owner, projectId, "hac-168-after")).status, 201);
+  assert.equal((await create(member, mine.id, "member-still-full")).status, 409);
   db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
 });
 
@@ -510,7 +508,7 @@ test("sized AWS environments: every catalog machine is allowed, disk is validate
     // The single-active AWS rule applies to every size.
     const blocked = await create({ profileId: "aws-cpu", idempotencyKey: `sized-blocked-${machine.id}` });
     assert.equal(blocked.status, 409);
-    assert.match((await blocked.json()).error, /An AWS run box is already active/);
+    assert.match((await blocked.json()).error, /active cloud environment limit/);
     // A retry with the same key returns the same job; a different disk is a different decision.
     const retry = await create({ profileId: machine.id, diskGb, idempotencyKey: `sized-${machine.id}` });
     assert.equal((await retry.json()).job.id, job.id);
@@ -551,4 +549,21 @@ test("sized AWS environments: every catalog machine is allowed, disk is validate
     approvals.setAwsApproval(db, { organizationId: fixture.organization.id, approved: true,
       maxRunMinutes: 120, monthlyMinutes: 1200, actorId: owner.id });
   }
+});
+
+test("account cap changes admit concurrent creates only up to the saved limit", async () => {
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider IN ('aws-ec2', 'runpod')").run();
+  const settings = await route("../app/api/account/settings/route.ts", "account-settings-route.js", 4);
+  const patch = (value) => settings.PATCH(new Request("http://localhost:3000/api/account/settings", {
+    method: "PATCH", headers: { cookie: owner.cookie, origin: "http://localhost:3000", "content-type": "application/json" },
+    body: JSON.stringify({ maxActiveEnvironments: value }),
+  }));
+  assert.equal((await patch(2)).status, 200);
+  const responses = await Promise.all([1, 2, 3].map((n) => boxes.POST(request("/api/run-boxes",
+    environment({ idempotencyKey: `capacity-concurrent-${n}` }), owner.cookie))));
+  assert.deepEqual(responses.map((response) => response.status).sort(), [201, 201, 409]);
+  const snapshot = await (await settings.GET(request("/api/account/settings", null, owner.cookie))).json();
+  assert.deepEqual(snapshot, { maxActiveEnvironments: 2, activeEnvironments: 2 });
+  assert.deepEqual(await (await patch(1)).json(), { maxActiveEnvironments: 1, activeEnvironments: 2 });
+  assert.equal((await boxes.POST(request("/api/run-boxes", environment({ idempotencyKey: "lowered-cap" }), owner.cookie))).status, 409);
 });
