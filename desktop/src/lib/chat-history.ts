@@ -6,6 +6,8 @@ export type HistoryThread = {
   createdBy?: string;
   createdByName?: string | null;
   agentName?: string;
+  canDelete?: boolean;
+  canRename?: boolean;
 };
 
 export function groupChatHistory(threads: HistoryThread[], query: string, now = new Date()) {
