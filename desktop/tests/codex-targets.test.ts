@@ -100,3 +100,15 @@ describe("legacy codex session API shape", () => {
     assert.equal(parseCodexSession({ id: "s1", status: "signed_in" })?.status, "error");
   });
 });
+
+describe("session creator attribution", () => {
+  it("preserves identity separately from agent identity and tolerates old servers", () => {
+    const session = parseCodexSession({ id: "chat", createdBy: "member-1", createdByName: "Alex", agentId: "agent-1", status: "ready" })!;
+    assert.equal(session.createdBy, "member-1");
+    assert.equal(session.createdByName, "Alex");
+    assert.equal(session.agentId, "agent-1");
+    assert.equal(parseCodexSession({ id: "old" })!.createdBy, undefined);
+    assert.equal(parseCodexSession({ id: "deleted", createdByName: null })!.createdByName, null);
+    assert.equal(parseCodexSession({ id: "bad", createdBy: {}, createdByName: 7 })!.createdBy, undefined);
+  });
+});
