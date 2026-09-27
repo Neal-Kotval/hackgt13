@@ -17,6 +17,7 @@ import type { Project } from "@/lib/types";
 import "../resources/resources.css";
 import "./environments.css";
 import Link from "next/link";
+import { EnvironmentMemoryChip } from "@/components/environment-detail/card-summary";
 import { MachinePicker, initialPickerValue, pickerRequest, type PickerValue } from "./machine-picker";
 import {
   environmentLabel,
@@ -616,8 +617,13 @@ function EnvironmentCard({
     <li id={`rb-${job.id}`} className="resource-request-card resource-panel environment-card" aria-labelledby={titleId}>
       <div className="resource-detail-title">
         <div className="environment-title">
-          <h4 id={titleId}>{profileLabel(job, templates)}</h4>
-          {specs && <p className="environment-specs">{specs}</p>}
+          {/* Environment detail link (env-detail-page). Keep when redesigning this card. */}
+          <h4 id={titleId}>
+            <Link className="environment-open-link" href={`/projects/${encodeURIComponent(projectId)}/environments/${encodeURIComponent(job.id)}`}>
+              {job.name || profileLabel(job, templates)}
+            </Link>
+          </h4>
+          {specs && <p className="environment-specs">{job.name ? `${profileLabel(job, templates)} · ` : ""}{specs}</p>}
         </div>
         <span className={`resource-badge resource-badge--${job.state}`}>{copy.label}</span>
       </div>
@@ -705,12 +711,8 @@ function EnvironmentCard({
 
       {!stopped && (
         <>
-      <EnvironmentMemory
-        job={job}
-        owner={role === "owner"}
-        busy={memoryBusy}
-        onMemory={onMemory}
-      />
+      {/* Shared memory is changed on the environment detail page (env-detail-page); the card shows status only. */}
+      <EnvironmentMemoryChip job={job} projectId={projectId} />
 
       <div className="environment-access">
         <p className="environment-trust">

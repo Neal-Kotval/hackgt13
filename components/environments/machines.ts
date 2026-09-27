@@ -34,6 +34,9 @@ export type JobMachine = {
 // fields may be absent on older servers; the UI never invents them.
 export type EnvironmentJob = {
   id: string;
+  // Environment model (docs/environment-model-contract.md).
+  name?: string | null;
+  visibility?: "private" | "public";
   resource_request_id: string;
   provider: "aws-ec2" | "runpod" | "docker-local" | "ssh-host";
   profile_id?: string | null;

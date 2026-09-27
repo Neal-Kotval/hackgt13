@@ -1,22 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import type { RunBoxJob } from "./types";
 import "./terminal.css";
 
 // Web terminal for one environment (environment model, slice C). The Next server
 // holds the SSH connection and the runner key; the browser only exchanges text with
 // it: POST .../terminal opens a PTY, an event stream carries output, and POSTs carry
-// keystrokes and resizes. Structural job type so slice B's RunBoxJob fits as-is.
-export type TerminalJob = {
-  id: string;
-  state: string;
-  stop_requested_at?: string | null;
-  permissions?: { open: boolean };
-};
-
+// keystrokes and resizes.
 type Status =
   | { kind: "idle" }
   | { kind: "connecting" }
@@ -92,11 +86,11 @@ async function errorMessage(response: Response, fallback: string) {
   }
 }
 
-function jobReady(job: TerminalJob) {
+function jobReady(job: RunBoxJob) {
   return job.state === "ready" && !job.stop_requested_at;
 }
 
-export function EnvironmentTerminal({ projectId, job }: { projectId: string; job: TerminalJob }) {
+export function EnvironmentTerminal({ projectId, job }: { projectId: string; job: RunBoxJob }): JSX.Element {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const leaveRef = useRef<HTMLButtonElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);

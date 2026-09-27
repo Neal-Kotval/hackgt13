@@ -21,6 +21,9 @@ export type PickerValue = {
   localProfileId: string;
   diskGib: number;
   durationHours: number;
+  /** Optional environment name (1–60 characters) and who can use it. */
+  name: string;
+  visibility: "private" | "public";
 };
 
 export const initialPickerValue: PickerValue = {
@@ -32,6 +35,8 @@ export const initialPickerValue: PickerValue = {
   localProfileId: localDockerSandboxProfile.id,
   diskGib: diskOptionsGib[0],
   durationHours: demoGpuDurations[0],
+  name: "",
+  visibility: "private",
 };
 
 /** Disk sizes allowed for a machine (the catalog minimum filters smaller volumes). */
@@ -54,9 +59,16 @@ export function pickerMachine(value: PickerValue): Machine | null {
 /** What POST /api/run-boxes receives for this selection. */
 export function pickerRequest(value: PickerValue) {
   const machine = pickerMachine(value);
-  if (!machine) return { profileId: value.localProfileId, durationHours: value.durationHours };
-  return { profileId: machine.id, durationHours: value.durationHours, diskGb: effectiveDisk(machine, value.diskGib) };
+  const name = value.name.trim();
+  const identity = { ...(name ? { name } : {}), visibility: value.visibility };
+  if (!machine) return { profileId: value.localProfileId, durationHours: value.durationHours, ...identity };
+  return { profileId: machine.id, durationHours: value.durationHours, diskGb: effectiveDisk(machine, value.diskGib), ...identity };
 }
+
+const visibilityOptions = [
+  { id: "private", label: "Private", hint: "Only you can open, chat, use the terminal, and stop it." },
+  { id: "public", label: "Public", hint: "Every project member can open, chat, use the terminal, and stop it." },
+] as const;
 
 const modes: { id: PickerMode; label: string; hint: string; icon: ReactNode }[] = [
   { id: "cpu", label: "CPU", hint: "AWS", icon: <Cpu aria-hidden="true" /> },
@@ -92,6 +104,35 @@ export function MachinePicker({
 
   return (
     <>
+      <label className="environment-name-field">
+        <span>Name <small>optional</small></span>
+        <input
+          type="text"
+          name="environment-name"
+          maxLength={60}
+          placeholder="e.g. payments refactor"
+          value={value.name}
+          onChange={(event) => set({ name: event.target.value })}
+        />
+      </label>
+      <fieldset>
+        <legend>Access</legend>
+        <div className="environment-duration-row">
+          {visibilityOptions.map((option) => (
+            <label key={option.id} className={`compute-option environment-duration${value.visibility === option.id ? " chosen" : ""}`}>
+              <input
+                type="radio"
+                name="environment-visibility"
+                value={option.id}
+                checked={value.visibility === option.id}
+                onChange={() => set({ visibility: option.id })}
+              />
+              <strong>{option.label}</strong>
+            </label>
+          ))}
+        </div>
+        <small className="environment-hint">{visibilityOptions.find((option) => option.id === value.visibility)!.hint}</small>
+      </fieldset>
       <fieldset className="environment-segment-field">
         <legend>Machine</legend>
         <div className="environment-segment">

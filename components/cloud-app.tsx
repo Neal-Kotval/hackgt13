@@ -41,6 +41,7 @@ import { RunControl } from "./runs/run-control";
 import { Skeleton, SkeletonHeading, SkeletonPanel, SkeletonRegion, SkeletonRows } from "./ui/skeleton";
 import { ResourceGraph } from "./resource-graph";
 import { Environments } from "./environments";
+import { EnvironmentDetail } from "./environment-detail";
 import { OverviewEnvironments, environmentSummary, environmentTag, useProjectEnvironments } from "./environments/project-environments";
 import { AgentSettings } from "./environments/agent-settings";
 type Action = Record<string, unknown>;
@@ -106,6 +107,8 @@ export function CloudApp() {
       ? state?.projects.find((p) => p.id === id)
       : state?.projects[0];
   const page = pieces[2] || "dashboard";
+  // /projects/:projectId/environments/:jobId renders one environment's detail page.
+  const environmentId = page === "environments" && pieces[3] ? decodeURIComponent(pieces[3]) : "";
   const tab = ["board", "services", "activity"].includes(page) ? page : "overview";
   const refresh = async () => {
     const response = await fetch("/api/state");
@@ -205,7 +208,15 @@ export function CloudApp() {
                 {project?.name.toLowerCase().replaceAll(" ", "-")}
               </Link>
               <CaretRight />
-              <span>{page === "dashboard" ? "overview" : page}</span>
+              {environmentId ? (
+                <>
+                  <Link href={base + "/environments"}>environments</Link>
+                  <CaretRight />
+                  <span>{environmentId.slice(0, 8)}</span>
+                </>
+              ) : (
+                <span>{page === "dashboard" ? "overview" : page}</span>
+              )}
             </>
           )}
           {online === false && (
@@ -277,8 +288,10 @@ export function CloudApp() {
               </span>
               <span className="meta-right">Project workspace pending</span>
             </div>
-            </> : <h1 className="visually-hidden project-section-title">{({board: "Task board", desktop: "Agent settings"} as Record<string, string>)[page] ?? page.charAt(0).toUpperCase() + page.slice(1)}</h1>}
-            {page === "environments" ? (
+            </> : environmentId ? null : <h1 className="visually-hidden project-section-title">{({board: "Task board", desktop: "Agent settings"} as Record<string, string>)[page] ?? page.charAt(0).toUpperCase() + page.slice(1)}</h1>}
+            {environmentId ? (
+              <EnvironmentDetail key={environmentId} projectId={project.id} jobId={environmentId} />
+            ) : page === "environments" ? (
               <div className="project-sections">
                 <Environments project={project} />
                 {/* The Environments flow above is the primary path. Saved requests and
