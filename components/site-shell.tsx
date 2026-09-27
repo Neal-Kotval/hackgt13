@@ -77,10 +77,10 @@ function SiteShell({ children }: { children: ReactNode }) {
   }
   return <div className="site-shell">
     <a className="skip-link" href="#site-content">Skip to content</a>
-    <header className="site-mobile-header"><Link className="site-brand" href="/projects">agentcloud<span className="brand-cursor" aria-hidden="true" /></Link><button ref={toggle} className="button ghost site-menu-toggle" aria-label="Open navigation" aria-expanded={open} aria-controls="site-navigation" onClick={() => setOpen(true)}><List /></button></header>
+    <header className="site-mobile-header"><Link className="site-brand" href="/projects">alto<span className="brand-cursor" aria-hidden="true" /></Link><button ref={toggle} className="button ghost site-menu-toggle" aria-label="Open navigation" aria-expanded={open} aria-controls="site-navigation" onClick={() => setOpen(true)}><List /></button></header>
     {open && <button className="site-sidebar-backdrop" tabIndex={-1} aria-label="Close navigation" onClick={() => setOpen(false)} />}
     <aside ref={sidebar} id="site-navigation" className="site-sidebar" data-open={open} aria-label="Website navigation">
-      <Link className="site-brand" href="/projects" onClick={() => setOpen(false)}>agentcloud<span className="brand-cursor" aria-hidden="true" /></Link>
+      <Link className="site-brand" href="/projects" onClick={() => setOpen(false)}>alto<span className="brand-cursor" aria-hidden="true" /></Link>
       <button className="button ghost site-sidebar-close" aria-label="Close navigation" onClick={() => setOpen(false)}><X /></button>
       <nav className="site-navigation" aria-label="Main navigation">
         <div className="site-nav-group">{navLink("Projects", "/projects", SquaresFour, pathname === "/projects" || pathname === "/projects/new")}{navLink("Organizations", "/organizations", Users)}</div>

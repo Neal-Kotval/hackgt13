@@ -38,7 +38,7 @@ The configuration is pinned to account `662660921850` and Region `us-east-1`. It
 ## Gates before a billable GPU run
 
 1. Obtain a separate owner decision to switch this account to Paid. Until then, the G6 preflight fails and no AWS GPU run is authorized. Recheck credits, price, quota, and account identity after any plan change.
-2. Launch only from a server-approved job through the scoped worker role. The browser must not receive AWS credentials or arbitrary launch parameters.
+2. Set `AGENTCLOUD_PLATFORM_ADMIN_EMAIL` to the verified platform operator's email and approve the organization at `/admin/aws`. A project owner alone cannot authorize platform AWS spend. Launch only from a server-approved job through the scoped worker role. The browser must not receive AWS credentials or arbitrary launch parameters.
 3. Verify AMI, subnet connectivity, volume behavior, tags, and cleanup on the actual box. The Terraform expiry Lambda is a second guard; the existing zero-instance check did not test a real termination.
 4. Verify the non-root account, workspace, repository revision, GPU device, and CPU-versus-CUDA workload. Record command evidence and final EC2 and EBS cleanup state.
 
