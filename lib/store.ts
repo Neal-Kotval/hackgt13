@@ -694,6 +694,17 @@ export async function agentAction(
   });
 }
 
+/** Resolve a current bearer credential without changing coordination state. */
+export async function authenticateAgentToken(token: string): Promise<{ projectId: string; agentId: string }> {
+  await globals.agentcloudQueue?.catch(() => {});
+  const disk = await load();
+  const credential = disk.credentials.find((c) => c.hash === hash(token));
+  if (!credential) throw new InputError("Invalid agent token", 401);
+  const p = project(disk, credential.projectId);
+  const a = agent(p, credential.agentId);
+  return { projectId: p.id, agentId: a.id };
+}
+
 const DESKTOP_CHAT_CLIENT = "desktop-chat";
 
 /**

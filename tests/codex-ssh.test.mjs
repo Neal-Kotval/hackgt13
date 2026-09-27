@@ -86,6 +86,16 @@ test("workspace paths are quoted for the remote shell and validated", () => {
   assert.throws(() => remoteCodexCommand("/home/agentcloud/../root"), /workspace/);
 });
 
+test("remote Codex startup prepares the selected agent worktree before app-server", async () => {
+  const { db, id } = database(); const spawn = fakeSpawn();
+  const runtime = await createCodexSshRuntime({ runBoxId: id, agentId: 'agent-a', agentWorktree: true }, deps(db, spawn));
+  const command = spawn.calls[0].args.at(-1);
+  assert.match(command, /git -C "\$workspace" worktree add --quiet -b "\$branch"/);
+  assert.match(command, /branch='agent\/agent-a'/);
+  assert.match(command, /cd "\$target" && exec codex app-server$/);
+  runtime.close(); db.close();
+});
+
 test("environments without this install's server key ask for a new environment and never spawn ssh", async () => {
   for (const serverFingerprint of [null, sshFingerprint(ed25519PublicKey())]) {
     const { db, id } = database({ serverFingerprint }); const spawn = fakeSpawn();

@@ -26,7 +26,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
 await copyFile(new URL("../lib/run-box-jobs.mjs", import.meta.url), path.join(temporary, "run-box-jobs.mjs"));
 await copyFile(new URL("../lib/aws-organization-approval.mjs", import.meta.url), path.join(temporary, "aws-organization-approval.mjs"));
 const authFixture = await prepareAuth(temporary);
-const { action, getState, agentAction } = await import(
+const { action, getState, agentAction, authenticateAgentToken } = await import(
   path.join(temporary, "store.js")
 );
 after(() => rm(temporary, { recursive: true, force: true }));
@@ -59,6 +59,8 @@ test("persistent collaboration, isolation, dependency enforcement, and serialize
     client: "Claude",
     role: "frontend",
   });
+  assert.deepEqual(await authenticateAgentToken(first.token), { projectId: id, agentId: first.agentId });
+  await assert.rejects(authenticateAgentToken('invalid'), { status: 401 });
   await agentAction(first.token, {
     type: "connect",
     projectId: id,
