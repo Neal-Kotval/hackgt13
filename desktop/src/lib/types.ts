@@ -86,6 +86,7 @@ export type ProjectTaskSnapshot = {
   status: string;
   instructions?: string;
   environmentId?: string;
+  runBoxId?: string;
 };
 
 export type ProjectResourceSnapshot = {
