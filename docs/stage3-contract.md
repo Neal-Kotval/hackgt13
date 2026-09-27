@@ -9,7 +9,7 @@ Decisions:
 
 ## Session target
 
-`codex_session` gains `run_box_id TEXT NULL`: null means local Docker, as today. A session is unique per `(project_id, agent_id, run_box_id)`.
+`codex_session` gains `run_box_id TEXT NULL`: null means local Docker, as today. The canonical setup session is unique per `(project_id, agent_id, run_box_id)`; explicit chats may share that target (HAC-164).
 
 ```
 POST /api/codex-sessions { projectId, agentId, runBoxId? }  -> 202 { session }
@@ -39,12 +39,50 @@ POST /api/codex-sessions { projectId, agentId, runBoxId? }  -> 202 { session }
 - `lib/codex-runner-key.mjs` (new): one ed25519 key per install at `<AGENTCLOUD_DATA_DIR>/codex-runner/id_ed25519`. The directory is 0700 and the files 0600. It's generated with `ssh-keygen` on first use and never logged or returned by any API.
 - At allocation, every provider (docker-local, runpod, aws-cpu) adds this public key to the environment's `agentcloud` authorized keys, next to the members' device keys. Its fingerprint is recorded in `run_box_ssh_endpoint.authorized_fingerprints`, tagged as the server key. Environments created before this change don't have it, so a remote session reports "Create a new environment to use Codex on it."
 
-## Desktop (Project chat)
+## Website preparation and desktop chats (HAC-164)
 
-- **Target picker:** project environments whose `agent.codex.state` is `ready`. Choosing one opens or creates that environment's session. Standalone local sessions are retained only for legacy compatibility and are absent from product navigation. Docker testing uses a normal `docker-local` environment.
-- **Sign-in:** if the target's Codex is signed out, Project chat shows **Sign in with ChatGPT**. For an environment it uses browser sign-in (below), with **Use a device code instead** as the fallback. The device flow (and the local Docker target) calls the login route, shows `userCode` large with a copy button, and opens `verificationUrl` (only `https://auth.openai.com/…`) in the system browser. Either way it waits for `account/login/completed`.
-- **Deep links:** `agentcloud://open?projectId&runBoxId&panel=codex` opens Project chat targeting that environment. The Environments "Open Codex" action does the same.
-- **One Codex UI:** the Stage 2 Codex panel (HAC-122) is removed from the Environments view in favor of Project chat. Its main-process code is no longer reachable from the UI; delete it if unused.
+The website prepares the environment's canonical session and owns Codex sign-in.
+Use the existing owner-only initialization route above, then
+`POST /api/codex-sessions/:id {action:"login",method:"deviceCode"}` when it reports
+`auth_required`. Device sign-in needs no callback tunnel on the user's computer.
+Only a `ready` or `running` session confirms account authentication; machine or CLI
+readiness alone does not. The desktop handoff selects that environment and its
+existing history. Standalone local boxes are retained only for compatibility.
+
+```
+POST /api/codex-sessions
+  {projectId, agentId, runBoxId, newChat:true, requestId:<UUID>}
+  -> 202 {session}
+```
+
+- Project members may create independent chats on an environment with at least one
+  authenticated `ready`/`running` session in the same project. Otherwise the server
+  returns 409 with `code:"environment_setup_required"`; the UI sends the user to
+  website setup. Each new runtime independently reads the actual account before
+  becoming ready, so expired credentials can still produce `auth_required`.
+- The request ID is scoped to the employee. Retrying the same target/agent/request
+  returns the saved chat; reusing it for another target or agent returns 409.
+  Creating chats for a null/local target is rejected. A fresh request ID creates
+  a distinct Codex thread, events and turn idempotency namespace.
+- Default initialization remains owner-only and always returns the canonical
+  setup session, even after several chats exist. Existing rows migrate to canonical
+  setup sessions, preserving IDs, threads, events and turn request records.
+- List and detail DTOs include `isSetupSession:boolean` and `title:string`.
+  A title is the first user message with whitespace normalized, redacted and
+  bounded to 80 characters (or `"New chat"` until the first message). The title
+  persists independently of bounded event-history pruning.
+- Desktop environment selection reads existing sessions; explicit **New chat**
+  performs the POST. Chats share workspace files and the environment account;
+  separate histories are not isolated filesystems or separate OpenAI identities.
+- Members can message, interrupt and resume independent environment chats. Owners
+  alone can initialize/resume canonical setup sessions, sign in, cancel sign-in
+  or stop sessions. Resuming uses the saved thread ID, never silently replaces a
+  nonempty conversation. On backend restart the old connection is marked ended;
+  reopening an existing independent chat can re-check the account and reconnect.
+- `agentcloud://open?projectId&runBoxId&codexSessionId` selects the environment and
+  optional saved chat in desktop. Legacy links remain compatible. The browser
+  login API below remains available for existing clients; product setup uses the
+  website device flow.
 
 ## ChatGPT browser sign-in (HAC-161)
 
