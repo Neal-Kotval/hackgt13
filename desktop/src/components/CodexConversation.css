@@ -36,6 +36,9 @@
 .codex-code-header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3); border-bottom: var(--border-width) solid var(--color-border-subtle); font-size: var(--text-xs); color: var(--color-subtle); }
 .codex-code-block pre { margin: 0; padding: var(--space-3) var(--space-4); overflow-x: auto; font-family: var(--font-body); font-size: var(--text-sm); line-height: var(--leading-normal); text-wrap: initial; }
 .codex-code-block pre code { padding: 0; border-radius: 0; background: none; }
+.codex-code-block .hljs-comment, .codex-code-block .hljs-quote { color: var(--color-subtle); }
+.codex-code-block .hljs-keyword, .codex-code-block .hljs-selector-tag, .codex-code-block .hljs-literal { color: var(--color-accent); }
+.codex-code-block .hljs-string, .codex-code-block .hljs-regexp, .codex-code-block .hljs-addition { color: var(--color-success); }
 .codex-message-actions { display: flex; align-items: center; gap: var(--space-1); }
 .codex-copy-control { display: inline-flex; align-items: center; gap: var(--space-2); }
 .codex-copy-error { color: var(--color-danger); font-size: var(--text-xs); }

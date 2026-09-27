@@ -1,6 +1,7 @@
 import { Children, isValidElement, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowBendUpRight, ArrowClockwise, ArrowUpRight, CaretDown, Check, Copy, FileCode, Robot, TerminalWindow } from "@phosphor-icons/react";
 import Markdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import "./CodexConversation.css";
 
 /** Optional structured evidence. Renderers never infer these from assistant prose. */
@@ -49,11 +50,19 @@ function CopyButton({ text, label, compact = false }: { text: string; label: str
   </span>;
 }
 
+// Highlighted code contains nested spans; copy their text, never React objects or markup.
+function codeText(children: ReactNode): string {
+  return Children.toArray(children).map(child => {
+    if (typeof child === "string" || typeof child === "number") return String(child);
+    return isValidElement<{ children?: ReactNode }>(child) ? codeText(child.props.children) : "";
+  }).join("");
+}
+
 function CodeBlock({ children }: { children?: ReactNode }) {
   const code = Children.toArray(children).find(isValidElement);
   const props = isValidElement<{ children?: ReactNode; className?: string }>(code) ? code.props : undefined;
-  const raw = String(props?.children ?? "").replace(/\n$/, "");
-  const language = props?.className?.replace(/^language-/, "") || "Code";
+  const raw = codeText(props?.children).replace(/\n$/, "");
+  const language = props?.className?.match(/(?:^|\s)language-([^\s]+)/)?.[1] || "Code";
   return <div className="codex-code-block">
     <div className="codex-code-header"><span>{language}</span><CopyButton text={raw} label="Copy code" /></div>
     <pre>{children}</pre>
@@ -61,7 +70,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 }
 
 function MarkdownBody({ text }: { text: string }) {
-  return <div className="codex-markdown"><Markdown skipHtml components={{
+  return <div className="codex-markdown"><Markdown skipHtml rehypePlugins={[rehypeHighlight]} components={{
     pre: CodeBlock,
     // Do not load remote tracking images embedded in model output.
     img: ({ alt }) => <span>{alt || "Image"}</span>,
