@@ -231,3 +231,28 @@ test("deterministic rejection still waits if any managed EBS volume exists", asy
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
   } finally { db.close(); }
 });
+
+// Live incident 2026-09-27: the shared staging worker terminated a box launched by a
+// developer's local worker ~7 s after it started, because that job was not in staging's DB.
+test("an instance launched by another AgentCloud install is never touched by this reconciler", async () => {
+  const { db } = setup();
+  try {
+    const foreign = { ...instance("job-owned-elsewhere"), InstanceId: "i-foreign",
+      Tags: [...instance("job-owned-elsewhere").Tags, { Key: "AgentCloudInstall", Value: "bbbbbbbbbbbbbbbb" }] };
+    const service = { ...provider([foreign]), installId: "aaaaaaaaaaaaaaaa" };
+    const result = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
+    assert.ok(!result.some((outcome) => outcome.instanceId === "i-foreign"));
+    assert.ok(!service.calls.some(([call, id]) => call === "terminate" && id === "i-foreign"));
+  } finally { db.close(); }
+});
+
+test("an orphan launched by this install is still released", async () => {
+  const { db } = setup();
+  try {
+    const own = { ...instance("lost-job", Date.now() - 1_000), InstanceId: "i-own-orphan",
+      Tags: [...instance("lost-job").Tags, { Key: "AgentCloudInstall", Value: "aaaaaaaaaaaaaaaa" }] };
+    const service = { ...provider([own]), installId: "aaaaaaaaaaaaaaaa" };
+    const result = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
+    assert.equal(result[0].status, "orphan-released");
+  } finally { db.close(); }
+});
