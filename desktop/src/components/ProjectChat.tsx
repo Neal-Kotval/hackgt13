@@ -721,7 +721,11 @@ export function ProjectChat({
     <ChatHistory
       threads={sessions.map((item) => ({
         id: item.id,
-        title: titles[item.id] || agentName(item),
+        title:
+          titles[item.id] ||
+          (item.target.kind === "runBox"
+            ? `${agentName(item)} · ${sessionTargetLabel(item.target)}`
+            : agentName(item)),
         updatedAt: item.updatedAt,
         status: item.status,
       }))}
