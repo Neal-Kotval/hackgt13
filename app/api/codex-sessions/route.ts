@@ -2,6 +2,8 @@ import { requireEmployee, requireMembership } from '@/lib/employee';
 import { body, sameOrigin } from '@/lib/http';
 import { createManagedCodexPeer, ensureManagedCodexAgent, getState, InputError } from '@/lib/store';
 import { codexEnabled, codexFailure, codexService } from '@/lib/codex-service';
+import { getDatabase } from '@/lib/auth.mjs';
+import { runBoxVisibleTo, sessionVisibleTo } from '@/lib/run-box-access.mjs';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
@@ -10,7 +12,10 @@ export async function GET(request: Request) {
     const projectId = new URL(request.url).searchParams.get('projectId') || '';
     requireMembership(employee, projectId);
     // `enabled` reports local Docker boxes; environment (runBox) sessions are always listed.
-    return Response.json({enabled:codexEnabled(),sessions:codexService().list(projectId)});
+    // Sessions on deleted environments or other people's private ones are omitted.
+    const db = getDatabase();
+    return Response.json({enabled:codexEnabled(),sessions:codexService().list(projectId)
+      .filter((session: {target:{kind:string;runBoxId?:string}}) => sessionVisibleTo(db,employee,session))});
   } catch(error) { return codexFailure(error); }
 }
 export async function POST(request: Request) {
@@ -27,6 +32,8 @@ export async function POST(request: Request) {
     if(!project) throw new InputError('Project not found.',404);
     const runBoxId = input.runBoxId ?? null;
     if(runBoxId !== null && (typeof runBoxId !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(runBoxId))) throw new InputError('Invalid environment.',400);
+    // Environment model: a private environment is 404 to everyone but its creator.
+    if(runBoxId !== null && !runBoxVisibleTo(getDatabase(),employee,runBoxId)) throw new InputError('Environment not found.',404);
     if(input.newChat === true && runBoxId === null) throw new InputError('New chats require an environment.',400);
     if(runBoxId === null && !codexEnabled()) throw new InputError('Local Codex boxes are disabled on this server.',503);
     const service = codexService();

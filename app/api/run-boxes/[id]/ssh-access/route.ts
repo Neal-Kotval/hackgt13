@@ -1,5 +1,6 @@
 import { getDatabase } from "../../../../../lib/auth.mjs";
 import { requireEmployee, requireMembership, type Employee } from "../../../../../lib/employee";
+import { runBoxVisibleTo } from "../../../../../lib/run-box-access.mjs";
 import { failure, sameOrigin } from "../../../../../lib/http";
 import { InputError } from "../../../../../lib/store";
 import { AWS_CPU_PROFILE_ID, getRunBoxJob, migrateRunBoxJobs } from "../../../../../lib/run-box-jobs.mjs";
@@ -32,6 +33,8 @@ async function eligibleJob(context: { params: Promise<{ id: string }> }, employe
   const job = getRunBoxJob(db, id) as Job | undefined;
   if (!job) throw new InputError("Run-box job not found", 404);
   requireMembership(employee, job.project_id);
+  // Environment model: deleted jobs and other people's private jobs do not exist here.
+  if (!runBoxVisibleTo(db, employee, job.id)) throw new InputError("Run-box job not found", 404);
   if (job.profile_id !== AWS_CPU_PROFILE_ID)
     return { db, job, refusal: refuse(409, "not_aws_cpu", "Network access is managed only for AWS CPU environments.") };
   if (!["ready", "verifying"].includes(job.state) || job.stop_requested_at)
