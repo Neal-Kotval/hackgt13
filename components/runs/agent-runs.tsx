@@ -8,8 +8,10 @@ import { Select } from "@/components/ui/select";
 import type { Project } from "@/lib/types";
 import styles from "./agent-runs.module.css";
 
-import { groupChatConversations, type ChatRun, type ChatConversation, type ChatRunStatus as Status } from "@/lib/chat-conversations";
+import { groupChatConversations, type ChatRun, type ChatConversation, type ChatRunStatus as Status, type ConversationStatus, type ConversationWorkflow } from "@/lib/chat-conversations";
 
+const workflowLabels: Record<ConversationStatus, string> = { todo: "To do", in_progress: "In progress", needs_attention: "Needs attention", done: "Done" };
+const workflowTones: Record<ConversationStatus, string> = { todo: "planned", in_progress: "running", needs_attention: "cancelled", done: "succeeded" };
 const labels: Record<Status, string> = { running: "In progress", completed: "Completed", failed: "Needs attention", stopped: "Stopped", unknown: "Outcome unavailable" };
 const tones: Record<Status, string> = { running: "running", completed: "succeeded", failed: "failed", stopped: "cancelled", unknown: "cancelled" };
 function date(value: string) { return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); }
@@ -22,7 +24,20 @@ function Badge({ status }: { status: Status }) {
   const Icon = status === "completed" ? CheckCircle : status === "running" ? Circle : Warning;
   return <span className={`${styles.badge} ${styles[tones[status]]}`}><Icon aria-hidden="true" />{labels[status]}</span>;
 }
-function Details({ run, closeHref }: { run: ChatConversation; closeHref: string }) {
+function WorkflowBadge({ status }: { status: ConversationStatus }) {
+  const Icon = status === "done" ? CheckCircle : status === "needs_attention" ? Warning : Circle;
+  return <span className={`${styles.badge} ${styles[workflowTones[status]] || ""}`}><Icon aria-hidden="true" />{workflowLabels[status]}</span>;
+}
+function Details({ run, closeHref, onStatusChange }: { run: ChatConversation; closeHref: string; onStatusChange: (id: string, status: ConversationStatus) => Promise<void> }) {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saved, setSaved] = useState(false);
+  async function changeStatus(status: ConversationStatus) {
+    setSaving(true); setSaveError(""); setSaved(false);
+    try { await onStatusChange(run.id, status); setSaved(true); }
+    catch (error) { setSaveError(error instanceof Error ? error.message : "Couldn’t save the status. Please try again."); }
+    finally { setSaving(false); }
+  }
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus({ preventScroll: true }); }, [run.id]);
   const replies = run.events.filter(event => event.kind === "assistant" && event.text);
@@ -33,9 +48,22 @@ function Details({ run, closeHref }: { run: ChatConversation; closeHref: string 
       <div className={styles.detailTitle}><h3 id="run-detail-heading" ref={heading} tabIndex={-1}>Conversation details</h3></div>
       <Link className={styles.close} href={closeHref} scroll={false} aria-label="Close conversation details"><X aria-hidden="true" /></Link>
     </div>
-    <Badge status={run.status} />
+    <div className={styles.statusControl}>
+      <h4 className={styles.label} id="conversation-status-label">Conversation status</h4>
+      <div className={styles.statusChoices} role="group" aria-labelledby="conversation-status-label" aria-busy={saving}>
+        {(Object.keys(workflowLabels) as ConversationStatus[]).map(status => <button
+          type="button" key={status} disabled={saving} aria-pressed={run.workflowStatus === status}
+          className={`${styles.statusChoice} ${styles[workflowTones[status]]}`}
+          onClick={() => { if (status !== run.workflowStatus) void changeStatus(status); }}
+        ><WorkflowBadge status={status} /></button>)}
+      </div>
+      <p className={styles.note}>You choose when this conversation is done. Agent replies won’t change this status.</p>
+      <span className={styles.note} role="status">{saving ? "Saving…" : saved ? "Status saved" : run.workflowUpdatedAt ? `Updated by ${run.workflowUpdatedBy || "a project member"} · ${date(run.workflowUpdatedAt)}` : ""}</span>
+      {saveError && <p className={styles.error} role="alert">{saveError}</p>}
+    </div>
     <div><h4 className={styles.label}>Latest request</h4><p className={styles.prompt}>{run.prompt}</p></div>
     <dl className={styles.facts}>
+      <div><dt>Latest request result</dt><dd><Badge status={run.status} /></dd></div>
       <div><dt>Last message from</dt><dd>{run.actorName || "Project member"}</dd></div>
       <div><dt>Environment</dt><dd>{environment(run)}</dd></div>
       <div><dt>Last activity</dt><dd><time dateTime={run.updatedAt}>{date(run.updatedAt)}</time></dd></div>
@@ -60,6 +88,7 @@ export function AgentRuns({ project }: { project: Project }) {
   const [updated, setUpdated] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
+  const mutationEpoch = useRef(0);
   const refresh = useRef<() => void>(() => {});
   const refreshNow = useCallback(() => refresh.current(), []);
   useEffect(() => {
@@ -70,11 +99,12 @@ export function AgentRuns({ project }: { project: Project }) {
     const load = async () => {
       if (busy || !active) return;
       clearTimeout(timer); busy = true; setRefreshing(true);
+      const epoch = mutationEpoch.current;
       try {
         const response = await fetch(`/api/chat-runs?projectId=${encodeURIComponent(project.id)}`, { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error(response.status === 401 ? "Sign in again to see the latest conversations." : "We couldn’t update your conversations. Try Refresh or wait for the next update.");
         const data = await response.json() as { runs: ChatRun[] };
-        if (active) { setRuns(groupChatConversations(data.runs)); setError(""); setUpdated(new Date().toLocaleTimeString(undefined, { timeStyle: "short" })); }
+        if (active && epoch === mutationEpoch.current) { setRuns(groupChatConversations(data.runs)); setError(""); setUpdated(new Date().toLocaleTimeString(undefined, { timeStyle: "short" })); }
       } catch (cause) { if (active) setError(cause instanceof Error ? cause.message : "We couldn’t update your conversations."); }
       finally { busy = false; if (active) { setRefreshing(false); timer = setTimeout(load, 4000); } }
     };
@@ -84,7 +114,19 @@ export function AgentRuns({ project }: { project: Project }) {
     void load();
     return () => { active = false; controller.abort(); clearTimeout(timer); window.removeEventListener("focus", onFocus); };
   }, [project.id]);
-  const visible = runs?.filter(run => filter === "all" || run.status === filter);
+  async function updateStatus(id: string, status: ConversationStatus) {
+    mutationEpoch.current++;
+    const response = await fetch("/api/chat-runs", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, sessionId: id, status }),
+    });
+    if (!response.ok) throw new Error(response.status === 401 ? "Sign in again to change the status." : response.status === 403 ? "You no longer have access to change this conversation." : "Couldn’t save the status. Please try again.");
+    const workflow = await response.json() as ConversationWorkflow;
+    mutationEpoch.current++;
+    setRuns(previous => previous?.map(run => run.id === id ? { ...run, ...workflow } : run) ?? null);
+    refreshNow();
+  }
+  const visible = runs?.filter(run => filter === "all" || run.workflowStatus === filter);
   const current = runs?.find(run => run.id === selected || run.requests.some(request => request.id === selected));
   const runHref = (id: string) => `${pathname}?${new URLSearchParams({ conversation: id })}`;
   return <section className={styles.root} aria-labelledby="recent-runs-heading">
@@ -93,15 +135,15 @@ export function AgentRuns({ project }: { project: Project }) {
       <button className="button secondary" onClick={refreshNow} disabled={refreshing}><ArrowClockwise aria-hidden="true" />Refresh</button>
     </div>
     {error && <p className={styles.error} role="alert">{error}</p>}
-    <div className={styles.toolbar}><Select aria-label="Filter conversations by status" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All conversations</option>{Object.entries(labels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</Select>{runs && <span className={styles.count}>{visible?.length} {visible?.length === 1 ? "conversation" : "conversations"}</span>}</div>
+    <div className={styles.toolbar}><Select aria-label="Filter conversations by status" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All conversations</option>{Object.keys(workflowLabels).map(value => <option key={value} value={value}><WorkflowBadge status={value as ConversationStatus} /></option>)}</Select>{runs && <span className={styles.count}>{visible?.length} {visible?.length === 1 ? "conversation" : "conversations"}</span>}</div>
     {runs === null && !error && <SkeletonRegion label="Loading conversations"><SkeletonRows count={3} /></SkeletonRegion>}
     <div className={`${styles.layout} ${selected ? styles.withDetail : ""}`}>
       <div className={styles.listColumn}>
         {runs && !runs.length && <div className={styles.empty}><ChatText aria-hidden="true" /><h3>Your conversations will appear here</h3><p>Start a chat with your agent in the desktop app. Follow-up messages stay together in one conversation here.</p><Link href={`/projects/${project.id}/environments`} className="button secondary">View environments</Link></div>}
         {runs && runs.length > 0 && !visible?.length && <p className={styles.note}>No conversations match this status. Choose All conversations to see the rest.</p>}
-        <ul className={styles.list}>{visible?.map(run => <li key={run.id}><Link className={`${styles.runLink} ${current?.id === run.id ? styles.selected : ""}`} href={runHref(run.id)} scroll={false} aria-current={current?.id === run.id ? "true" : undefined}><div className={styles.runTop}><strong className={styles.runPrompt}>{run.title}</strong><Badge status={run.status} /></div><div className={styles.runMeta}><span>{run.actorName || "Project member"}</span><span>{environment(run)}</span><time dateTime={run.updatedAt}>{date(run.updatedAt)}</time></div></Link></li>)}</ul>
+        <ul className={styles.list}>{visible?.map(run => <li key={run.id}><Link className={`${styles.runLink} ${current?.id === run.id ? styles.selected : ""}`} href={runHref(run.id)} scroll={false} aria-current={current?.id === run.id ? "true" : undefined}><div className={styles.runTop}><strong className={styles.runPrompt}>{run.title}</strong><WorkflowBadge status={run.workflowStatus} /></div><div className={styles.runMeta}><span>{run.actorName || "Project member"}</span><span>{environment(run)}</span><time dateTime={run.updatedAt}>{date(run.updatedAt)}</time></div></Link></li>)}</ul>
       </div>
-      {current ? <Details run={current} closeHref={pathname} /> : selected && runs && <section className={styles.detail}><h3>Conversation unavailable</h3><p className={styles.note}>This conversation is no longer in the available chat history.</p><Link href={pathname} className="button secondary">Back to conversations</Link></section>}
+      {current ? <Details key={current.id} run={current} closeHref={pathname} onStatusChange={updateStatus} /> : selected && runs && <section className={styles.detail}><h3>Conversation unavailable</h3><p className={styles.note}>This conversation is no longer in the available chat history.</p><Link href={pathname} className="button secondary">Back to conversations</Link></section>}
     </div>
   </section>;
 }

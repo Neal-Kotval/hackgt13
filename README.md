@@ -313,12 +313,22 @@ After `npm run build`, run `npm run test:motion:browser` to verify Motion entran
 
 Runs groups recent saved work into one entry per environment-backed Codex chat.
 Entries use the first retained request as their title, sort by latest activity,
-and show the latest request’s outcome and response. Earlier requests remain in
+and show a manually assigned status: To do (the default), In progress, Needs
+attention, or Done. Project members change it in conversation details; their
+choice is saved on the server with attribution and survives later replies or
+server restarts. Details separately show the latest request’s outcome and
+response. Earlier requests remain in
 expandable conversation details. The underlying history API retains individual
 requests; completion, failure and interruption come from saved
 turn events. Environment shutdown does not change an already completed outcome.
 An unfinished request without a final result is shown as outcome unavailable,
 not inferred to have succeeded. Empty setup chats do not create runs.
+
+`PATCH /api/chat-runs` accepts `{projectId, sessionId, status}` with status
+`todo`, `in_progress`, `needs_attention`, or `done`. It requires a verified
+project member and same-origin validation. The response and GET history expose
+`workflowStatus`, `workflowUpdatedAt`, and `workflowUpdatedBy`; changes retain
+employee attribution in a separate audit record and never alter model events.
 
 The page refreshes every four seconds and on window focus, offers manual refresh
 and status filtering, and opens the original chat in desktop. Work details stay
