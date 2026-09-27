@@ -266,3 +266,101 @@ test("an orphan launched by this install is still released", async () => {
     assert.equal(result[0].status, "orphan-released");
   } finally { db.close(); }
 });
+
+// HAC-166 (live on staging): an aws-cpu job stopped while still queued sat in
+// `stopping` forever when no CPU worker claimed it, and the single-active AWS guard
+// then refused every new AWS environment.
+function stoppedWhileQueued({ profileId = "aws-cpu" } = {}) {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = ON");
+  migrateRunBoxJobs(db);
+  migrateRunBoxCleanup(db);
+  approve(db);
+  const { job } = saveRunBoxDecision(db, {
+    idempotencyKey: "queued-stop-1", resourceRequestId: "resource-queued-stop-1", projectId: "project-1",
+    employeeId: "employee-1", organizationId: "organization-1", projectRole: "owner",
+    provider: "aws-ec2", ...(profileId ? { profileId } : {}), maxDurationMinutes: 60, repoUrl: "https://example.com/repo.git",
+  });
+  requestRunBoxStop(db, job.id, "owner");
+  return { db, job };
+}
+
+function nextAwsDecision(db) {
+  return saveRunBoxDecision(db, {
+    idempotencyKey: "after-stuck-stop", resourceRequestId: "resource-after-stuck-stop", projectId: "project-1",
+    employeeId: "employee-1", organizationId: "organization-1", projectRole: "owner",
+    provider: "aws-ec2", profileId: "aws-cpu", maxDurationMinutes: 60, repoUrl: "https://example.com/repo.git",
+  });
+}
+
+function tagged(jobId, key = "AgentCloudJobId") {
+  return [{ Key: "Project", Value: "AgentCloudDemo" }, { Key: "AgentCloudAutoExpire", Value: "true" }, { Key: key, Value: jobId }];
+}
+
+test("a stop requested before allocation closes once EC2 shows nothing for the job, unblocking new AWS requests", async () => {
+  const { db, job } = stoppedWhileQueued();
+  try {
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopping");
+    assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
+    const service = provider([]);
+    const result = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
+    assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
+    assert.ok(service.calls.some(([call]) => call === "list-volumes"));
+    const closed = db.prepare("SELECT * FROM run_box_transition WHERE job_id = ? ORDER BY id DESC LIMIT 1").get(job.id);
+    assert.equal(closed.to_state, "stopped");
+    assert.equal(closed.evidence_ref, `job:never-allocated:${job.id}:ec2-inventory-empty`);
+    assert.equal(nextAwsDecision(db).decision.outcome, "approved");
+  } finally { db.close(); }
+});
+
+test("a pre-allocation stop never closes while a job-tagged instance or volume exists", async () => {
+  for (const service of [
+    provider([{ ...instance("x"), Tags: tagged("JOB") }]),
+    provider([], { managedVolumes: [{ VolumeId: "vol-1", Tags: tagged("JOB") }] }),
+  ]) {
+    const { db, job } = stoppedWhileQueued();
+    try {
+      const fixed = JSON.parse(JSON.stringify({ instances: await service.listManagedInstances(), volumes: await service.listManagedVolumes() })
+        .replaceAll('"JOB"', JSON.stringify(job.id)));
+      const fake = { ...provider(fixed.instances, { managedVolumes: fixed.volumes, volumeState: "in-use", failTermination: true }) };
+      await reconcileAwsRunBoxes(db, fake, { workerId: "worker", requestStop });
+      assert.notEqual(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
+    } finally { db.close(); }
+  }
+});
+
+test("a pre-allocation stop waits for another worker's lease and for a recent launch attempt", async () => {
+  const { db, job } = stoppedWhileQueued();
+  try {
+    // Another worker holds the job (a create may be in flight).
+    db.prepare("UPDATE run_box_job SET worker_id = 'other', lease_expires_at = ? WHERE id = ?")
+      .run(new Date(Date.now() + 60_000).toISOString(), job.id);
+    await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopping");
+  } finally { db.close(); }
+
+  // Entered allocating (a launch may have been attempted): only a quiet period plus empty
+  // job and untagged volume inventory, and no RunInstances error, may close it.
+  const attempted = failedBeforeAllocation("CPU launch template missing");
+  try {
+    const service = provider([]);
+    let result = await reconcileAwsRunBoxes(attempted.db, service, { workerId: "worker", requestStop });
+    assert.equal(attempted.db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(attempted.job.id).state, "failed");
+    assert.ok(result.some((item) => item.status === "retry"));
+    const old = new Date(Date.now() - 20 * 60_000).toISOString();
+    attempted.db.prepare("UPDATE run_box_transition SET created_at = ? WHERE job_id = ?").run(old, attempted.job.id);
+    result = await reconcileAwsRunBoxes(attempted.db, provider([], { managedVolumes: [{ VolumeId: "vol-legacy", Tags: tagged("x", "Other") }] }),
+      { workerId: "worker", requestStop });
+    assert.equal(attempted.db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(attempted.job.id).state, "failed");
+    result = await reconcileAwsRunBoxes(attempted.db, provider([]), { workerId: "worker", requestStop });
+    assert.equal(attempted.db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(attempted.job.id).state, "stopped");
+  } finally { attempted.db.close(); }
+
+  const ambiguous = failedBeforeAllocation("AWS ec2:run-instances network timeout: reply lost");
+  try {
+    ambiguous.db.prepare("UPDATE run_box_transition SET created_at = ? WHERE job_id = ?")
+      .run(new Date(Date.now() - 60 * 60_000).toISOString(), ambiguous.job.id);
+    await reconcileAwsRunBoxes(ambiguous.db, provider([]), { workerId: "worker", requestStop });
+    assert.equal(ambiguous.db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(ambiguous.job.id).state, "failed");
+  } finally { ambiguous.db.close(); }
+});
