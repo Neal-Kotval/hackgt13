@@ -277,3 +277,119 @@ test("HAC-166: revokeSshCidr removes one requester rule; termination still revok
   assert.equal((await provider.terminateInstance(instanceId)).state, "terminated");
   assert.deepEqual(rules, [other]);
 });
+
+// Sized AWS environments: the job's catalog machine drives template, type, price, and disk.
+function sizedAws({ calls, templateName, templateType, usd, snapshotGib = 8 }) {
+  const price = JSON.stringify({ terms: { OnDemand: { t: { priceDimensions: { d: { unit: "Hrs", pricePerUnit: { USD: usd } } } } } } });
+  return fakeAws({ calls, overrides: {
+    "ec2:describe-launch-templates": (args) => ({ LaunchTemplates: args.includes(templateName)
+      ? [{ LaunchTemplateId: `lt-0${templateName.endsWith("gpu-env") ? "gpu" : "cpu"}`, LaunchTemplateName: templateName }] : [] }),
+    "ec2:describe-launch-template-versions": { LaunchTemplateVersions: [{ LaunchTemplateData: templateData({ InstanceType: templateType }) }] },
+    "pricing:get-products": { PriceList: [price] },
+    "ec2:describe-images": { Images: [{ State: "available", Architecture: "x86_64", RootDeviceName: "/dev/xvda",
+      BlockDeviceMappings: [{ DeviceName: "/dev/xvda", Ebs: { VolumeSize: snapshotGib } }] }] },
+  } });
+}
+const argValue = (call, flag) => call.args[call.args.indexOf(flag) + 1];
+
+test("sized CPU machine: RunInstances overrides type and disk through the CPU template, priced for that type", async () => {
+  const calls = [];
+  const provider = createAwsCpuProvider({ aws: sizedAws({ calls, templateName: "agentcloud-demo-cpu", templateType: "t3.medium", usd: "0.4032000000" }),
+    subnetId, now: () => new Date("2026-09-26T12:10:00Z") });
+  await provider.allocate(job({ profile_id: "aws-cpu-large", disk_gb: 50 }), { authorizedKeys: [ed25519PublicKey()] });
+  const template = calls.find((call) => call.key === "ec2:describe-launch-templates");
+  assert.equal(argValue(template, "--launch-template-names"), "agentcloud-demo-cpu");
+  assert.ok(calls.find((call) => call.key === "pricing:get-products").args.includes("Type=TERM_MATCH,Field=instanceType,Value=m7i.2xlarge"));
+  assert.equal(argValue(calls.find((call) => call.key === "ec2:describe-instance-type-offerings"), "--filters"), "Name=instance-type,Values=m7i.2xlarge");
+  const launch = JSON.parse(calls.find((call) => call.key === "ec2:run-instances").args.at(-1));
+  assert.deepEqual(launch.LaunchTemplate, { LaunchTemplateId: "lt-0cpu", Version: "$Default" });
+  assert.equal(launch.InstanceType, "m7i.2xlarge");
+  assert.deepEqual(launch.BlockDeviceMappings, [{ DeviceName: "/dev/xvda",
+    Ebs: { VolumeSize: 50, VolumeType: "gp3", Encrypted: true, DeleteOnTermination: true } }]);
+  assert.equal(launch.CreditSpecification, undefined, "only T3 sizes carry a credit specification");
+  const tags = Object.fromEntries(launch.TagSpecifications[0].Tags.map(({ Key, Value }) => [Key, Value]));
+  assert.equal(tags.AgentCloudProfile, "aws-cpu-large");
+  assert.doesNotMatch(Buffer.from(launch.UserData, "base64").toString(), /nvidia-smi/);
+
+  // The original aws-cpu job (no disk_gb recorded) keeps t3.medium, 20 GiB, and standard credits.
+  const small = [];
+  await createAwsCpuProvider({ aws: sizedAws({ calls: small, templateName: "agentcloud-demo-cpu", templateType: "t3.medium", usd: "0.0416000000" }),
+    subnetId, now: () => new Date("2026-09-26T12:10:00Z") }).allocate(job(), { authorizedKeys: [ed25519PublicKey()] });
+  const smallLaunch = JSON.parse(small.find((call) => call.key === "ec2:run-instances").args.at(-1));
+  assert.equal(smallLaunch.InstanceType, "t3.medium");
+  assert.equal(smallLaunch.BlockDeviceMappings[0].Ebs.VolumeSize, 20);
+  assert.deepEqual(smallLaunch.CreditSpecification, { CpuCredits: "standard" });
+});
+
+test("sized GPU machine: RunInstances uses the GPU template, g4dn.xlarge, its disk, and a GPU bootstrap step", async () => {
+  const calls = [];
+  const provider = createAwsCpuProvider({ aws: sizedAws({ calls, templateName: "agentcloud-demo-gpu-env", templateType: "g4dn.xlarge",
+    usd: "0.5260000000", snapshotGib: 75 }), subnetId, now: () => new Date("2026-09-26T12:10:00Z") });
+  await provider.allocate(job({ profile_id: "aws-gpu-t4", disk_gb: 100 }), { authorizedKeys: [ed25519PublicKey()] });
+  assert.equal(argValue(calls.find((call) => call.key === "ec2:describe-launch-templates"), "--launch-template-names"), "agentcloud-demo-gpu-env");
+  assert.ok(calls.find((call) => call.key === "pricing:get-products").args.includes("Type=TERM_MATCH,Field=instanceType,Value=g4dn.xlarge"));
+  const launch = JSON.parse(calls.find((call) => call.key === "ec2:run-instances").args.at(-1));
+  assert.deepEqual(launch.LaunchTemplate, { LaunchTemplateId: "lt-0gpu", Version: "$Default" });
+  assert.equal(launch.InstanceType, "g4dn.xlarge");
+  assert.equal(launch.BlockDeviceMappings[0].Ebs.VolumeSize, 100);
+  assert.equal(launch.CreditSpecification, undefined);
+  const userData = Buffer.from(launch.UserData, "base64").toString();
+  execFileSync("bash", ["-n"], { input: userData });
+  assert.match(userData, /step gpu\n[^]*nvidia-smi --query-gpu=name,memory\.total/);
+  assert.match(userData, new RegExp(`@openai/codex@${CODEX_VERSION.replaceAll(".", "\\.")}`), "Codex installs the same way");
+});
+
+test("sized machines: preflight refuses the wrong template default, a price above the machine ceiling, and a disk below the AMI snapshot", async () => {
+  const cases = [
+    [{ templateName: "agentcloud-demo-gpu-env", templateType: "g6.xlarge", usd: "0.9000000000" }, job({ profile_id: "aws-gpu-t4", disk_gb: 100 }),
+      /exceeds \$0\.7\/hour ceiling/],
+    [{ templateName: "agentcloud-demo-cpu", templateType: "g4dn.xlarge", usd: "0.1664000000" }, job({ profile_id: "aws-cpu-medium", disk_gb: 20 }),
+      /template profile or IMDSv2 mismatch/],
+    [{ templateName: "agentcloud-demo-cpu", templateType: "t3.medium", usd: "0.1664000000" }, job({ profile_id: "aws-gpu-t4", disk_gb: 100 }),
+      /Launch template agentcloud-demo-gpu-env missing/],
+    [{ templateName: "agentcloud-demo-gpu-env", templateType: "g4dn.xlarge", usd: "0.5260000000", snapshotGib: 120 }, job({ profile_id: "aws-gpu-t4", disk_gb: 100 }),
+      /needs at least 120 GiB/],
+  ];
+  for (const [options, approved, pattern] of cases) {
+    const calls = [];
+    const provider = createAwsCpuProvider({ aws: sizedAws({ calls, ...options }), subnetId, now: () => new Date("2026-09-26T12:10:00Z") });
+    await assert.rejects(provider.allocate(approved, { authorizedKeys: [ed25519PublicKey()] }), pattern);
+    assert.ok(!calls.some((call) => call.key === "ec2:run-instances"));
+  }
+  // A disk the catalog does not allow for the machine never reaches AWS.
+  await assert.rejects(createAwsCpuProvider({ aws: fakeAws(), subnetId }).allocate(job({ profile_id: "aws-gpu-t4", disk_gb: 50 }),
+    { authorizedKeys: [ed25519PublicKey()] }), /Disk must be one of 100 GiB/);
+  await assert.rejects(createAwsCpuProvider({ aws: fakeAws(), subnetId }).allocate(job({ profile_id: "g6-l4-small" }),
+    { authorizedKeys: [ed25519PublicKey()] }), /Invalid approved CPU job/);
+});
+
+test("GPU verification requires nvidia-smi evidence of the catalog GPU", () => {
+  const gpuJob = job({ profile_id: "aws-gpu-t4", disk_gb: 100 });
+  const script = agentCheckScript(gpuJob);
+  execFileSync("bash", ["-n"], { input: script });
+  assert.match(script, /nvidia-smi --query-gpu=name,memory\.total --format=csv,noheader,nounits/);
+  assert.doesNotMatch(agentCheckScript(job()), /nvidia-smi/);
+  const proof = { account: "agentcloud", uid: 1001, workspace: `/home/agentcloud/agentcloud/${jobId}/repo`, repo_sha: "c".repeat(40),
+    codex: `codex-cli ${CODEX_VERSION}`, tmux: "tmux 3.2a", git: "git version 2.47.1", node: "v22.23.3" };
+  const line = (value) => `AGENTCLOUD_EVIDENCE=${JSON.stringify(value)}\n`;
+  assert.throws(() => parseAgentCheck(line(proof), gpuJob), /nvidia-smi saw no GPU/);
+  assert.throws(() => parseAgentCheck(line({ ...proof, gpus: [] }), gpuJob), /nvidia-smi saw no GPU/);
+  assert.throws(() => parseAgentCheck(line({ ...proof, gpus: [{ name: "NVIDIA A10G", memoryMiB: 23028 }] }), gpuJob), /does not show 1 NVIDIA T4/);
+  assert.throws(() => parseAgentCheck(line({ ...proof, gpus: [{ name: "Tesla T4", memoryMiB: 4096 }] }), gpuJob), /does not show 1 NVIDIA T4/);
+  const verified = parseAgentCheck(line({ ...proof, gpus: [{ name: "Tesla T4", memoryMiB: 15360 }] }), gpuJob);
+  assert.deepEqual(verified.gpus, [{ name: "Tesla T4", memoryMiB: 15360 }]);
+  assert.equal(parseAgentCheck(line({ ...proof, gpus: [{ name: "NVIDIA L4", memoryMiB: 23034 }] }), job({ profile_id: "aws-gpu-l4" })).gpus[0].name, "NVIDIA L4");
+  // A CPU machine needs no GPU evidence.
+  assert.equal(parseAgentCheck(line(proof), job({ profile_id: "aws-cpu-large" })).repo_sha, "c".repeat(40));
+});
+
+test("GPU agent check script emits nvidia-smi rows as evidence", () => {
+  // Runs the script's evidence step with a stub nvidia-smi on PATH, so the shell quoting is exercised.
+  const script = agentCheckScript(job({ profile_id: "aws-gpu-t4" }));
+  const evidence = script.slice(script.indexOf('gpu="$(nvidia-smi'));
+  const stub = `nvidia-smi() { printf 'Tesla T4, 15360\\n'; }\nid() { echo agentcloud; }\ncodex() { echo codex-cli ${CODEX_VERSION}; }\n` +
+    `tmux() { echo tmux 3.2a; }\ngit() { if [ "$1" = "--version" ]; then echo git version 2.47.1; else echo ${"c".repeat(40)}; fi; }\nrepo=/tmp/x\n`;
+  const out = execFileSync("bash", ["-c", stub + evidence], { encoding: "utf8" });
+  const proof = JSON.parse(out.split("\n").find((entry) => entry.startsWith("AGENTCLOUD_EVIDENCE=")).slice("AGENTCLOUD_EVIDENCE=".length));
+  assert.deepEqual(proof.gpus, [{ name: "Tesla T4", memoryMiB: 15360 }]);
+});

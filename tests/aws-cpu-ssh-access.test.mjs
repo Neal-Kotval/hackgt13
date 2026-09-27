@@ -74,8 +74,9 @@ test("a failed requester rule is recorded and does not throw", async () => {
 
 function readyJob(db, id, state = "ready", extra = {}) {
   db.prepare(`INSERT INTO run_box_job (id, decision_id, project_id, provider, profile_id, state, repo_url, max_duration_minutes,
-    stop_requested_at, created_at, updated_at) VALUES (@id, @id, 'project-1', 'aws-ec2', 'aws-cpu', @state, 'https://example.com/r',
-    60, @stop, @at, @at)`).run({ id, state, stop: extra.stop ?? null, at: new Date().toISOString() });
+    stop_requested_at, created_at, updated_at) VALUES (@id, @id, 'project-1', @provider, @profile, @state, 'https://example.com/r',
+    60, @stop, @at, @at)`).run({ id, state, stop: extra.stop ?? null, at: new Date().toISOString(),
+    provider: extra.provider ?? "aws-ec2", profile: extra.profile === undefined ? "aws-cpu" : extra.profile });
 }
 
 test("HAC-166: the worker applies pending desktop addresses for ready jobs only and records failures", async () => {
@@ -160,5 +161,35 @@ test("HAC-166: the first-version table is migrated to accept desktop requests", 
     assert.deepEqual(listAwsCpuSshAccess(db, jobId).map((row) => row.source).sort(), ["create", "desktop"]);
     assert.throws(() => db.prepare(`INSERT INTO aws_cpu_ssh_access (id, job_id, cidr, source, requested_by, status, created_at,
       last_requested_at, updated_at) VALUES ('x', ?, '8.8.8.8/32', 'desktop', 'e', 'pending', 'a', 'a', 'a')`).run(jobId), /UNIQUE/);
+  } finally { db.close(); }
+});
+
+test("sized AWS environments: pending addresses are applied for every catalog machine and nothing else", async () => {
+  const db = database();
+  const ids = {
+    large: "a1111111-1111-4111-8111-111111111111",
+    t4: "a2222222-2222-4222-8222-222222222222",
+    g6: "a3333333-3333-4333-8333-333333333333",
+    runpod: "a4444444-4444-4444-8444-444444444444",
+  };
+  try {
+    readyJob(db, ids.large, "ready", { profile: "aws-cpu-large" });
+    readyJob(db, ids.t4, "ready", { profile: "aws-gpu-t4" });
+    readyJob(db, ids.g6, "ready", { profile: null });
+    readyJob(db, ids.runpod, "ready", { provider: "runpod", profile: "runpod-rtx-4090" });
+    for (const id of Object.values(ids))
+      requestAwsCpuSshAccess(db, { jobId: id, cidr: "8.8.8.8/32", employeeId: "employee-1", source: "desktop" });
+    const calls = [];
+    const provider = { async authorizeSsh(job, cidr) { calls.push(job.id); return { ruleId: "sgr-0aa", cidr }; } };
+    await applyReadyAwsCpuSshAccess(db, provider);
+    assert.deepEqual(calls.sort(), [ids.large, ids.t4].sort());
+    assert.equal(listAwsCpuSshAccess(db, ids.g6)[0].status, "pending");
+    assert.equal(listAwsCpuSshAccess(db, ids.runpod)[0].status, "pending");
+    // `profileId` still narrows the cycle to one profile.
+    requestAwsCpuSshAccess(db, { jobId: ids.large, cidr: "1.1.1.1/32", employeeId: "employee-1", source: "desktop" });
+    requestAwsCpuSshAccess(db, { jobId: ids.t4, cidr: "1.1.1.1/32", employeeId: "employee-1", source: "desktop" });
+    calls.length = 0;
+    await applyReadyAwsCpuSshAccess(db, provider, { profileId: "aws-gpu-t4" });
+    assert.deepEqual(calls, [ids.t4]);
   } finally { db.close(); }
 });

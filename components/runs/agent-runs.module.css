@@ -437,3 +437,23 @@
 .activity summary:focus-visible { outline: var(--focus-width) solid var(--color-accent); outline-offset: var(--focus-offset); }
 @media (max-width: 768px) { .heading { align-items: flex-start; flex-wrap: wrap; } }
 .detail > .badge { justify-self: start; }
+
+.statusControl { display: grid; justify-items: start; gap: var(--space-2); }
+.statusControl .label { margin: 0; }
+
+.planned { color: var(--color-agent-secondary); background: var(--color-agent-secondary-soft); }
+
+.statusChoices { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.statusChoice {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height-small);
+  padding: 0;
+  border: var(--border-width) solid var(--color-transparent);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.statusChoice[aria-pressed="true"] { border-color: currentColor; }
+.statusChoice:hover:not(:disabled) { border-color: currentColor; }
+.statusChoice:focus-visible { outline: var(--focus-width) solid var(--color-accent); outline-offset: var(--focus-offset); }
+.statusChoice:disabled { opacity: var(--opacity-disabled); cursor: wait; }

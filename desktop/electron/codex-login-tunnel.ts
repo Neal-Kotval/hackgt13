@@ -18,7 +18,7 @@ import net from "node:net";
 import type { Duplex } from "node:stream";
 import ssh2 from "ssh2";
 import { browserLoginCallbackPort, CODEX_CALLBACK_PORTS } from "../src/lib/chatgpt-sign-in.ts";
-import { AWS_CPU_PROFILE_ID } from "./environment-access.ts";
+import { needsNetworkAccess } from "./environment-access.ts";
 import {
   fetchRunBoxConnection,
   HOST_KEY_MISMATCH_MESSAGE,
@@ -297,7 +297,7 @@ export class CodexLoginTunnels {
       await this.deps.beforeConnect?.();
       const connection = await fetchRunBoxConnection(this.deps.request, runBoxId);
       if (entry.cancelled) throw new LoginTunnelError("Sign-in was cancelled.");
-      if (connection.profileId === AWS_CPU_PROFILE_ID && this.deps.ensureAccess) {
+      if (needsNetworkAccess(connection) && this.deps.ensureAccess) {
         await this.deps.ensureAccess(runBoxId, () => {
           if (!entry.cancelled) send({ type: "access", sessionId, state: "pending" });
         });

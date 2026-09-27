@@ -10,7 +10,7 @@ The visual emphasis is environment readiness and observable agent progress, supp
 
 ## Public alto sales page
 
-The public `/` page uses a white editorial canvas with near-black type and restrained blue accents. The authenticated application uses white panels on a pale canvas with those same type and accent roles. Both surfaces use Hanken Grotesk for reading and JetBrains Mono for technical labels and code. Light semantic aliases are scoped to `.alto-web` in `app/tokens.css`; the native desktop renderer retains the dark `:root` defaults. The hero centers the product promise; the dark workspace diagram and roadmap have their own scoped tokens. The diagram explains the intended workflow without simulating live activity.
+The public `/` page uses a white editorial canvas with near-black type and restrained blue accents. The authenticated application and native desktop use white panels on a pale canvas with those same type and accent roles. All surfaces use Hanken Grotesk for reading and JetBrains Mono for technical labels and code. Light semantic aliases are scoped to `.alto-web` in `app/tokens.css`, applied at the desktop document root so menus and the terminal inherit the same palette. The hero centers the product promise; the dark workspace diagram and roadmap have their own scoped tokens. The diagram explains the intended workflow without simulating live activity.
 
 ## Interactive reference
 

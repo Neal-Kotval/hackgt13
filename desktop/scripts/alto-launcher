@@ -1,0 +1,16 @@
+#!/bin/sh
+# Resolve symlinks so ~/.local/bin/alto keeps using its containing application.
+set -eu
+launcher=$0
+while [ -L "$launcher" ]; do
+  directory=$(CDPATH= cd -P "$(dirname "$launcher")" && pwd)
+  link=$(readlink "$launcher")
+  case "$link" in
+    /*) launcher=$link ;;
+    *) launcher=$directory/$link ;;
+  esac
+done
+directory=$(CDPATH= cd -P "$(dirname "$launcher")" && pwd)
+export ALTO_LAUNCHER_PATH="$directory/$(basename "$launcher")"
+export ELECTRON_RUN_AS_NODE=1
+exec "$directory/../../MacOS/Electron" "$directory/../app/cli/alto.mjs" "$@"

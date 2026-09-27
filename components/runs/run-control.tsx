@@ -9,7 +9,7 @@ export function RunControl({ project }: { project: Project }) {
     <header className={styles.heading}>
       <div>
         <h2 id="runs-heading">Runs</h2>
-        <p>See what your agent is working on and review its results. Each message you send in a chat starts a run.</p>
+        <p>Follow your agent’s work by conversation. Set a status for each conversation and review the latest response, with earlier messages kept together.</p>
       </div>
     </header>
     <Suspense fallback={null}><AgentRuns key={project.id} project={project} /></Suspense>

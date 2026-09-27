@@ -30,8 +30,15 @@ export async function body(request: Request): Promise<Record<string, unknown>> {
     throw new InputError("Expected a JSON object");
   }
 }
+// Errors from .mjs modules that cannot import InputError (for example
+// lib/run-box-access.mjs) mark themselves `expose` with a 4xx status.
+export function exposedError(error: unknown): error is Error & { status: number } {
+  const status = (error as { status?: unknown } | null)?.status;
+  return error instanceof Error && (error as { expose?: unknown }).expose === true &&
+    typeof status === "number" && Number.isInteger(status) && status >= 400 && status < 500;
+}
 export function failure(error: unknown) {
-  if (error instanceof InputError)
+  if (error instanceof InputError || exposedError(error))
     return Response.json({ error: error.message }, { status: error.status });
   console.error(error);
   return Response.json(
