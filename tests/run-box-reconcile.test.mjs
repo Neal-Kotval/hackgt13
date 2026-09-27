@@ -504,7 +504,7 @@ test("an accepted termination unblocks a new AWS request while release proof is 
   try {
     requestStop(db, job.id, "owner");
     transitionRunBoxJob(db, job.id, "stopping", "worker", { reason: "Stop requested" });
-    assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
+    assert.throws(() => nextAwsDecision(db), /cloud environment limit/);
     const shuttingDown = { ...instance(job.id), State: { Name: "running" } };
     const service = provider([shuttingDown]);
     service.terminateInstance = async (id) => { service.calls.push(["terminate", id]); return { state: "shutting-down", instanceId: id }; };
@@ -523,7 +523,7 @@ test("a failed termination call does not unblock new AWS requests", async () => 
     requestStop(db, job.id, "owner");
     await reconcileAwsRunBoxes(db, provider([instance(job.id)], { failTermination: true }), { workerId: "worker", requestStop });
     assert.equal(db.prepare("SELECT termination_requested_at FROM run_box_job WHERE id = ?").get(job.id).termination_requested_at, null);
-    assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
+    assert.throws(() => nextAwsDecision(db), /cloud environment limit/);
   } finally { db.close(); }
 });
 
