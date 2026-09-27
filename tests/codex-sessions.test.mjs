@@ -40,6 +40,18 @@ test('message idempotency, real streamed snapshots, interrupt confirmation and p
  await f.service.action(a.id,{action:'resume'});assert.equal(f.service.get(a.id).threadId,'thread-1');assert(f.calls.some(x=>x.method==='thread/resume'));
  assert.equal(f.service.list('other').length,0);f.service.close();f.db.close();
 });
+test('one shared conversation retains each human instruction with its actor',async()=>{
+ const f=fixture();const session=f.service.initialize({projectId:'p',agentId:'a',createdBy:'owner'});await tick();
+ await f.service.action(session.id,{action:'message',text:'Build the API',requestId:randomUUID(),actor:{id:'owner',name:'Alex Owner'}});
+ f.notify('turn/completed',{turn:{id:'turn-1',status:'completed'}});
+ await f.service.action(session.id,{action:'message',text:'Add pagination',requestId:randomUUID(),actor:{id:'member',name:'Sam Member'}});
+ const messages=f.service.snapshot(session.id).events.filter(event=>event.kind==='user');
+ assert.deepEqual(messages.map(event=>({text:event.text,actorId:event.actorId,actorName:event.actorName})),[
+  {text:'Build the API',actorId:'owner',actorName:'Alex Owner'},
+  {text:'Add pagination',actorId:'member',actorName:'Sam Member'},
+ ]);
+ f.service.close();f.db.close();
+});
 test('restart marks lost connections honestly and preserves history',async()=>{
  const f=fixture();const a=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();f.service.close();
  const restarted=createCodexSessionService({db:f.db,dataDir:'/tmp/codex-test',runtimeFactory:async()=>{throw Error('offline');}});

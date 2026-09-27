@@ -163,6 +163,21 @@ The proposed backend uses one provider-neutral run-box contract: attach an exist
 
 For a local coordination walkthrough, create a project and two agent identities, connect each CLI with its own credential, assign tasks, register an endpoint you operate, and send a handoff to the second identity. Observe the resulting activity and saved records, then reopen the project. This demonstrates coordination; real remote execution and the GPU demo remain pending.
 
+### Share one environment with teammates
+
+Invite teammates to the organization and grant them access to the project. Each
+person signs in with their own employee account and registers their own device
+SSH key in the desktop app. The worker reconciles project membership and device
+keys on a ready environment; a newly added member may need to wait for that
+cycle before opening a terminal. Project members can see the same Codex chats,
+send follow-up instructions, and see who sent each human message. Only project
+owners can set up Codex or stop the environment.
+
+Terminal sessions share the environment's Unix account and files. This is a
+trusted shared workspace, not a private filesystem per teammate. Removing a
+member blocks their app access and removes their key from new SSH connections
+after the worker reconciles it; an existing SSH connection is not terminated.
+
 ### Send a message between Codex agents
 
 In Agent settings, sign in to Codex on a ready environment, then select

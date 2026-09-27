@@ -18,7 +18,7 @@ const fixture=await prepareAuth(dir),store=await import(path.join(dir,'store.js'
 // Stub only execution; all employee/session/organization checks use real Better Auth.
 await writeFile(path.join(dir,'codex-service.js'),`import {failure} from './http.js'; import {InputError} from './store.js';
 export const codexEnabled=()=>true;export const codexFailure=failure;
-let saved=[];export function codexService(){return {validateEnvironment:(projectId,runBoxId)=>{if(runBoxId!=='ready-env')throw new InputError('Environment not found or not ready',409);},list:(projectId)=>saved.filter(session=>session.projectId===projectId),initialize:({projectId,agentId,runBoxId,newChat})=>{let session=saved.find(row=>row.projectId===projectId&&row.agentId===agentId&&!newChat);if(session)return session;session={id:saved.length?'s'+(saved.length+1):'s1',projectId,agentId,status:'ready',isSetupSession:!newChat,target:runBoxId?{kind:'runBox',runBoxId}:{kind:'local'}};saved.push(session);return session;},get:(id)=>saved.find(row=>row.id===id),snapshot:(id)=>({session:saved.find(row=>row.id===id),events:[]}),action:async({id})=>({session:saved.find(row=>row.id===id)})};}`);
+let saved=[];const events=new Map();export function codexService(){return {validateEnvironment:(projectId,runBoxId)=>{if(runBoxId!=='ready-env')throw new InputError('Environment not found or not ready',409);},list:(projectId)=>saved.filter(session=>session.projectId===projectId),initialize:({projectId,agentId,runBoxId,newChat})=>{let session=saved.find(row=>row.projectId===projectId&&row.agentId===agentId&&!newChat);if(session)return session;session={id:saved.length?'s'+(saved.length+1):'s1',projectId,agentId,status:'ready',isSetupSession:!newChat,target:runBoxId?{kind:'runBox',runBoxId}:{kind:'local'}};saved.push(session);return session;},get:(id)=>saved.find(row=>row.id===id),snapshot:(id)=>({session:saved.find(row=>row.id===id),events:events.get(id)||[]}),action:async(id,input)=>{if(input.action==='message'){const entries=events.get(id)||[];entries.push({kind:'user',text:input.text,actorId:input.actor.id,actorName:input.actor.name});events.set(id,entries);}return {session:saved.find(row=>row.id===id)};}};}`);
 const routes=await compile('../app/api/codex-sessions/route.ts','sessions.js');
 const detail=await compile('../app/api/codex-sessions/[id]/route.ts','detail.js');
 const owner=fixture.users[0],member=fixture.users[1];
@@ -42,6 +42,15 @@ test('Codex setup is owner-scoped; session reads and messages require project me
  assert.equal((await detail.POST(request({action:'login',method:'browser'},member.cookie),ctx)).status,403);
  assert.equal((await detail.POST(request({action:'cancelLogin'},member.cookie),ctx)).status,403);
  assert.equal((await detail.POST(request({action:'message',text:'hello'},member.cookie),ctx)).status,200);
+ const ownerView=await (await detail.GET(request(null,owner.cookie),ctx)).json();
+ assert.deepEqual(ownerView.events.map(({text,actorId,actorName})=>({text,actorId,actorName})),[
+  {text:'hello',actorId:member.id,actorName:member.name},
+ ]);
+ assert.equal((await detail.POST(request({action:'message',text:'from owner'},owner.cookie),ctx)).status,200);
+ const memberView=await (await detail.GET(request(null,member.cookie),ctx)).json();
+ assert.deepEqual(memberView.events.map(({text,actorId})=>({text,actorId})),[
+  {text:'hello',actorId:member.id},{text:'from owner',actorId:owner.id},
+ ]);
  assert.equal((await detail.POST(request({action:'resume'},member.cookie),ctx)).status,403);
  assert.equal((await routes.POST(request({...input,newChat:'yes'},member.cookie))).status,400);
  assert.equal((await routes.POST(request({...input,newChat:true},member.cookie))).status,400);
