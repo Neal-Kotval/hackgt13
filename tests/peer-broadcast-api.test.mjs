@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import ts from 'typescript';
 import {prepareAuth} from './auth-fixture.mjs';
+import { copyRunBoxAccess } from './run-box-access-fixture.mjs';
 
 const dir=await mkdtemp(path.join(os.tmpdir(),'peer-broadcast-api-'));
 process.env.AGENTCLOUD_DATA_DIR=path.join(dir,'data');
@@ -21,6 +22,7 @@ await compile('../lib/resource-profiles.ts','resource-profiles.js');
 await compile('../lib/store.ts','store.js');
 await compile('../lib/http.ts','http.js');
 const fixture=await prepareAuth(dir),store=await import(path.join(dir,'store.js'));
+await copyRunBoxAccess(dir);
 await writeFile(path.join(dir,'codex-service.js'),`import {failure} from './http.js';
 export const codexFailure=failure;
 export const calls=[];

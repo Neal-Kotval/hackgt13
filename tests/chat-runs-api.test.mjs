@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import ts from 'typescript';
 import { prepareAuth } from './auth-fixture.mjs';
+import { copyRunBoxAccess } from './run-box-access-fixture.mjs';
 
 const dir = await mkdtemp(path.join(os.tmpdir(), 'chat-runs-api-'));
 process.env.AGENTCLOUD_DATA_DIR = path.join(dir, 'data');
@@ -21,6 +22,7 @@ await compile('../lib/resource-profiles.ts', 'resource-profiles.js');
 await compile('../lib/store.ts', 'store.js');
 await compile('../lib/http.ts', 'http.js');
 const fixture = await prepareAuth(dir);
+await copyRunBoxAccess(dir);
 await copyFile(new URL('../lib/chat-runs.mjs', import.meta.url), path.join(dir, 'chat-runs.mjs'));
 // Real authentication and membership; no live agent or external model needed.
 await writeFile(path.join(dir, 'codex-service.js'), `

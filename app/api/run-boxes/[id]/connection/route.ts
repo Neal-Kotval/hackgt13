@@ -4,6 +4,7 @@ import { failure } from "../../../../../lib/http";
 import { InputError } from "../../../../../lib/store";
 import { getRunBoxJob, isAwsMachineProfile, migrateRunBoxJobs } from "../../../../../lib/run-box-jobs.mjs";
 import { listSshKeys, migrateSshKeys } from "../../../../../lib/ssh-keys.mjs";
+import { runBoxVisibleTo } from "../../../../../lib/run-box-access.mjs";
 import { getRunBoxSshEndpoint, knownHostsLine, migrateRunBoxSsh } from "../../../../../lib/run-box-ssh.mjs";
 
 export const runtime = "nodejs";
@@ -21,6 +22,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const job = getRunBoxJob(db, id);
     if (!job) throw new InputError("Run-box job not found", 404);
     requireMembership(employee, job.project_id);
+    // Environment model: deleted jobs and other people's private jobs do not exist here.
+    if (!runBoxVisibleTo(db, employee, job.id)) throw new InputError("Run-box job not found", 404);
     if (job.state !== "ready") throw new InputError("Environment is not ready", 409);
     const endpoint = getRunBoxSshEndpoint(db, id);
     if (!endpoint) throw new InputError("Environment has no SSH endpoint", 409);

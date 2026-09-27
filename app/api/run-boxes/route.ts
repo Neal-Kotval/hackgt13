@@ -10,6 +10,7 @@ import { getAgentCheck, getWorkspacePath, migrateAgentCheck } from "../../../lib
 import { getContainerTemplate, listContainerTemplates, templateIdFromProfile } from "../../../lib/container-templates.mjs";
 import { requestAwsCpuSshAccess, trustedRequesterCidr } from "../../../lib/aws-cpu-ssh-access.mjs";
 import { defaultBackboardFile, environmentMemory, projectMemoryStatus } from "../../../lib/backboard-memory.mjs";
+import { createMetadataInput, listVisibleRunBoxJobs, recordCreatedJob } from "../../../lib/run-box-access.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +65,7 @@ function existingDecision(db: Database, idempotencyKey: string) {
   return { decision, job };
 }
 
+type Metadata = ReturnType<typeof createMetadataInput>;
 // The catalog machine a job runs on (null for local-docker-sandbox, Runpod, and the
 // profile-less g6 GPU job) and its approved root volume.
 function machineFields(job: { profile_id: string | null; disk_gb?: number | null }) {
@@ -77,8 +79,10 @@ function machineFields(job: { profile_id: string | null; disk_gb?: number | null
   };
 }
 
-function respond(result: { decision: { outcome: string }; job?: unknown }) {
-  const job = result.job as JobRow | null | undefined;
+// Environment model: every approved job gets a name/visibility row; the job JSON
+// carries name, visibility, createdBy, and permissions (lib/run-box-access.mjs).
+function respond(employee: Employee, metadata: Metadata, result: { decision: { outcome: string }; job?: unknown }) {
+  const job = recordCreatedJob(getDatabase(), employee, result.job, metadata) as JobRow | null | undefined;
   return Response.json(job ? { ...result, job: { ...job, ...machineFields(job) } } : result,
     { status: result.decision.outcome === "approved" ? 201 : 200 });
 }
@@ -103,7 +107,7 @@ const pending = new Map<string, Promise<unknown>>();
 // (lib/aws-cpu-ssh-access.mjs), or null. It is used only for catalog machine jobs.
 async function createEnvironment(employee: Employee, input: Record<string, unknown>, requesterCidr: string | null) {
   for (const key of Object.keys(input))
-    if (!["projectId", "profileId", "durationHours", "diskGb", "idempotencyKey"].includes(key))
+    if (!["projectId", "profileId", "durationHours", "diskGb", "idempotencyKey", "name", "visibility"].includes(key))
       throw new InputError(`Unsupported field: ${key}`);
   const projectId = identifier(input.projectId, "project ID");
   const idempotencyKey = identifier(input.idempotencyKey, "idempotency key");
@@ -114,6 +118,7 @@ async function createEnvironment(employee: Employee, input: Record<string, unkno
   const profileId = input.profileId;
   const durationHours = input.durationHours;
   if (durationHours !== 1 && durationHours !== 2) throw new InputError("Duration must be 1 or 2 hours");
+  const metadata = createMetadataInput(input);
   // Disk size is chosen only for catalog machines; the catalog decides what is allowed.
   const machine = findMachine(profileId);
   let diskGb: number | null = null;
@@ -144,7 +149,7 @@ async function createEnvironment(employee: Employee, input: Record<string, unkno
         (decision.profile_id !== null && decision.profile_id !== profileId) ||
         (prior.job && machine && (prior.job as JobRow).disk_gb !== diskGb))
       throw new InputError("Idempotency key reused for a different decision", 409);
-    return respond(prior);
+    return respond(employee, metadata, prior);
   }
   if (!providerSupported(db, profile.provider))
     throw new InputError(`${profile.label} is not available on this server yet`, 409);
@@ -190,7 +195,7 @@ async function createEnvironment(employee: Employee, input: Record<string, unkno
   // HAC-166: the worker adds a tcp/22 rule for the requester's address next to its own.
   if (isAwsMachineProfile(profileId) && result.job && requesterCidr)
     requestAwsCpuSshAccess(db, { jobId: result.job.id, cidr: requesterCidr, employeeId: employee.id, source: "create" });
-  return respond(result);
+  return respond(employee, metadata, result);
 }
 
 export async function POST(request: Request) {
@@ -210,6 +215,7 @@ export async function POST(request: Request) {
     const resourceRequestId = identifier(input.resourceRequestId, "resource request ID");
     const idempotencyKey = identifier(input.idempotencyKey, "idempotency key");
     if (idempotencyKey.length > 128) throw new InputError("Invalid idempotency key");
+    const metadata = createMetadataInput(input);
     const membership = requireMembership(employee, projectId);
     const project = (await getState()).projects.find((item) => item.id === projectId);
     if (!project) throw new InputError("Project not found", 404);
@@ -247,7 +253,7 @@ export async function POST(request: Request) {
     } catch (error) {
       decisionError(error);
     }
-    return respond(result);
+    return respond(employee, metadata, result);
   } catch (error) {
     return failure(error);
   }
@@ -264,7 +270,8 @@ export async function GET(request: Request) {
     migrateAgentCheck(db);
     const memoryAvailable = projectMemoryStatus().enabled;
     const memoryFile = defaultBackboardFile();
-    const jobs = (listRunBoxJobs(db, projectId) as JobRow[])
+    // Deleted jobs and other people's private jobs are omitted (lib/run-box-access.mjs).
+    const jobs = (listVisibleRunBoxJobs(db, employee, projectId, listRunBoxJobs(db, projectId)) as JobRow[])
       .map((job) => {
         const ready = job.state === "ready" && !job.stop_requested_at;
         const endpoint = ready ? getRunBoxSshEndpoint(db, job.id) : null;

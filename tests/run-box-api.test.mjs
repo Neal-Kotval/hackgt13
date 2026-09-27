@@ -16,7 +16,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"])
+for (const name of ["run-box-jobs", "run-box-ssh", "ssh-keys", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory", "run-box-metadata", "run-box-access"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
 const db = fixture.getDatabase();
@@ -27,7 +27,8 @@ async function route(sourcePath, outputName, depth) {
   const code = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText.replaceAll(prefix, "./").replace(/from ["']\.\/([\w-]+)["']/g, (match, name) =>
-    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"].includes(name) ? ".mjs" : ".js"}'`);
+    `from './${name}${["auth", "run-box-jobs", "run-box-ssh", "ssh-keys", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory", "run-box-metadata", "run-box-access"].includes(name) ? ".mjs" : ".js"}'`)
+    .replace(/from ["']\.\.\/route["']/g, "from './boxes-route.js'");
   await writeFile(path.join(directory, outputName), code);
   return import(path.join(directory, outputName));
 }
@@ -116,7 +117,9 @@ test("approval API binds a saved request to verified owner and rejects cross-pro
   assert.equal((await boxes.POST(request("/api/run-boxes", { projectId, resourceRequestId: nextRequest.id, idempotencyKey: "approval-test-2" }, owner.cookie))).status, 409);
   assert.equal((await boxes.GET(request(`/api/run-boxes?projectId=wrong-project`, null, owner.cookie))).status, 403);
   assert.equal((await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, member.cookie))).status, 200);
-  assert.equal((await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, member.cookie))).json()).jobs[0].id, job.id);
+  // New jobs are private: the creator lists it, another member does not.
+  assert.equal((await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, owner.cookie))).json()).jobs[0].id, job.id);
+  assert.ok(!(await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, member.cookie))).json()).jobs.some((item) => item.id === job.id));
 });
 
 test("member decision denies allocation and stop is owner-scoped and durable", async () => {
@@ -126,7 +129,8 @@ test("member decision denies allocation and stop is owner-scoped and durable", a
   assert.equal(denied.status, 200);
   assert.equal((await denied.json()).job, null);
   const job = db.prepare("SELECT * FROM run_box_job LIMIT 1").get();
-  assert.equal((await stop.POST(request(`/api/run-boxes/${job.id}/stop`, { projectId }, member.cookie), { params: Promise.resolve({ id: job.id }) })).status, 403);
+  // A private job does not exist for another member.
+  assert.equal((await stop.POST(request(`/api/run-boxes/${job.id}/stop`, { projectId }, member.cookie), { params: Promise.resolve({ id: job.id }) })).status, 404);
   const stopped = await stop.POST(request(`/api/run-boxes/${job.id}/stop`, { projectId }, owner.cookie), { params: Promise.resolve({ id: job.id }) });
   assert.equal(stopped.status, 200);
   assert.equal((await stopped.json()).job.state, "stopping");
@@ -211,6 +215,7 @@ test("one-step member path records a denied decision without a job, once under c
 });
 
 const { migrateRunBoxJobs } = await import(path.join(directory, "run-box-jobs.mjs"));
+const metadataLib = await import(path.join(directory, "run-box-metadata.mjs"));
 migrateRunBoxJobs(db);
 const dockerSupported = (() => {
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'run_box_job'").get();
@@ -337,6 +342,9 @@ test("shared memory stays off until the project owner enables that environment",
   const job = db.prepare("SELECT id FROM run_box_job WHERE project_id = ? AND provider = 'docker-local'").get(projectId);
   assert.ok(job);
   const context = { params: Promise.resolve({ id: job.id }) };
+  // Private to its creator: 404 for another member until it is made public.
+  assert.equal((await memory.POST(request(`/api/run-boxes/${job.id}/memory`, { projectId, enabled: true }, member.cookie), context)).status, 404);
+  metadataLib.updateRunBoxMetadata(db, job.id, owner.id, { visibility: "public" });
   const listed = await (await boxes.GET(request(`/api/run-boxes?projectId=${projectId}`, null, member.cookie))).json();
   assert.equal(listed.jobs.find((item) => item.id === job.id).memory.enabled, false);
   assert.equal((await memory.POST(request(`/api/run-boxes/${job.id}/memory`, { projectId, enabled: true }, member.cookie), context)).status, 403);
@@ -379,7 +387,7 @@ test("HAC-168: the active-box conflict names only a visible blocker, and its own
     { params: Promise.resolve({ id }) });
   assert.equal((await forceStop.POST(request(`/api/run-boxes/${job.id}/force-stop`, { projectId: hidden.id }), { params: Promise.resolve({ id: job.id }) })).status, 401);
   assert.equal((await call(member, hidden.id)).status, 403);
-  assert.equal((await call(member, projectId)).status, 403);
+  assert.equal((await call(member, projectId)).status, 404);
   assert.equal((await call(owner, projectId)).status, 404);
   const forced = await call(owner, hidden.id);
   assert.equal(forced.status, 200);
@@ -401,7 +409,7 @@ test("HAC-166: desktop registers its IPv4 for a ready aws-cpu environment", asyn
       headers: { ...(cookie ? { cookie } : {}), ...(viewer ? { "cloudfront-viewer-address": viewer } : {}), ...headers },
     }), { params: Promise.resolve({ id: jobId }) });
   try {
-    const created = await boxes.POST(request("/api/run-boxes", { projectId, profileId: "aws-cpu", durationHours: 1, idempotencyKey: "hac-166-desktop" }, owner.cookie));
+    const created = await boxes.POST(request("/api/run-boxes", { projectId, profileId: "aws-cpu", durationHours: 1, idempotencyKey: "hac-166-desktop", visibility: "public" }, owner.cookie));
     assert.equal(created.status, 201);
     const job = (await created.json()).job;
     const setJob = (fields) => db.prepare(`UPDATE run_box_job SET ${Object.keys(fields).map((key) => `${key} = @${key}`).join(", ")} WHERE id = @id`).run({ ...fields, id: job.id });
