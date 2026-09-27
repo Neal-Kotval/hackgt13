@@ -11,7 +11,7 @@ function fixture({targets={'rb-1':{...ready}},apiKey='',runtimeError=null}={}) {
   runtimeFactory:async options=>{factories.push(options);if(runtimeError)throw runtimeError;const runtime={
    async request(method,params){calls.push({method,params,runBoxId:options.runBoxId});
     if(method==='account/read')return {account:null};
-    if(method==='account/login/start')return {type:'chatgptDeviceCode',verificationUrl:'https://auth.openai.com/codex/device',userCode:'ABCD-1234'};
+    if(method==='account/login/start')return {type:'chatgpt',loginId:'login-1',authUrl:'https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback'};
     if(method.startsWith('thread/'))return {thread:{id:'thread-r'}};return {};},
    close(){closed.push(options.sessionId);},async stop(){}};return runtime;}});
  return {db,service,calls,factories,targets,closed,stop:id=>listener(id)};
@@ -20,12 +20,15 @@ test('initialize validates the environment target',()=>{
  const f=fixture({targets:{'rb-1':{...ready},'other':{...ready,runBoxId:'other',projectId:'q'},'busy':{...ready,runBoxId:'busy',state:'verifying'},
   'nocodex':{...ready,runBoxId:'nocodex',codexState:'failed'},'old':{...ready,runBoxId:'old',serverKeyInstalled:false},'stopping':{...ready,runBoxId:'stopping',stopRequested:true}}});
  const base={projectId:'p',agentId:'a',createdBy:'u'};
- const reject=(runBoxId,pattern,status=409)=>assert.throws(()=>f.service.initialize({...base,runBoxId}),e=>e.status===status&&pattern.test(e.message));
+ const reject=(runBoxId,pattern,status=409)=>{
+  assert.throws(()=>f.service.validateEnvironment(base.projectId,runBoxId),e=>e.status===status&&pattern.test(e.message));
+  assert.throws(()=>f.service.initialize({...base,runBoxId}),e=>e.status===status&&pattern.test(e.message));
+ };
  reject('missing',/not found/);reject('other',/not found/);reject('busy',/must be ready/);reject('stopping',/must be ready/);
  reject('nocodex',/Codex is not ready/);reject('old',/^Create a new environment to use Codex on it\.$/);reject('../x',/Invalid/,400);
  assert.equal(f.db.prepare('SELECT count(*) AS n FROM codex_session').get().n,0);f.service.close();f.db.close();
 });
-test('local and environment sessions coexist; remote runs in workspacePath and device-code login works',async()=>{
+test('local and environment sessions coexist; remote runs in workspacePath and browser login works and device-code is rejected',async()=>{
  const f=fixture({apiKey:'sk-operator-key-never-remote'});const base={projectId:'p',agentId:'a',createdBy:'u'};
  const local=f.service.initialize(base);const remote=f.service.initialize({...base,runBoxId:'rb-1'});
  assert.notEqual(local.id,remote.id);assert.equal(f.service.initialize({...base,runBoxId:'rb-1'}).id,remote.id);
@@ -37,7 +40,9 @@ test('local and environment sessions coexist; remote runs in workspacePath and d
  assert.equal(f.calls.some(c=>c.runBoxId==='rb-1'&&c.method==='account/login/start'),false,'operator API key is never sent to an environment');
  assert.equal(f.service.get(remote.id).status,'auth_required');
  const {login}=await f.service.action(remote.id,{action:'login'});
- assert.deepEqual(login,{verificationUrl:'https://auth.openai.com/codex/device',userCode:'ABCD-1234'});
+ assert.equal(login.method,'browser');
+ await assert.rejects(f.service.action(remote.id,{action:'login',method:'deviceCode'}),error=>error.status===400);
+ assert.equal(f.calls.some(c=>c.method==='account/login/start'&&c.params.type==='chatgptDeviceCode'),false);
  const context=f.db.prepare('SELECT context FROM codex_session WHERE id=?').get(remote.id).context;
  assert.match(context,/\/home\/agentcloud\/agentcloud\/rb-1\/repo/);assert.doesNotMatch(context,/local Docker/);
  f.service.close();f.db.close();
