@@ -107,6 +107,9 @@ function StructuredPart({ part }: { part: CodexEventPart }) {
 export function CodexConversation({ events, working, emptyLabel, agentName = "Codex", environmentName, emptyContent, onRetry, retryDisabled }: CodexConversationProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const following = useRef(true);
+  const hasMessages = events.some(event => event.kind === "user" || event.kind === "assistant");
+  const lastUserIndex = events.reduce((last, event, index) => event.kind === "user" ? index : last, -1);
+  const lastAssistantIndex = events.reduce((last, event, index) => event.kind === "assistant" ? index : last, -1);
   useLayoutEffect(() => {
     const node = scroller.current;
     if (!node) return;
@@ -124,14 +127,15 @@ export function CodexConversation({ events, working, emptyLabel, agentName = "Co
     following.current = node.scrollHeight - node.scrollTop - node.clientHeight <= gap;
   }
   return <div className="conversation codex-conversation" ref={scroller} onScroll={trackScroll} aria-label="Project conversation" tabIndex={0}>
-    {events.length === 0 && !working ? emptyContent ?? <div className="main-empty chat-empty" role="status">{emptyLabel ? <p>{emptyLabel}</p> : null}</div> : null}
+    {!hasMessages && !working ? emptyContent ?? <div className="main-empty chat-empty" role="status">{emptyLabel ? <p>{emptyLabel}</p> : null}</div> : null}
     {events.map((event, index) => {
+      if (!hasMessages && !working && event.kind === "status") return null;
       if (event.kind === "command") {
         const summary = event.text.split("\n").find(line => line.trim()) || "Command output";
         return <details className="codex-command" key={event.id}><summary><TerminalWindow aria-hidden="true" /><span className="codex-command-title">{summary}</span><CaretDown className="codex-disclosure-icon" aria-hidden="true" /></summary><pre className="codex-command-output">{event.text || "No output reported yet."}</pre></details>;
       }
       if (event.kind === "status" || event.kind === "error") return <p key={event.id} className="message-status codex-event-status" data-tone={event.kind === "error" ? "danger" : "muted"} role={event.kind === "error" ? "alert" : "status"}>{event.kind === "error" ? "Error: " : ""}{event.text}</p>;
-      const streaming = working && index === events.length - 1;
+      const streaming = working && index === lastAssistantIndex && index > lastUserIndex;
       const environment = event.runBoxName || environmentName;
       const copyText = event.parts?.some(part => part.type === "text") ? event.parts.filter(part => part.type === "text").map(part => part.markdown).join("\n\n") : event.text;
       return <article key={event.id} className="message" data-role={event.kind}>
