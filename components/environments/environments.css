@@ -503,6 +503,16 @@
   color: var(--color-subtle);
 }
 
+/* Disclosure rows share an inset and the same compact vertical rhythm. */
+.project-sections.environment-sections { gap: var(--space-4); }
+.environment-sections .environment-list-section { gap: var(--space-4); }
+.environment-stopped,
+.environment-advanced {
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
 /* Stopped environments and the Advanced area stay collapsed and quiet. */
 .environment-stopped > summary {
   cursor: pointer;
@@ -517,16 +527,10 @@
 }
 
 .environment-stopped[open] > summary {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
 /* One quiet Advanced area groups the legacy request and catalog views. */
-.environment-advanced {
-  padding: var(--space-4) var(--space-6);
-  border: var(--border-width) solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-}
-
 .environment-advanced > summary {
   cursor: pointer;
   color: var(--color-muted);
