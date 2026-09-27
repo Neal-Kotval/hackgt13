@@ -207,10 +207,12 @@ export function CloudApp() {
               <span>{page === "dashboard" ? "overview" : page}</span>
             </>
           )}
-          <span className={`connection ${online ? "connected" : online === null ? "pending" : ""}`}>
-            <span className="status-dot" />
-            {online ? "stream connected" : online === null ? "connecting…" : "reconnecting…"}
-          </span>
+          {online === false && (
+            <span className="connection" role="status">
+              <span className="status-dot" />
+              reconnecting…
+            </span>
+          )}
         </div>
         {error && (
           <div role="alert" className="alert error">
