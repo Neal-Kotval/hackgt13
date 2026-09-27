@@ -378,24 +378,10 @@ export function EnvironmentsPanel({
             </p>
           ) : null}
 
-          {jobs.kind === "ok" && jobList.length === 0 ? (
-            <div className="tasks-empty" role="status">
-              <h2>No environments</h2>
-              <p>
-                This project has no run boxes. Create one on the web
-                Environments page, then use Open in desktop or refresh here.
-              </p>
-            </div>
-          ) : null}
-
-          {jobs.kind === "ok" && hiddenCount > 0 && visibleJobs.length === 0 ? (
-            <div className="tasks-empty">
-              <h2>All environments are stopped</h2>
-              <p>Show stopped environments to review them, or create an environment on the website.</p>
-              <button type="button" className="button ghost" onClick={() => updateHideStopped(false)}>
-                Show stopped environments
-              </button>
-            </div>
+          {jobs.kind === "ok" && visibleJobs.length === 0 ? (
+            <p className="environment-empty" role="status">
+              No environments available
+            </p>
           ) : null}
 
           {visibleJobs.length > 0 ? (

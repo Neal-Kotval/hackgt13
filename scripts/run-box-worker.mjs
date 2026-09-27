@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { getDatabase } from "../lib/auth.mjs";
-import { migrateRunBoxJobs, requestRunBoxStop } from "../lib/run-box-jobs.mjs";
+import { migrateRunBoxJobs, requestRunBoxStop, releaseDeadWorkerLeases } from "../lib/run-box-jobs.mjs";
 import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
 import { migrateAwsForceClose, processAwsForceCloses } from "../lib/aws-force-close.mjs";
 import { migrateAwsGpuEvidence } from "../lib/aws-gpu-evidence.mjs";
@@ -64,9 +64,9 @@ async function awsCycle() {
     console.log(`AWS force close ${item.jobId}: ${item.status}${item.error ? ` (${item.error})` : ""}`);
   const reconciled = await reconcileAwsRunBoxes(db, provider, { workerId, requestStop: requestRunBoxStop,
     cleanupAgent: cpuConfigured ? createAwsCpuAgentCleanup(db, cpuConnection) : null });
-  if (reconciled.some((item) => item.status === "retry"))
-    throw new Error("EC2 cleanup remains unconfirmed; refusing another allocation");
-  const result = await workOneAwsGpuJob(db, gpuProvider, { workerId });
+  const gate = cleanupGate(reconciled);
+  if (gate.block) throw new Error("EC2 cleanup remains unconfirmed; refusing another allocation");
+  const result = gate.pauseLegacyGpu ? null : await workOneAwsGpuJob(db, gpuProvider, { workerId });
   if (result) console.log(`Processed GPU job ${result.jobId}: ${result.state} (${result.evidenceRef})`);
   if (!cpuConfigured) return result;
   const runner = await runnerKey();
@@ -137,6 +137,11 @@ const cycle = { "runpod": runpodCycle, "docker-local": dockerLocalCycle }[provid
 const interval = providerName === "docker-local" ? 3_000 : 15_000;
 
 async function execute() {
+  // A restart (for example a deploy) leaves the previous process's leases behind.
+  const startupDb = getDatabase();
+  migrateRunBoxJobs(startupDb);
+  const released = releaseDeadWorkerLeases(startupDb);
+  if (released) console.log(`Released ${released} lease(s) held by a stopped worker process`);
   if (mode === "--once") return cycle();
   while (true) {
     try { await cycle(); }
