@@ -4,11 +4,11 @@ import Database from 'better-sqlite3';
 import {randomUUID} from 'node:crypto';
 import {createCodexSessionService} from '../lib/codex-sessions.mjs';
 const tick=()=>new Promise(r=>setImmediate(r));
-function fixture({signedIn=true}={}) {
+function fixture({signedIn=true,turns=[]}={}) {
  const db=new Database(':memory:');let callbacks;const calls=[];
  const runtime={async request(method,params){calls.push({method,params});
   if(method==='account/read')return {account:signedIn?{type:'chatgpt'}:null};
-  if(method==='thread/start'||method==='thread/resume')return {thread:{id:'thread-1',turns:[]}};
+  if(method==='thread/start'||method==='thread/resume')return {thread:{id:'thread-1',turns}};
   if(method==='account/login/start')return {type:'chatgptDeviceCode',verificationUrl:'https://auth.openai.com/codex/device',userCode:'TEST-CODE'};
   if(method==='turn/start'){callbacks.onNotification('turn/started',{turn:{id:'turn-1'}});return {turn:{id:'turn-1'}};}
   return {};
@@ -80,23 +80,21 @@ test('failed starts are never acknowledged as successful retries',async()=>{
  await service.action(s.id,{action:'resume'});await assert.rejects(service.action(s.id,input),e=>e.code==='ambiguous_turn');
  await service.action(s.id,{...input,requestId:randomUUID()});service.close();db.close();
 });
-test('command output and command arguments never enter snapshots or retained events',async()=>{
+test('command and file events retain fine-grained details through streaming and restart',async()=>{
  const f=fixture();const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
- const secret='-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-material\n-----END OPENSSH PRIVATE KEY-----';
- const argument='ARGUMENT_SECRET_UNIQUE';
- const delta='STREAM_SECRET_UNIQUE';
- f.notify('item/started',{item:{id:'cmd',type:'commandExecution',command:`printf '${argument}'`,status:'inProgress'}});
- f.notify('item/commandExecution/outputDelta',{itemId:'cmd',delta});
- f.notify('item/completed',{item:{id:'cmd',type:'commandExecution',command:`printf '${argument}'`,status:'completed',exitCode:0,aggregatedOutput:secret}});
- f.notify('item/completed',{item:{id:'file',type:'fileChange',status:'completed',changes:[{path:'PRIVATE_PATH_UNIQUE'}]}});
- const result=f.service.snapshot(s.id);
- for(const sensitive of [secret,argument,delta,'PRIVATE_PATH_UNIQUE'])assert.equal(JSON.stringify(result).includes(sensitive),false);
- assert.equal(f.db.prepare('SELECT text FROM codex_session_event WHERE event_id=?').get('cmd').text.includes(secret),false);
- assert.match(result.events.find(e=>e.id==='cmd').text,/completed.*exit 0/i);
+ f.notify('item/started',{item:{id:'cmd',type:'commandExecution',command:'npm test',cwd:'/workspace',status:'inProgress'}});
+ f.notify('item/commandExecution/outputDelta',{itemId:'cmd',delta:'First test passed\n'});
+ assert.equal(f.service.snapshot(s.id).events.find(e=>e.id==='cmd').details.output,'First test passed\n');
+ f.notify('item/completed',{item:{id:'cmd',type:'commandExecution',status:'completed',exitCode:0,durationMs:123}});
+ f.notify('item/completed',{item:{id:'file',type:'fileChange',status:'completed',changes:[{path:'src/app.ts',kind:{type:'update',move_path:'src/main.ts'},diff:'@@ -1 +1 @@\n-old\n+new'}]}});
+ const events=f.service.snapshot(s.id).events;
+ assert.equal(events.filter(e=>e.id==='cmd').length,1);
+ assert.deepEqual(events.find(e=>e.id==='cmd').details,{type:'commandExecution',status:'completed',command:'npm test',cwd:'/workspace',output:'First test passed\n',exitCode:0,durationMs:123});
+ assert.deepEqual(events.find(e=>e.id==='file').details.changes,[{path:'src/app.ts',kind:'update',movePath:'src/main.ts',diff:'@@ -1 +1 @@\n-old\n+new'}]);
  f.service.close();
  const restarted=createCodexSessionService({db:f.db,dataDir:'/tmp/codex-test',runtimeFactory:async()=>{throw Error('offline');}});
- assert.match(restarted.snapshot(s.id).events.find(e=>e.id==='cmd').text,/completed.*exit 0/i);
- f.db.close();
+ assert.deepEqual(restarted.snapshot(s.id).events.find(e=>e.id==='cmd').details,events.find(e=>e.id==='cmd').details);
+ restarted.close();f.db.close();
 });
 test('migration removes command details already saved by older versions',async()=>{
  const f=fixture();const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();f.service.close();
@@ -107,4 +105,47 @@ test('migration removes command details already saved by older versions',async()
  assert.equal(JSON.stringify(restored.snapshot(s.id)).includes(secret),false);
  assert.equal(f.db.prepare('SELECT text FROM codex_session_event WHERE event_id=?').get('legacy').text.includes(secret),false);
  f.db.close();
+});
+
+test('execution details redact secrets across output chunks and patch fields before saving',async()=>{
+ const f=fixture();const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ const notify=delta=>f.notify('item/commandExecution/outputDelta',{itemId:'cmd',delta});
+ f.notify('item/started',{item:{id:'cmd',type:'commandExecution',command:'TOKEN="command secret" npm test',status:'inProgress'}});
+ notify('passed\nAPI_TOKEN=split');
+ let saved=JSON.stringify(f.db.prepare('SELECT * FROM codex_session_event').all());
+ assert(!saved.includes('split')); assert(!saved.includes('command secret'));
+ notify('credential\n-----BEGIN OPENSSH PRIVATE KEY-----\nprivate');
+ notify('-material\n-----END OPENSSH PRIVATE KEY-----\nAuthorization: Bearer bearer-secret\n');
+ f.notify('item/completed',{item:{id:'cmd',type:'commandExecution',status:'completed',exitCode:0}});
+ f.notify('item/completed',{item:{id:'file',type:'fileChange',status:'completed',changes:[{path:'src/config.ts',kind:{type:'add'},diff:'+password="file secret"\n+api_key=abc123\n+const enabled = true'}]}});
+ saved=JSON.stringify(f.db.prepare('SELECT * FROM codex_session_event').all());
+ for(const secret of ['splitcredential','private-material','bearer-secret','file secret','abc123'])assert(!saved.includes(secret),secret);
+ assert(saved.includes('const enabled = true'));
+ assert(saved.includes('[redacted private key]'));
+ const before=f.service.snapshot(s.id).events.find(e=>e.id==='cmd');
+ notify('late output\n');
+ assert.deepEqual(f.service.snapshot(s.id).events.find(e=>e.id==='cmd'),before);
+ f.service.close();f.db.close();
+});
+test('resume recovers authoritative execution details without duplicating items',async()=>{
+ const turns=[{items:[{id:'cmd',type:'commandExecution',status:'completed',command:'pwd',cwd:'/workspace',exitCode:0,durationMs:9,aggregatedOutput:'/workspace\n'},
+ {id:'file',type:'fileChange',status:'completed',changes:[{path:'a.txt',kind:{type:'delete'},diff:'-old'}]}]}];
+ const f=fixture({turns});const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ await f.service.action(s.id,{action:'resume'});
+ assert.equal(f.service.snapshot(s.id).events.filter(e=>e.id==='cmd').length,1);
+ assert.equal(f.service.snapshot(s.id).events.find(e=>e.id==='cmd').details.output,'/workspace\n');
+ assert.equal(f.service.snapshot(s.id).events.find(e=>e.id==='file').details.changes[0].kind,'delete');
+ f.service.close();f.db.close();
+});
+test('large streamed output and patches have explicit retention bounds',async()=>{
+ const f=fixture();const s=f.service.initialize({projectId:'p',agentId:'a',createdBy:'u'});await tick();
+ f.notify('item/commandExecution/outputDelta',{itemId:'cmd',delta:'x'.repeat(100000)});
+ f.notify('item/completed',{item:{id:'cmd',type:'commandExecution',status:'completed'}});
+ const command=f.service.snapshot(s.id).events.find(e=>e.id==='cmd').details;
+ assert.equal(command.output.length,32768);assert.equal(command.truncated,true);
+ f.notify('item/completed',{item:{id:'file',type:'fileChange',status:'completed',changes:Array.from({length:150},(_,i)=>({path:`file-${i}`,kind:{type:'update'},diff:'x'.repeat(1000)}))}});
+ const patch=f.service.snapshot(s.id).events.find(e=>e.id==='file').details;
+ assert.equal(patch.changes.length,100);assert.equal(patch.truncated,true);
+ assert(patch.changes.reduce((sum,c)=>sum+c.path.length+c.diff.length,0)<=32768);
+ f.service.close();f.db.close();
 });
