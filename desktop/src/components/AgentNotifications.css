@@ -1,0 +1,75 @@
+.agent-notifications {
+  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: var(--content-narrow);
+  margin: 0 auto;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.agent-notifications-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-transparent);
+  color: var(--color-text);
+  text-align: left;
+  font-size: var(--text-sm);
+}
+.agent-notifications-toggle:hover { background: var(--color-surface-raised); }
+.agent-notifications-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 50vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3);
+  border-top: var(--border-width) solid var(--color-border);
+  font-size: var(--text-sm);
+}
+.agent-notifications-body p { margin: 0; }
+.agent-notifications-hint { color: var(--color-muted); }
+.agent-notifications-compose { display: flex; flex-direction: column; gap: var(--space-2); }
+.agent-notifications-compose textarea { width: 100%; min-width: 0; resize: vertical; }
+.agent-notifications-actions, .agent-notifications-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+.agent-notifications-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.agent-notifications-history li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-top: var(--border-width) solid var(--color-border-subtle);
+  padding-top: var(--space-3);
+}
+.agent-notifications-meta strong { color: var(--color-text); font-weight: var(--font-weight-medium); }
+.agent-notifications-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-notifications-error { color: var(--color-danger); overflow-wrap: anywhere; }
+.agent-notifications :is(button, textarea):focus-visible {
+  outline: var(--focus-width) solid var(--color-accent);
+  outline-offset: var(--focus-offset);
+}
+@media (max-width: 768px) {
+  .agent-notifications :is(button, textarea) { min-height: var(--control-height-touch); }
+}
