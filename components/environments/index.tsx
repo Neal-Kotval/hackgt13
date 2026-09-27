@@ -3,108 +3,38 @@ import { SkeletonRegion, SkeletonRows } from "@/components/ui/skeleton";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  ChatsCircle,
   CheckCircle,
   Copy,
   Cube,
-  Lightning,
+  GitBranch,
   Plus,
   ShieldWarning,
   Stop,
   Warning,
 } from "@phosphor-icons/react";
 import type { Project } from "@/lib/types";
-import {
-  awsCpuProfile,
-  demoGpuDurations,
-  demoGpuProfile,
-  localDockerSandboxProfile,
-  runpodBudgetGpuProfile,
-  runpodGpuProfile,
-} from "@/lib/resource-profiles";
 import "../resources/resources.css";
 import "./environments.css";
 import Link from "next/link";
+import { MachinePicker, initialPickerValue, pickerRequest, type PickerValue } from "./machine-picker";
+import {
+  environmentLabel,
+  expiresAt,
+  jobDiskGib,
+  jobMachine,
+  machineSpecs,
+  repoName,
+  timeLeft,
+  type ContainerTemplate,
+  type EnvironmentJob,
+  type JobState,
+} from "./machines";
 
-type JobState =
-  | "queued"
-  | "allocating"
-  | "connecting"
-  | "verifying"
-  | "ready"
-  | "stopping"
-  | "stopped"
-  | "failed";
-
-// Shape of GET /api/run-boxes?projectId= (docs/sandbox-mvp-contract.md). The
-// profileId, ssh, desktopUrl, and access fields are optional until the listing
-// extension lands; the page never invents them.
-export type EnvironmentJob = {
-  id: string;
-  resource_request_id: string;
-  provider: "aws-ec2" | "runpod" | "docker-local" | "ssh-host";
-  profile_id?: string | null;
-  profileId?: string | null;
-  state: JobState;
-  provider_resource_id: string | null;
-  max_duration_minutes: number;
-  stop_requested_at: string | null;
-  force_stop_requested_at?: string | null;
-  created_at: string;
-  outcome?: "approved" | "denied";
-  decision_reason?: string;
-  failure_reason?: string | null;
-  failureReason?: string | null;
-  ssh?: { host: string; port: number; username?: string } | null;
-  desktopUrl?: string | null;
-  access?: "trusted-shell";
-  memory?: { enabled: boolean; available: boolean };
-};
+export type { EnvironmentJob } from "./machines";
 
 type Role = "owner" | "member" | null;
-type ContainerTemplate = { id: string; label: string; imageId: string; source: string };
-
-const profiles = [
-  {
-    id: localDockerSandboxProfile.id,
-    label: localDockerSandboxProfile.label,
-    icon: <Cube aria-hidden="true" />,
-    summary: "CPU-only Linux container · no GPU · no provider cost",
-    detail:
-      "Runs with sshd on the machine that runs the alto worker. Suitable for local development and demos. It has no GPU.",
-  },
-  {
-    id: awsCpuProfile.id,
-    label: "AWS EC2 CPU",
-    icon: <Cube aria-hidden="true" />,
-    summary: `${awsCpuProfile.instanceType} · 2 vCPU · no GPU · about $0.05/hour`,
-    detail:
-      "Billable on AWS. A Linux VM with Codex installed. SSH opens only to your current public address, and the disk is deleted when the environment stops.",
-  },
-  {
-    id: runpodBudgetGpuProfile.id,
-    label: "Runpod budget GPU",
-    icon: <Lightning aria-hidden="true" />,
-    summary: `RTX 2000 Ada, A5000, or 4000 Ada, whichever is in stock · up to $${runpodBudgetGpuProfile.maxHourlyUsd.toFixed(2)}/hour`,
-    detail:
-      "Billable, for short smoke tests. The worker checks live price and availability against the hourly ceiling before creating a Pod, and marks it ready only after an SSH and GPU probe succeeds.",
-  },
-  {
-    id: runpodGpuProfile.id,
-    label: "Runpod RTX 4090",
-    icon: <Lightning aria-hidden="true" />,
-    summary: `Runpod Secure Cloud · up to $${runpodGpuProfile.maxHourlyUsd.toFixed(2)}/hour`,
-    detail:
-      "Billable. The worker checks live price and availability against the hourly ceiling before creating a Pod, and marks it ready only after an SSH and GPU probe succeeds.",
-  },
-  {
-    id: demoGpuProfile.id,
-    label: "AWS EC2 g6 · NVIDIA L4",
-    icon: <Lightning aria-hidden="true" />,
-    summary: `SSM-managed ${demoGpuProfile.instanceType} · desktop SSH not yet available`,
-    detail:
-      "Billable on a paid AWS account. Managed through AWS Systems Manager; the GPU is verified by probe. Opening it in the desktop app over SSH is not available yet.",
-  },
-] as const;
+type CodexSession = { isSetupSession?: boolean; target?: { kind: string; runBoxId?: string } };
 
 const stateCopy: Record<JobState, { label: string; phase: string; detail: string }> = {
   queued: {
@@ -163,13 +93,7 @@ function providerLabel(provider: EnvironmentJob["provider"]) {
 }
 
 export function profileLabel(job: EnvironmentJob, templates: ContainerTemplate[] = []) {
-  const id = job.profileId ?? job.profile_id;
-  const known = profiles.find((profile) => profile.id === id);
-  if (known) return known.label;
-  const template = templates.find((item) => `local-template:${item.id}` === id);
-  if (template) return template.label;
-  if (job.provider === "aws-ec2") return profiles[2].label;
-  return id || "Not recorded";
+  return environmentLabel(job, templates);
 }
 
 function readableDate(value: string | number) {
@@ -191,8 +115,10 @@ export function Environments({ project }: { project: Project }) {
   const [role, setRole] = useState<Role>(null);
   const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [profileId, setProfileId] = useState<string>(localDockerSandboxProfile.id);
-  const [durationHours, setDurationHours] = useState<number>(1);
+  const [picker, setPicker] = useState<PickerValue>(initialPickerValue);
+  const [chatCounts, setChatCounts] = useState<Map<string, number> | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [showStopped, setShowStopped] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(newKey);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
@@ -207,13 +133,22 @@ export function Environments({ project }: { project: Project }) {
   const formHeading = useRef<HTMLHeadingElement>(null);
   const focusedEnvironment = useRef(false);
 
-  useEffect(() => setServerUrl(window.location.origin), []);
+  useEffect(() => {
+    setServerUrl(window.location.origin);
+    // The overview's "New environment" action links here with ?new=1.
+    if (new URL(window.location.href).searchParams.get("new") === "1") setShowForm(true);
+  }, []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   useEffect(() => {
     if (focusedEnvironment.current || !jobs) return;
     const selected = new URL(window.location.href).searchParams.get("environment");
     if (!selected || !jobs.some(job => job.id === selected)) return;
     focusedEnvironment.current = true;
-    document.getElementById(`rb-${selected}`)?.scrollIntoView({ block: "start" });
+    if (jobs.find((job) => job.id === selected)?.state === "stopped") setShowStopped(true);
+    window.requestAnimationFrame(() => document.getElementById(`rb-${selected}`)?.scrollIntoView({ block: "start" }));
   }, [jobs]);
 
   useEffect(() => {
@@ -234,6 +169,21 @@ export function Environments({ project }: { project: Project }) {
       setJobs(data.jobs);
       setTemplates(data.templates ?? []);
       setLoadError("");
+      setNow(Date.now());
+      // Codex chat counts are optional context; a failed lookup hides them rather than showing zero.
+      try {
+        const sessionsResponse = await fetch(`/api/codex-sessions?projectId=${encodeURIComponent(project.id)}`);
+        const sessions = sessionsResponse.ok ? ((await sessionsResponse.json()) as { sessions?: CodexSession[] }).sessions : undefined;
+        if (!active) return;
+        if (!Array.isArray(sessions)) { setChatCounts(null); return; }
+        const counts = new Map<string, number>();
+        for (const session of sessions)
+          if (session.target?.kind === "runBox" && session.target.runBoxId && session.isSetupSession === false)
+            counts.set(session.target.runBoxId, (counts.get(session.target.runBoxId) ?? 0) + 1);
+        setChatCounts(counts);
+      } catch {
+        if (active) setChatCounts(null);
+      }
     }
     const report = (caught: unknown) => {
       if (active)
@@ -279,7 +229,7 @@ export function Environments({ project }: { project: Project }) {
       const response = await fetch("/api/run-boxes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: project.id, profileId, durationHours, idempotencyKey }),
+        body: JSON.stringify({ projectId: project.id, ...pickerRequest(picker), idempotencyKey }),
       });
       const data = (await response.json()) as {
         job?: EnvironmentJob | null;
@@ -373,15 +323,34 @@ export function Environments({ project }: { project: Project }) {
     }
   }
 
-  const availableProfiles = [...profiles, ...templates.map((template) => ({
-    id: `local-template:${template.id}`,
-    label: template.label,
-    icon: <Cube aria-hidden="true" />,
-    summary: "Imported container template · CPU only · no provider cost",
-    detail: `Image ${template.imageId.slice(0, 19)}… passed import checks. Runs on the machine hosting the Docker worker with trusted SSH access.`,
-  }))];
-  const selectedProfile = availableProfiles.find((profile) => profile.id === profileId) ?? availableProfiles[0];
   const empty = jobs !== null && jobs.length === 0;
+  const active = (jobs ?? []).filter((job) => job.state !== "stopped");
+  const stopped = (jobs ?? []).filter((job) => job.state === "stopped");
+  const renderCard = (job: EnvironmentJob) => (
+    <EnvironmentCard
+      key={job.id}
+      job={job}
+      templates={templates}
+      projectId={project.id}
+      chatCount={chatCounts ? chatCounts.get(job.id) ?? 0 : null}
+      now={now}
+      serverUrl={serverUrl}
+      role={role}
+      confirming={confirmingStop === job.id}
+      stopBusy={stopBusy === job.id}
+      onConfirm={() => setConfirmingStop(job.id)}
+      onCancel={() => setConfirmingStop("")}
+      onStop={() => void stop(job)}
+      forceConfirming={confirmingForce === job.id}
+      forceBusy={forceBusy === job.id}
+      onForceConfirm={() => setConfirmingForce(job.id)}
+      onForceCancel={() => setConfirmingForce("")}
+      onForceStop={() => void forceStop(job)}
+      onCopy={(text, message) => void copy(text, message)}
+      memoryBusy={memoryBusy === job.id}
+      onMemory={(enabled) => void setMemory(job, enabled)}
+    />
+  );
 
   return (
     <section className="resource-page" aria-labelledby="environments-title">
@@ -459,54 +428,7 @@ export function Environments({ project }: { project: Project }) {
                 : "Submitting records a request and an owner approval, then queues one job. A worker must allocate and verify it before it is ready."}
             </p>
           </div>
-          <fieldset className="environment-options">
-            <legend>Profile</legend>
-            {availableProfiles.map((profile) => (
-              <label
-                key={profile.id}
-                className={`compute-option environment-option${profileId === profile.id ? " chosen" : ""}`}
-              >
-                <input
-                  type="radio"
-                  name="environment-profile"
-                  value={profile.id}
-                  checked={profileId === profile.id}
-                  onChange={() => setProfileId(profile.id)}
-                />
-                {profile.icon}
-                <span>
-                  <strong>{profile.label}</strong>
-                  <small>{profile.summary}</small>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-          <p className="resource-note">{selectedProfile.detail}</p>
-          <fieldset className="environment-durations">
-            <legend>Duration</legend>
-            <div className="environment-duration-row">
-              {demoGpuDurations.map((hours) => (
-                <label
-                  key={hours}
-                  className={`compute-option environment-duration${durationHours === hours ? " chosen" : ""}`}
-                >
-                  <input
-                    type="radio"
-                    name="environment-duration"
-                    value={hours}
-                    checked={durationHours === hours}
-                    onChange={() => setDurationHours(hours)}
-                  />
-                  <strong>
-                    {hours} {hours === 1 ? "hour" : "hours"}
-                  </strong>
-                </label>
-              ))}
-            </div>
-            <small className="environment-hint">
-              The worker stops the environment at this limit, counted from the request.
-            </small>
-          </fieldset>
+          <MachinePicker value={picker} onChange={setPicker} templates={templates} />
           {formError && (
             <p className="resource-feedback resource-feedback--error" role="alert">
               <Warning aria-hidden="true" />
@@ -529,33 +451,27 @@ export function Environments({ project }: { project: Project }) {
       {jobs && jobs.length > 0 && (
         <section className="environment-list-section" aria-labelledby="environment-list-title">
           <h3 id="environment-list-title" className="environment-list-title">
-            Project environments <span className="resource-count">{jobs.length}</span>
+            Running in this project <span className="resource-count">{active.length}</span>
           </h3>
-          <ul className="environment-list">
-            {jobs.map((job) => (
-              <EnvironmentCard
-                key={job.id}
-                job={job}
-                templates={templates}
-                projectId={project.id}
-                serverUrl={serverUrl}
-                role={role}
-                confirming={confirmingStop === job.id}
-                stopBusy={stopBusy === job.id}
-                onConfirm={() => setConfirmingStop(job.id)}
-                onCancel={() => setConfirmingStop("")}
-                onStop={() => void stop(job)}
-                forceConfirming={confirmingForce === job.id}
-                forceBusy={forceBusy === job.id}
-                onForceConfirm={() => setConfirmingForce(job.id)}
-                onForceCancel={() => setConfirmingForce("")}
-                onForceStop={() => void forceStop(job)}
-                onCopy={(text, message) => void copy(text, message)}
-                memoryBusy={memoryBusy === job.id}
-                onMemory={(enabled) => void setMemory(job, enabled)}
-              />
-            ))}
-          </ul>
+          {active.length > 0 ? (
+            <ul className="environment-list">
+              {active.map(renderCard)}
+            </ul>
+          ) : (
+            <p className="resource-note">Nothing is running for this project. Stopped environments are listed below.</p>
+          )}
+          {stopped.length > 0 && (
+            <details
+              className="environment-stopped"
+              open={showStopped}
+              onToggle={(event) => setShowStopped(event.currentTarget.open)}
+            >
+              <summary>Stopped environments ({stopped.length})</summary>
+              <ul className="environment-list">
+                {stopped.map(renderCard)}
+              </ul>
+            </details>
+          )}
         </section>
       )}
     </section>
@@ -611,6 +527,8 @@ function EnvironmentCard({
   job,
   templates,
   projectId,
+  chatCount,
+  now,
   serverUrl,
   role,
   confirming,
@@ -630,6 +548,8 @@ function EnvironmentCard({
   job: EnvironmentJob;
   templates: ContainerTemplate[];
   projectId: string;
+  chatCount: number | null;
+  now: number;
   serverUrl: string;
   role: Role;
   confirming: boolean;
@@ -665,7 +585,14 @@ function EnvironmentCard({
   }, [forceConfirming]);
   const titleId = `environment-${job.id}-title`;
   const failure = job.failureReason ?? job.failure_reason;
-  const expiresAt = Date.parse(job.created_at) + job.max_duration_minutes * 60_000;
+  const expires = expiresAt(job);
+  const machine = jobMachine(job);
+  const disk = jobDiskGib(job);
+  const specs = machine
+    ? `${machineSpecs(machine, disk)} · ${machine.instanceType}`
+    : job.provider === "docker-local"
+      ? "CPU-only container on the worker host · no GPU · no provider cost"
+      : null;
   const command = job.ssh ? sshCommand(job.ssh) : "";
   const canStop = role === "owner" && job.state !== "stopped" && !job.stop_requested_at;
   const ready = job.state === "ready" && !job.stop_requested_at;
@@ -690,12 +617,48 @@ function EnvironmentCard({
       <div className="resource-detail-title">
         <div className="environment-title">
           <h4 id={titleId}>{profileLabel(job, templates)}</h4>
-          {phase !== copy.label && <span className="environment-phase">{phase}</span>}
+          {specs && <p className="environment-specs">{specs}</p>}
         </div>
         <span className={`resource-badge resource-badge--${job.state}`}>{copy.label}</span>
       </div>
-      <p className="resource-note">{stopDetail}</p>
-      <dl className="resource-facts resource-facts--compact">
+      {(job.repo_url || chatCount !== null) && (
+        <p className="environment-coupling">
+          {job.repo_url && (
+            <span>
+              <GitBranch aria-hidden="true" />
+              Clones <strong title={job.repo_url}>{repoName(job.repo_url)}</strong>
+              {" · "}
+              {job.repo_revision ? <code title={job.repo_revision}>{job.repo_revision.slice(0, 7)}</code> : "revision pending"}
+            </span>
+          )}
+          {chatCount !== null && (
+            <span>
+              <ChatsCircle aria-hidden="true" />
+              {chatCount} Codex {chatCount === 1 ? "chat" : "chats"}
+            </span>
+          )}
+        </p>
+      )}
+      <p className="resource-note">
+        {phase !== copy.label && <strong className="environment-phase">{phase}. </strong>}
+        {stopDetail}
+      </p>
+      <dl className="resource-facts resource-facts--compact environment-facts">
+        <div>
+          <dt>Time limit</dt>
+          <dd>
+            {job.max_duration_minutes / 60} {job.max_duration_minutes === 60 ? "hour" : "hours"}
+            {job.state !== "stopped" && ` · ${timeLeft(job, now)}`}
+            {Number.isFinite(expires) && <small className="environment-fact-detail">Expires {readableDate(expires)}</small>}
+          </dd>
+        </div>
+        <div>
+          <dt>Provider</dt>
+          <dd>
+            {providerLabel(job.provider)}
+            {job.provider_resource_id ? ` · ${job.provider_resource_id}` : " · not allocated"}
+          </dd>
+        </div>
         <div>
           <dt>Environment ID</dt>
           <dd className="environment-id">
@@ -711,26 +674,8 @@ function EnvironmentCard({
           </dd>
         </div>
         <div>
-          <dt>Provider</dt>
-          <dd>
-            {providerLabel(job.provider)}
-            {job.provider_resource_id ? ` · ${job.provider_resource_id}` : " · not allocated"}
-          </dd>
-        </div>
-        <div>
-          <dt>Profile</dt>
-          <dd>{job.profileId ?? job.profile_id ?? (job.provider === "aws-ec2" ? demoGpuProfile.id : "Not recorded")}</dd>
-        </div>
-        <div>
           <dt>Created</dt>
           <dd>{readableDate(job.created_at)}</dd>
-        </div>
-        <div>
-          <dt>Expires</dt>
-          <dd>
-            {Number.isFinite(expiresAt) ? readableDate(expiresAt) : "Not recorded"} ·{" "}
-            {job.max_duration_minutes / 60} {job.max_duration_minutes === 60 ? "hour" : "hours"} limit
-          </dd>
         </div>
         {job.decision_reason && (
           <div>
@@ -758,6 +703,8 @@ function EnvironmentCard({
         )}
       </dl>
 
+      {!stopped && (
+        <>
       <EnvironmentMemory
         job={job}
         owner={role === "owner"}
@@ -787,6 +734,8 @@ function EnvironmentCard({
           </p>
         )}
       </div>
+        </>
+      )}
 
       {ready && job.ssh && <p className="resource-note">Your environment is ready. Add Codex or manage its sign-in in Settings.</p>}
       <div className="environment-actions">
