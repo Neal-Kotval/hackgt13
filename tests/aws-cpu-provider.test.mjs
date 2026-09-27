@@ -603,3 +603,32 @@ test("unknown ingress is never changed and prevents launching into an unreviewed
   await assert.rejects(provider.preflight(job()), /Unmanaged SSH ingress/);
   assert.deepEqual(rules, [unknown]);
 });
+
+test("eventually consistent rule absence retries a duplicate create without failing the job", async () => {
+  const rules = [];
+  let hide = false;
+  const provider = createAwsCpuProvider({ aws: fakeAws({ rules, overrides: {
+    "ec2:describe-security-group-rules": () => ({ SecurityGroupRules: hide ? [] : rules }),
+  } }), subnetId });
+  await provider.authorizeSsh(job(), "203.0.113.1/32");
+  hide = true;
+  const other = job({ id: otherJobId, provider_resource_id: otherInstanceId });
+  await assert.rejects(provider.authorizeSsh(other, "203.0.113.1/32"), (error) => error.ingressPending === true);
+  hide = false;
+  await provider.authorizeSsh(other, "203.0.113.1/32");
+  assert.equal(rules.length, 1);
+  assert.deepEqual(ruleOwners(rules[0]), { [jobId]: instanceId, [otherJobId]: otherInstanceId });
+});
+
+test("a stale deleted EC2 rule returns an ingress retry instead of a permanent job failure", async () => {
+  const rules = [];
+  const raw = fakeAws({ rules });
+  const aws = async (service, operation, ...args) => {
+    if (operation === "create-tags") throw new Error("AWS ec2:create-tags InvalidSecurityGroupRuleId.NotFound");
+    return raw(service, operation, ...args);
+  };
+  const provider = createAwsCpuProvider({ aws, subnetId });
+  await provider.authorizeSsh(job(), "203.0.113.1/32");
+  await assert.rejects(provider.authorizeSsh(job({ id: otherJobId, provider_resource_id: otherInstanceId }), "203.0.113.1/32"),
+    (error) => error.ingressPending === true);
+});
