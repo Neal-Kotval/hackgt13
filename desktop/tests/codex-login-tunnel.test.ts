@@ -12,6 +12,8 @@ import type { AddressInfo } from "node:net";
 import { encodeOpenSshPublicKey, generateDeviceKey } from "../electron/device-key.ts";
 import {
   CodexLoginTunnels,
+  FORWARD_REFUSED_MESSAGE,
+  LISTENER_MISSING_MESSAGE,
   openLoginTunnel,
   portInUseMessage,
   TIMEOUT_MESSAGE,
@@ -30,7 +32,7 @@ const allowedBlob = Buffer.from(deviceKey.publicKey.split(" ")[1], "base64");
 type FakeSshd = { port: number; requests: Array<{ destIP: string; destPort: number }>; clients: Set<ssh2.Connection>; close: () => Promise<void> };
 
 /** A fake environment sshd. direct-tcpip is answered by connecting to `targetPort` on this machine. */
-function startFakeSshd(targetPort: () => number, options: { refuseForward?: boolean } = {}): Promise<FakeSshd> {
+function startFakeSshd(targetPort: () => number, options: { refuseForward?: "prohibited" | "connect-failed" } = {}): Promise<FakeSshd> {
   const requests: FakeSshd["requests"] = [];
   const clients = new Set<ssh2.Connection>();
   const server = new ssh2.Server({ hostKeys: [hostKey.privateKey] }, (client) => {
@@ -42,6 +44,8 @@ function startFakeSshd(targetPort: () => number, options: { refuseForward?: bool
       else ctx.reject(["publickey"]);
     });
     client.on("ready", () => {
+      // With no tcpip listener ssh2 answers ADMINISTRATIVELY_PROHIBITED, like sshd with AllowTcpForwarding no.
+      if (options.refuseForward === "prohibited") return;
       client.on("tcpip", (accept, reject, info) => {
         requests.push({ destIP: info.destIP, destPort: info.destPort });
         if (options.refuseForward) {
@@ -203,6 +207,30 @@ describe("openLoginTunnel over a fake environment sshd", () => {
     assert.equal(await canConnect(listenPort), false, "listener closed after SSH failure");
   });
 
+  for (const [mode, message] of [
+    ["prohibited", FORWARD_REFUSED_MESSAGE],
+    ["connect-failed", LISTENER_MISSING_MESSAGE],
+  ] as const) {
+    it(`closes with a clear message when the forward fails (${mode})`, async () => {
+      const refusing = await startFakeSshd(() => 1, { refuseForward: mode });
+      const listenPort = await freePort();
+      let closedWith: string | undefined | null = null;
+      const tunnel = await openLoginTunnel({
+        connection: { ...connection(), port: refusing.port },
+        listenPort,
+        remotePort: 1455,
+        onClose: (error) => (closedWith = error),
+      });
+      await httpGet(listenPort).catch(() => "");
+      const deadline = Date.now() + 5_000;
+      while (closedWith === null && Date.now() < deadline) await sleep(20);
+      assert.equal(closedWith, message);
+      assert.equal(await canConnect(listenPort), false);
+      tunnel.close();
+      await refusing.close();
+    });
+  }
+
   it("reports the SSH connection dropping", async () => {
     const listenPort = await freePort();
     let closedWith: string | undefined | null = null;
@@ -230,9 +258,8 @@ describe("CodexLoginTunnels lifecycle", () => {
     const listeners: Array<(error?: string) => void> = [];
     let closed = false;
     const forwarder: SshForwarder = {
-      forward: async () => {
-        throw new Error("not used");
-      },
+      // Channels never open in these lifecycle tests; the Mac-side socket just waits.
+      forward: () => new Promise<never>(() => {}),
       close: () => {
         closed = true;
       },

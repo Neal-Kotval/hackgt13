@@ -30,6 +30,8 @@ export const LOGIN_TUNNEL_TIMEOUT_MS = 10 * 60_000;
 export const UNREACHABLE_MESSAGE = "Could not reach the environment over SSH. Check that it is running, then try again.";
 export const FORWARD_REFUSED_MESSAGE =
   "The environment refused to forward the sign-in callback. Use a device code instead.";
+export const LISTENER_MISSING_MESSAGE =
+  "Codex's sign-in listener on the environment is not running. Start sign-in again.";
 export const TIMEOUT_MESSAGE = "ChatGPT sign-in timed out after 10 minutes. Start it again when you're ready.";
 export const TUNNEL_CLOSED_MESSAGE = "The SSH connection for ChatGPT sign-in closed. Start sign-in again.";
 const SESSION_ID = /^[A-Za-z0-9-]{8,64}$/;
@@ -114,9 +116,9 @@ export function connectForwarder(options: PinnedConnectOptions): Promise<SshForw
           new Promise((resolveChannel, rejectChannel) => {
             client.forwardOut("127.0.0.1", sourcePort, "127.0.0.1", remotePort, (error, channel) => {
               if (error) {
-                const reason = /prohibited/i.test(error.message)
-                  ? FORWARD_REFUSED_MESSAGE
-                  : "Codex's sign-in listener on the environment is not running. Start sign-in again.";
+                // SSH_OPEN_ADMINISTRATIVELY_PROHIBITED (1): sshd has TCP forwarding disabled.
+                const prohibited = (error as { reason?: unknown }).reason === 1 || /prohibited/i.test(error.message);
+                const reason = prohibited ? FORWARD_REFUSED_MESSAGE : LISTENER_MISSING_MESSAGE;
                 rejectChannel(new LoginTunnelError(reason));
                 return;
               }
@@ -220,7 +222,11 @@ export async function openLoginTunnel(options: {
         channel.pipe(socket);
         socket.resume();
       },
-      () => socket.destroy(),
+      (error: unknown) => {
+        socket.destroy();
+        // The environment refused the forward or nothing listens there: sign-in cannot finish.
+        close(error instanceof LoginTunnelError ? error.message : TUNNEL_CLOSED_MESSAGE);
+      },
     );
   });
   server.on("error", () => close(TUNNEL_CLOSED_MESSAGE));
