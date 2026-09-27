@@ -117,16 +117,21 @@ Semantic action variants use sage (`.button.success`) for approvals, access gran
 The project summary and metadata appear only on Overview, followed by a `--space-8` gap. Subsection pages begin with their own content beneath the breadcrumb; their page title remains available to assistive technology. Section stacks own their gaps; embedded cards, setup layouts, and resource views must not add a second outer margin or padding at that boundary. Preserve each panel’s internal padding independently.
 
 The desktop renderer shares the web token source and Select primitive. Its
-Tasks, Environments, and Project chat destinations use the same flush glass
+Environments and Project chat destinations use the same flush glass
 sidebar and account-card treatment, with a focus-managed drawer on narrow
 windows. Desktop errors use danger colors; agent identity colors must not
 stand in for failed states.
 
 Project chat places its history inside the shared desktop navigation. The reading
 column and composer use `--content-narrow`, with user turns on a neutral selected
-surface and assistant turns on the canvas. Only the empty-chat greeting is centered;
+surface and assistant turns on the canvas. Empty-chat context controls are centered;
 conversation content remains left aligned. A compact composer expands with its
 text, keeps Send/Stop reachable, and exposes keyboard guidance through its accessible
 description. Routine timestamps, message counts, and repeated setup explanations
 are omitted; errors and missing configuration remain visible. History actions are
 available through the existing focus-managed navigation drawer on narrow windows.
+
+HAC-154 follows the supplied chat reference with searchable, date-grouped history,
+agent identity, Markdown/code blocks, and compact context controls. The Tasks
+destination is removed. Display branding is lowercase `alto`. Status colors use
+existing semantic roles; execution and SSH terminal choices stay distinguishable.
