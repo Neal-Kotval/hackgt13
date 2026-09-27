@@ -81,6 +81,8 @@ type Session = {
   pgid: number | null;
   stopping: boolean;
   stopVerified?: boolean;
+  /** Settles when Stop has finished killing and checking the process group. */
+  stopDone?: Promise<unknown>;
   deviceUrl: string | null;
   finished: boolean;
   stderr: string;
@@ -291,6 +293,7 @@ export class CodexSessions {
       throw error;
     }
     void session.handle.done.then(async ({ exitCode }) => {
+      if (session.stopDone) await session.stopDone;
       session.finished = true;
       const success = exitCode === 0 && LOGIN_SUCCESS.test(session.stderr);
       try {
@@ -426,6 +429,8 @@ export class CodexSessions {
 
     void session.handle.done.then(async ({ exitCode }) => {
       handleLines(splitter.end());
+      // The channel usually closes while Stop is still confirming the kill.
+      if (session.stopDone) await session.stopDone;
       session.finished = true;
       let status: CodexRunStatus;
       if (session.stopping) {
@@ -491,8 +496,17 @@ export class CodexSessions {
     return this.stopSession(session);
   }
 
-  private async stopSession(session: Session): Promise<{ stopped: boolean; verified: boolean }> {
-    if (session.finished) return { stopped: false, verified: true };
+  private stopSession(session: Session): Promise<{ stopped: boolean; verified: boolean }> {
+    if (session.finished) return Promise.resolve({ stopped: false, verified: true });
+    if (session.stopDone) {
+      return session.stopDone.then(() => ({ stopped: true, verified: session.stopVerified === true }));
+    }
+    const done = this.killSession(session);
+    session.stopDone = done.catch(() => undefined);
+    return done;
+  }
+
+  private async killSession(session: Session): Promise<{ stopped: boolean; verified: boolean }> {
     session.stopping = true;
     let verified = false;
     if (session.pgid !== null) {
