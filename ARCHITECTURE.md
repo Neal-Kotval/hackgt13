@@ -157,6 +157,22 @@ Sign-in is ChatGPT device code inside the environment. Stopping the environment
 closes its sessions. Environments created before this change cannot host a
 session. See [docs/stage3-contract.md](docs/stage3-contract.md).
 
+## Web terminal
+
+The environment detail page's Terminal tab (`components/environment-detail/terminal.tsx`,
+xterm.js) is trusted shell access, not a sandbox. The Next server
+(`lib/web-terminal.mjs`, ssh2) opens an interactive PTY as `agentcloud` in the
+workspace, with the same runner key and only the pinned host key. Next route handlers
+cannot hold WebSockets, so the transport is `POST /api/run-boxes/:id/terminal`
+(`{ projectId, cols, rows }` → `{ sessionId, expiresAt, idleTimeoutMs }`), a
+server-sent event stream at `GET …/terminal/:sessionId/stream` (base64 output,
+`event: close`, 15 s heartbeats), `POST …/:sessionId/input` and `…/resize`, and
+`DELETE …/:sessionId`. A session id is bound to the employee and job that opened it,
+allows one stream, and is re-authorized on every request. It closes when its stream
+drops, after 15 minutes without input, at the environment's time limit, or when the
+environment stops. Sessions live in the server process's memory. Opens and closes are
+recorded in `run_box_terminal_event`; terminal contents and keys are never logged.
+
 ## Agent worktrees and peer inbox
 
 New remote Codex sessions for projects with a repository prepare a verified Git
