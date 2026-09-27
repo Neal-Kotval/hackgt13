@@ -1,0 +1,80 @@
+.environment-terminal {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.environment-terminal-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+}
+.environment-terminal-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-warning);
+}
+.environment-terminal-state.connected {
+  color: var(--color-success);
+}
+.environment-terminal-state.disconnected,
+.environment-terminal-state.forbidden {
+  color: var(--color-danger);
+}
+.environment-terminal-trust {
+  flex: 1 1 var(--card-min-width);
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.environment-terminal-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.environment-terminal-message {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+.environment-terminal-message.disconnected,
+.environment-terminal-message.forbidden {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+.environment-terminal-surface {
+  min-width: 0;
+  height: 60vh;
+  min-height: var(--terminal-min-height);
+  padding: var(--space-3);
+  overflow: hidden;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+}
+.environment-terminal-surface:focus-within {
+  outline: var(--focus-width) solid var(--color-accent);
+  outline-offset: var(--focus-offset);
+}
+.environment-terminal-surface[data-state="disconnected"],
+.environment-terminal-surface[data-state="forbidden"],
+.environment-terminal-surface[data-state="not-ready"] {
+  opacity: var(--opacity-disabled);
+}
+.environment-terminal-hint {
+  font-size: var(--text-sm);
+}
+.environment-terminal-notice {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}

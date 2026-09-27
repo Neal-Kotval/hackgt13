@@ -10,7 +10,7 @@ COPY --chown=node:node components ./components
 COPY --chown=node:node lib ./lib
 COPY --chown=node:node public ./public
 COPY --chown=node:node scripts ./scripts
-COPY --chown=node:node tsconfig.json next-env.d.ts proxy.ts ./
+COPY --chown=node:node tsconfig.json next-env.d.ts next.config.ts proxy.ts ./
 RUN mkdir -p /data /app/.next && chown node:node /data /app /app/.next
 USER node
 EXPOSE 3000
