@@ -364,3 +364,38 @@ test("a pre-allocation stop waits for another worker's lease and for a recent la
     assert.equal(ambiguous.db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(ambiguous.job.id).state, "failed");
   } finally { ambiguous.db.close(); }
 });
+
+// HAC-166 (live on staging, 2026-09-27): an aws-cpu job that failed right after the
+// claim ("No registered device SSH keys…") stayed `failed` with no stop request, and the
+// single-active AWS guard then refused every new AWS environment.
+function failedBeforeLaunch() {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = ON");
+  migrateRunBoxJobs(db);
+  migrateRunBoxCleanup(db);
+  approve(db);
+  const { job } = saveRunBoxDecision(db, {
+    idempotencyKey: "failed-prelaunch-1", resourceRequestId: "resource-failed-prelaunch-1", projectId: "project-1",
+    employeeId: "employee-1", organizationId: "organization-1", projectRole: "owner",
+    provider: "aws-ec2", profileId: "aws-cpu", maxDurationMinutes: 60, repoUrl: "https://example.com/repo.git",
+  });
+  claimRunBoxJob(db, "worker");
+  transitionRunBoxJob(db, job.id, "failed", "worker", { reason: "No registered device SSH keys for this project; sign in to the desktop app first" });
+  return { db, job };
+}
+
+test("a job that failed before any launch closes once quiet and EC2 shows nothing, unblocking new AWS requests", async () => {
+  const { db, job } = failedBeforeLaunch();
+  try {
+    assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
+    // Within 15 minutes of the claim it is left alone (a create could still surface).
+    await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+    // After 15 quiet minutes with nothing tagged in EC2, it is closed.
+    db.prepare("UPDATE run_box_transition SET created_at = ? WHERE job_id = ?").run(new Date(Date.now() - 16 * 60_000).toISOString(), job.id);
+    db.prepare("UPDATE run_box_job SET lease_expires_at = ? WHERE id = ?").run(new Date(Date.now() - 60_000).toISOString(), job.id);
+    const result = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+    assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
+    assert.equal(nextAwsDecision(db).decision.outcome, "approved");
+  } finally { db.close(); }
+});
