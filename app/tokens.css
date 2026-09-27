@@ -243,6 +243,7 @@
   --modal-width: 36rem;
   --control-height: 2.5rem;
   --control-height-small: 2rem;
+  --control-height-touch: 2.75rem;
   /* Dropdowns share comfortable label separation and text insets. */
   --field-label-gap: var(--space-2);
   --select-padding-block: var(--space-1);
@@ -280,6 +281,8 @@
 @media (max-width: 768px) {
   :root {
     --page-gutter: var(--space-4);
+    --control-height: var(--control-height-touch);
+    --control-height-small: var(--control-height-touch);
   }
 }
 
