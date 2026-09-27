@@ -35,6 +35,8 @@ runuser -u agentcloud -- env NODE_OPTIONS=--max-old-space-size=1536 NEXT_TELEMET
 runuser -u agentcloud -- env NODE_OPTIONS=--max-old-space-size=1536 NEXT_TELEMETRY_DISABLED=1 /usr/bin/npm-22 run build
 runuser -u agentcloud -- /usr/bin/npm-22 prune --omit=dev --no-audit --no-fund
 
+install -d -m 0755 /usr/local/lib/agentcloud
+install -m 0644 "$RELEASE/scripts/aws-auth/runtime-secret.mjs" /usr/local/lib/agentcloud/runtime-secret.mjs
 install -m 0755 "$RELEASE/scripts/aws-auth/service-start.sh" /usr/local/bin/agentcloud-service-start
 cat > /etc/systemd/system/agentcloud.service <<EOF
 [Unit]

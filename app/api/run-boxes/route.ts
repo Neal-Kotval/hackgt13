@@ -8,6 +8,7 @@ import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../../../lib/run-box-ssh
 import { getAgentCheck, getWorkspacePath, migrateAgentCheck } from "../../../lib/agent-check.mjs";
 import { getContainerTemplate, listContainerTemplates, templateIdFromProfile } from "../../../lib/container-templates.mjs";
 import { requestAwsCpuSshAccess, trustedRequesterCidr } from "../../../lib/aws-cpu-ssh-access.mjs";
+import { defaultBackboardFile, environmentMemory, projectMemoryStatus } from "../../../lib/backboard-memory.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -230,11 +231,15 @@ export async function GET(request: Request) {
     migrateRunBoxJobs(db);
     migrateRunBoxSsh(db);
     migrateAgentCheck(db);
+    const memoryAvailable = projectMemoryStatus().enabled;
+    const memoryFile = defaultBackboardFile();
     const jobs = (listRunBoxJobs(db, projectId) as { id: string; state: string; profile_id: string | null; stop_requested_at: string | null }[])
       .map((job) => {
         const ready = job.state === "ready" && !job.stop_requested_at;
         const endpoint = ready ? getRunBoxSshEndpoint(db, job.id) : null;
         const codex = getAgentCheck(db, job.id, "codex");
+        let memoryEnabled = false;
+        try { memoryEnabled = environmentMemory(memoryFile, job.id).enabled; } catch { memoryEnabled = false; }
         return {
           ...job,
           profileId: job.profile_id,
@@ -246,6 +251,7 @@ export async function GET(request: Request) {
           // HAC-121: repo checkout path (null until ready) and agent readiness, separate from `state`.
           workspacePath: ready ? getWorkspacePath(db, job.id) : null,
           agent: { codex: { state: codex.state, version: codex.version, reason: codex.reason } },
+          memory: { enabled: memoryEnabled, available: memoryAvailable },
         };
       });
     return Response.json({ jobs, templates: listContainerTemplates(db).map((item: {

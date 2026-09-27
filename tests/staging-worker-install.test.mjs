@@ -23,6 +23,23 @@ test("the staging worker unit configures aws-cpu and the app trusts CloudFront's
   assert.ok(deploy.includes("Environment=AGENTCLOUD_TRUST_CLOUDFRONT_VIEWER=1"));
   // The app and the worker share the data directory, so Codex sessions use the runner key the worker installs.
   assert.match(readFileSync("scripts/aws-auth/service-start.sh", "utf8"), /AGENTCLOUD_DATA_DIR=\/var\/lib\/agentcloud/);
+  assert.match(deploy, /install -m 0644 "\$RELEASE\/scripts\/aws-auth\/runtime-secret.mjs"/);
+  assert.match(readFileSync("scripts/aws-auth/service-start.sh", "utf8"), /runtime-secret\.mjs/);
+});
+
+test("the hosted start script keeps a plain auth secret and reads Backboard from JSON", () => {
+  const load = (secret) => {
+    const assignments = execFileSync(process.execPath, ["scripts/aws-auth/runtime-secret.mjs"], { input: secret, encoding: "utf8" });
+    const child = execFileSync("bash", ["-c", 'eval "$1"; printf "%s\\n%s" "${#BETTER_AUTH_SECRET}" "${BACKBOARD_API_KEY-}"', "runtime", assignments], { encoding: "utf8" });
+    const [authLength, board] = child.split("\n");
+    return { authLength: Number(authLength), board };
+  };
+  const plain = "a".repeat(40);
+  assert.deepEqual(load(plain), { authLength: 40, board: "" });
+  const quoted = `${"b".repeat(31)}'`;
+  assert.deepEqual(load(JSON.stringify({ BETTER_AUTH_SECRET: quoted, BACKBOARD_API_KEY: "espr_test_key" })), { authLength: 32, board: "espr_test_key" });
+  assert.deepEqual(load(JSON.stringify({ BETTER_AUTH_SECRET: plain })), { authLength: 40, board: "" });
+  assert.throws(() => load("short"), /Staging auth secret is not initialized/);
 });
 
 test("the operator key is generated once, kept private, and only its public half is printed", () => {

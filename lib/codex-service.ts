@@ -1,4 +1,5 @@
 import { getDatabase } from './auth.mjs';
+import { augmentCodexTurn } from './backboard-memory.mjs';
 import { createCodexSessionService, CodexSessionError } from './codex-sessions.mjs';
 import { createCodexDockerRuntime, stopCodexContainer } from './codex-docker.mjs';
 import { createCodexSshRuntime } from './codex-ssh.mjs';
@@ -29,6 +30,7 @@ export function codexService() {
       targets: createRunBoxTargets(db),
       onStopRequested: onRunBoxStopRequested,
       dataDir: process.env.AGENTCLOUD_DATA_DIR || '.agentcloud',
+      projectMemory: augmentCodexTurn,
       apiKey: process.env.AGENTCLOUD_CODEX_API_KEY || '', model: process.env.AGENTCLOUD_CODEX_MODEL,
     });
   })();
