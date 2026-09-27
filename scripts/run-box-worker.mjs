@@ -10,7 +10,7 @@ import { createRunpodProvider } from "../lib/runpod-provider.mjs";
 import { verifyRunpodSsh } from "../lib/runpod-ssh-proof.mjs";
 import { migrateRunpodEvidence } from "../lib/runpod-evidence.mjs";
 import { migrateRunpodCleanup, reconcileRunpodJobs } from "../lib/runpod-reconcile.mjs";
-import { workOneRunpodJob } from "../lib/runpod-worker.mjs";
+import { reconcileRunpodSshAccess, workOneRunpodJob } from "../lib/runpod-worker.mjs";
 import { migrateSshKeys } from "../lib/ssh-keys.mjs";
 import { migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
 import { createDockerSandboxProvider } from "../lib/docker-sandbox-provider.mjs";
@@ -64,6 +64,8 @@ async function runpodCycle() {
     // Optional operator pins written by scripts/runpod-pin-host-key.mjs; they override the injected key.
     knownHostsFile: process.env.AGENTCLOUD_RUNPOD_KNOWN_HOSTS_FILE || "/var/lib/agentcloud/runpod/known_hosts",
   };
+  for (const item of await reconcileRunpodSshAccess(db, provider, connection))
+    console.log(`Reconciled Runpod SSH access ${item.jobId}: ${item.status}`);
   const result = await workOneRunpodJob(db, provider, { workerId, connection, verify: verifyRunpodSsh,
     checkCleanupGuard: runpodGuard });
   if (result) console.log(`Processed Runpod job ${result.jobId}: ${result.state}${result.retry ? " (verification pending)" : ""}`);
