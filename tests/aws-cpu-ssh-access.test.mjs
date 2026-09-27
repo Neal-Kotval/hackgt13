@@ -193,3 +193,15 @@ test("sized AWS environments: pending addresses are applied for every catalog ma
     assert.deepEqual(calls, [ids.t4]);
   } finally { db.close(); }
 });
+
+test("shared ingress contention leaves requester access pending for automatic retry", async () => {
+  const db = database();
+  try {
+    requestAwsCpuSshAccess(db, { jobId, cidr: "8.8.4.4/32", employeeId: "employee-1" });
+    const provider = { async authorizeSsh() { throw Object.assign(new Error("Ingress lease busy"), { ingressPending: true }); } };
+    assert.deepEqual((await applyAwsCpuSshAccess(db, provider, { id: jobId })).map((item) => item.status), ["pending"]);
+    assert.equal(listAwsCpuSshAccess(db, jobId)[0].status, "pending");
+    provider.authorizeSsh = async () => ({ ruleId: "sgr-0abc" });
+    assert.deepEqual((await applyAwsCpuSshAccess(db, provider, { id: jobId })).map((item) => item.status), ["applied"]);
+  } finally { db.close(); }
+});

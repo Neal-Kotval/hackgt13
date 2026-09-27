@@ -345,3 +345,19 @@ test("a new environment waits, not fails, while the previous machine is shutting
   assert.match(getAwsCpuEnvironment(db, job.id).last_wait, /previous environment is still shutting down/);
   assert.equal(getAwsCpuEnvironment(db, job.id).launch_attempted_at, null);
 });
+
+test("shared ingress contention retries provisioning without failing the environment", async () => {
+  const { db, job } = setup();
+  try {
+    const provider = fakeProvider();
+    const authorize = provider.authorizeSsh;
+    provider.authorizeSsh = async () => { throw Object.assign(new Error("Another worker holds ingress lease"), { ingressPending: true }); };
+    const first = await workOneAwsCpuJob(db, provider, { workerId: "worker-1", connection, sshSourceCidr: cidr });
+    assert.equal(first.retry, true);
+    assert.equal(first.state, "connecting");
+    assert.ok(db.prepare("SELECT lease_expires_at FROM run_box_job WHERE id = ?").get(job.id).lease_expires_at <= new Date().toISOString());
+    provider.authorizeSsh = authorize;
+    const results = await runUntilSettled(db, provider);
+    assert.equal(results.at(-1).state, "ready");
+  } finally { db.close(); }
+});
