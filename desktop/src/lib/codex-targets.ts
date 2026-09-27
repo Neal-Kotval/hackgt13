@@ -84,6 +84,11 @@ export function targetKey(target: CodexSessionTarget): string {
 
 const PROFILE_LABELS: Record<string, string> = {
   "aws-cpu": "AWS EC2 CPU",
+  "aws-cpu-medium": "AWS EC2 CPU (Medium)",
+  "aws-cpu-large": "AWS EC2 CPU (Large)",
+  "aws-gpu-t4": "AWS EC2 GPU · T4",
+  "aws-gpu-l4": "AWS EC2 GPU · L4",
+  "aws-gpu-a10g": "AWS EC2 GPU · A10G",
   "g6-l4-small": "AWS EC2 GPU",
   "local-docker-sandbox": "Local Docker sandbox",
   "runpod-rtx-4090": "Runpod RTX 4090",

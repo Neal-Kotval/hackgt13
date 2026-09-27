@@ -1,4 +1,8 @@
 # HAC-125: AWS CPU environment (profile `aws-cpu`) that the desktop app opens over SSH.
+# Sized environments: every CPU size in lib/machine-catalog.mjs (aws-cpu t3.medium,
+# aws-cpu-medium t3.xlarge, aws-cpu-large m7i.2xlarge) launches through this template; the
+# worker overrides the instance type and the root volume size per job. GPU environments use
+# the template in gpu-env.tf. The worker policy below allows exactly the catalog's types.
 #
 # Additive only: nothing here modifies the GPU launch template, the existing worker
 # policy, the budget guard, or the expiry guard. Applying this file creates no instance.
@@ -34,19 +38,27 @@ resource "aws_security_group" "cpu_ssh" {
   }
 }
 
+locals {
+  # Must equal the instance types in lib/machine-catalog.mjs, per launch template.
+  catalog_cpu_instance_types = ["t3.medium", "t3.xlarge", "m7i.2xlarge"]
+  catalog_gpu_instance_types = ["g4dn.xlarge", "g6.xlarge", "g5.xlarge"]
+  # Largest root volume the catalog offers (diskOptionsGib).
+  catalog_max_disk_gib = 100
+}
+
 resource "aws_launch_template" "cpu" {
   name          = "agentcloud-demo-cpu"
   image_id      = var.cpu_ami_id
   instance_type = "t3.medium"
+  # RunInstances uses $Default; keep it on the latest version after any change here.
+  update_default_version = true
 
   # The on-box self-destruct timer (`shutdown -P +N` in user data) then terminates the
   # instance, and delete_on_termination removes its volume.
   instance_initiated_shutdown_behavior = "terminate"
 
-  # Standard credits avoid T3 Unlimited surplus-credit charges under sustained load.
-  credit_specification {
-    cpu_credits = "standard"
-  }
+  # No credit specification here: m7i.2xlarge has no CPU credits. The worker requests
+  # standard credits in RunInstances for T3 sizes, which avoids T3 Unlimited surplus charges.
 
   iam_instance_profile {
     arn = aws_iam_instance_profile.instance.arn
@@ -87,7 +99,9 @@ resource "aws_launch_template" "cpu" {
 
 # A separate inline policy on the existing worker role, so the GPU policy is unchanged.
 # The HAC-115 budget action already denies RunInstances/StartInstances/CreateVolume on
-# this role, so it also blocks CPU launches at the monthly budget.
+# this role, so it also blocks CPU and GPU environment launches at the monthly budget.
+# It covers both sized-environment templates (CPU and gpu-env): each template may launch
+# only its catalog instance types, and every root volume is at most 100 GiB.
 resource "aws_iam_role_policy" "worker_cpu" {
   name = "ManageOnlyApprovedAgentCloudDemoCPU"
   role = aws_iam_role.worker.id
@@ -101,29 +115,50 @@ resource "aws_iam_role_policy" "worker_cpu" {
         Resource = "*"
       },
       {
-        Sid      = "LaunchOnlyT3MediumThroughPinnedCpuTemplate"
+        Sid      = "LaunchOnlyCatalogCpuTypesThroughPinnedCpuTemplate"
         Effect   = "Allow"
         Action   = "ec2:RunInstances"
         Resource = "arn:aws:ec2:us-east-1:${var.account_id}:instance/*"
         Condition = { StringEquals = {
           "ec2:LaunchTemplate" = aws_launch_template.cpu.arn
-          "ec2:InstanceType"   = "t3.medium"
+          "ec2:InstanceType"   = local.catalog_cpu_instance_types
         } }
       },
       {
-        Sid    = "UsePinnedCpuTemplateAndLaunchResources"
+        Sid      = "LaunchOnlyCatalogGpuTypesThroughPinnedGpuEnvTemplate"
+        Effect   = "Allow"
+        Action   = "ec2:RunInstances"
+        Resource = "arn:aws:ec2:us-east-1:${var.account_id}:instance/*"
+        Condition = { StringEquals = {
+          "ec2:LaunchTemplate" = aws_launch_template.gpu_env.arn
+          "ec2:InstanceType"   = local.catalog_gpu_instance_types
+        } }
+      },
+      {
+        Sid    = "UsePinnedEnvironmentTemplatesAndLaunchResources"
         Effect = "Allow"
         Action = "ec2:RunInstances"
         Resource = [
           "arn:aws:ec2:us-east-1::image/${var.cpu_ami_id}",
-          "arn:aws:ec2:us-east-1:${var.account_id}:volume/*",
+          "arn:aws:ec2:us-east-1::image/${var.gpu_env_ami_id}",
           "arn:aws:ec2:us-east-1:${var.account_id}:network-interface/*",
           "arn:aws:ec2:us-east-1:${var.account_id}:subnet/${var.gpu_subnet_id}",
           aws_security_group.instance.arn,
           aws_security_group.cpu_ssh.arn,
-          aws_launch_template.cpu.arn
+          aws_launch_template.cpu.arn,
+          aws_launch_template.gpu_env.arn
         ]
-        Condition = { StringEquals = { "ec2:LaunchTemplate" = aws_launch_template.cpu.arn } }
+        Condition = { StringEquals = { "ec2:LaunchTemplate" = [aws_launch_template.cpu.arn, aws_launch_template.gpu_env.arn] } }
+      },
+      {
+        Sid      = "CreateRootVolumesUpTo100GiBThroughEnvironmentTemplates"
+        Effect   = "Allow"
+        Action   = "ec2:RunInstances"
+        Resource = "arn:aws:ec2:us-east-1:${var.account_id}:volume/*"
+        Condition = {
+          StringEquals          = { "ec2:LaunchTemplate" = [aws_launch_template.cpu.arn, aws_launch_template.gpu_env.arn] }
+          NumericLessThanEquals = { "ec2:VolumeSize" = local.catalog_max_disk_gib }
+        }
       },
       {
         Sid    = "ManagePerJobSshRulesOnCpuGroupOnly"
