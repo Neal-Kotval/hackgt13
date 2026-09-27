@@ -493,3 +493,62 @@ test("a profile-less g6 GPU job that failed after its claim keeps the quiet wind
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
   } finally { db.close(); }
 });
+
+// Fast stop: once AWS accepts TerminateInstances the machine is shutting down and no
+// longer billed for compute. Release proof (terminated + EBS deleted) can take minutes for
+// GPU machines; a new AWS environment may be requested meanwhile (its launch waits for the
+// old instance to disappear, see the worker test). A stop that AWS has not accepted yet
+// still blocks.
+test("an accepted termination unblocks a new AWS request while release proof is pending", async () => {
+  const { db, job } = setup();
+  try {
+    requestStop(db, job.id, "owner");
+    transitionRunBoxJob(db, job.id, "stopping", "worker", { reason: "Stop requested" });
+    assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
+    const shuttingDown = { ...instance(job.id), State: { Name: "running" } };
+    const service = provider([shuttingDown]);
+    service.terminateInstance = async (id) => { service.calls.push(["terminate", id]); return { state: "shutting-down", instanceId: id }; };
+    const result = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
+    assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "retry"]]);
+    const row = db.prepare("SELECT state, termination_requested_at FROM run_box_job WHERE id = ?").get(job.id);
+    assert.equal(row.state, "stopping");
+    assert.ok(row.termination_requested_at);
+    assert.equal(nextAwsDecision(db).decision.outcome, "approved");
+  } finally { db.close(); }
+});
+
+test("a failed termination call does not unblock new AWS requests", async () => {
+  const { db, job } = setup();
+  try {
+    requestStop(db, job.id, "owner");
+    await reconcileAwsRunBoxes(db, provider([instance(job.id)], { failTermination: true }), { workerId: "worker", requestStop });
+    assert.equal(db.prepare("SELECT termination_requested_at FROM run_box_job WHERE id = ?").get(job.id).termination_requested_at, null);
+    assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
+  } finally { db.close(); }
+});
+
+// Fast stop: the reconciler asks for termination without blocking (it used to poll for up
+// to 5 minutes inside the worker loop). Normal in-progress states keep the job `stopping`
+// with a visible pending note; only real problems move it to `failed`.
+test("termination in progress keeps the job stopping, then closes once terminated and EBS is gone", async () => {
+  const { db, job } = setup();
+  try {
+    requestStop(db, job.id, "owner");
+    const service = provider([instance(job.id)]);
+    const states = ["shutting-down", "terminated", "terminated"];
+    const volumeStates = [["deleting"], ["deleted"]];
+    service.terminateInstance = async (id, options) => { service.calls.push(["terminate", id, options]); return { state: states.shift(), instanceId: id }; };
+    service.inspectVolumes = async (ids) => ids.map((id) => ({ id, state: volumeStates.shift()[0] }));
+    const first = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
+    assert.equal(first[0].status, "retry");
+    assert.deepEqual(service.calls[0], ["terminate", "i-abc123", { wait: false }]);
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopping");
+    assert.match(db.prepare("SELECT last_error FROM run_box_cleanup WHERE instance_id = 'i-abc123'").get().last_error, /shutting down/);
+    const second = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
+    assert.equal(second[0].status, "retry");
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopping");
+    const third = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
+    assert.equal(third[0].status, "stopped");
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
+  } finally { db.close(); }
+});

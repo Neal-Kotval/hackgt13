@@ -166,3 +166,23 @@ test("scopedWorkerAws uses an existing worker-role session, assumes from staging
   await assert.rejects(scopedWorkerAws({ aws: cli("arn:aws:iam::662660921850:root"), assume: rootAssume }), /root credentials are rejected/);
   await assert.rejects(scopedWorkerAws({ aws: async () => ({ Account: "111111111111", Arn: "x" }), assume }), /another account/);
 });
+
+test("terminateInstance with wait:false requests termination and returns the current state at once", async () => {
+  const operations = [];
+  const aws = mockAws((service, operation) => {
+    operations.push(operation);
+    if (operation === "describe-instances") return { Reservations: [{ Instances: [{ InstanceId: instanceId,
+      State: { Name: operations.includes("terminate-instances") ? "shutting-down" : "running" },
+      Tags: [{ Key: "Project", Value: "AgentCloudDemo" }, { Key: "AgentCloudAutoExpire", Value: "true" }],
+      BlockDeviceMappings: [{ Ebs: { VolumeId: "vol-0123456789abcdef0" } }] }] }] };
+    if (operation === "terminate-instances") return {};
+    throw new Error(`Unexpected ${operation}`);
+  });
+  let slept = 0;
+  const provider = createAwsGpuProvider({ aws, subnetId, sleep: async () => { slept++; } });
+  const result = await provider.terminateInstance(instanceId, { wait: false });
+  assert.equal(result.state, "shutting-down");
+  assert.deepEqual(result.volumeIds, ["vol-0123456789abcdef0"]);
+  assert.equal(slept, 0);
+  assert.equal(operations.filter((operation) => operation === "terminate-instances").length, 1);
+});
