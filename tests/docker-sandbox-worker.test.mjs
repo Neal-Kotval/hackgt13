@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { claimRunBoxJob, migrateRunBoxJobs, requestRunBoxStop, saveRunBoxDecision } from "../lib/run-box-jobs.mjs";
-import { migrateSshKeys, registerSshKey, revokeSshKey } from "../lib/ssh-keys.mjs";
+import { migrateSshKeys, registerSshKey, revokeSshKey, sshFingerprint } from "../lib/ssh-keys.mjs";
 import { getRunBoxSshEndpoint, migrateRunBoxSsh } from "../lib/run-box-ssh.mjs";
 import { registerContainerTemplate } from "../lib/container-templates.mjs";
 import { NO_DEVICE_KEYS, reconcileDockerSandboxes, verifyDockerSandboxSsh,
@@ -227,6 +227,24 @@ test("zero registered device keys fails the job with a clear reason and creates 
   assert.equal(provider.calls.filter((call) => call[0] === "create").length, 0);
   // A failed sandbox holds nothing, so the owner may start another.
   assert.equal(decide(db, { idempotencyKey: "idem-5", resourceRequestId: "request-5" }).job.state, "queued");
+  db.close();
+});
+
+// HAC-166: website-only owners have no desktop device key; the install's Codex runner
+// key alone lets the environment launch (Codex runs over it from the server).
+test("zero device keys but a Codex runner key still launches with the runner key installed", async () => {
+  const { db, job } = setup({ keys: 0 });
+  const runnerPublicKey = devicePublicKey();
+  const runnerKey = { publicKey: runnerPublicKey, fingerprint: sshFingerprint(runnerPublicKey) };
+  const provider = fakeProvider();
+  const result = await workOneDockerSandboxJob(db, provider, { workerId: "docker-worker", verify: passingVerify(), runnerKey });
+  assert.equal(result.state, "ready");
+  const created = provider.calls.find((call) => call[0] === "create")[1];
+  assert.equal(created.authorizedKeys[0], runnerPublicKey.split(" ").slice(0, 2).join(" "));
+  assert.equal(created.authorizedKeys.length, 2, "runner key plus the one-time verifier key");
+  const endpoint = getRunBoxSshEndpoint(db, job.id);
+  assert.deepEqual(endpoint.authorizedFingerprints, []);
+  assert.equal(endpoint.serverFingerprint, runnerKey.fingerprint);
   db.close();
 });
 

@@ -81,7 +81,7 @@ describe("TerminalSessions", () => {
     const h = harness(403, { error: "nope", code: "no_authorized_key" });
     await assert.rejects(
       h.sessions.open(1, () => {}, "session-0003", "job1", { cols: 80, rows: 24 }),
-      /registered after the environment was created/,
+      /created on the web before this device registered its key/,
     );
     assert.equal(h.opened.length, 0);
     assert.equal(h.sessions.size, 0);

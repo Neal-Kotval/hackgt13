@@ -342,11 +342,11 @@ export function Environments({ project }: { project: Project }) {
     }
   }
 
-  async function copy(command: string) {
+  async function copy(text: string, message = "SSH command copied.") {
     setActionError("");
     try {
-      await navigator.clipboard.writeText(command);
-      setNotice("SSH command copied.");
+      await navigator.clipboard.writeText(text);
+      setNotice(message);
     } catch {
       setActionError("Clipboard unavailable. Select the command to copy it.");
     }
@@ -529,7 +529,7 @@ export function Environments({ project }: { project: Project }) {
                 onForceConfirm={() => setConfirmingForce(job.id)}
                 onForceCancel={() => setConfirmingForce("")}
                 onForceStop={() => void forceStop(job)}
-                onCopy={(command) => void copy(command)}
+                onCopy={(text, message) => void copy(text, message)}
               />
             ))}
           </ul>
@@ -572,7 +572,7 @@ function EnvironmentCard({
   onForceConfirm: () => void;
   onForceCancel: () => void;
   onForceStop: () => void;
-  onCopy: (command: string) => void;
+  onCopy: (text: string, message?: string) => void;
 }) {
   const copy = stateCopy[job.state] ?? stateCopy.failed;
   const confirmButton = useRef<HTMLButtonElement>(null);
@@ -624,6 +624,20 @@ function EnvironmentCard({
       </div>
       <p className="resource-note">{stopDetail}</p>
       <dl className="resource-facts resource-facts--compact">
+        <div>
+          <dt>Environment ID</dt>
+          <dd className="environment-id">
+            <code title={job.id}>{job.id.slice(0, 8)}</code>
+            <button
+              className="button ghost environment-id-copy"
+              type="button"
+              aria-label={`Copy full environment ID ${job.id}`}
+              onClick={() => onCopy(job.id, "Environment ID copied.")}
+            >
+              <Copy aria-hidden="true" /> Copy full ID
+            </button>
+          </dd>
+        </div>
         <div>
           <dt>Provider</dt>
           <dd>
