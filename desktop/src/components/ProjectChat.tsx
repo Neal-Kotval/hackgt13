@@ -534,7 +534,7 @@ export function ProjectChat({
     error: "Needs attention",
     stopped: "Stopped",
   };
-  const environmentsUrl = projectId
+  const settingsUrl = projectId
     ? `${webBaseUrl}/projects/${encodeURIComponent(projectId)}/settings#agent-setup`
     : webBaseUrl;
   const messages = session ? (snapshot?.events ?? []) : [];
@@ -660,7 +660,7 @@ export function ProjectChat({
       selectedId={sessionId}
       busy={busy || attaching || !currentTarget || !targetAgents.some((item) => item.status === "ready" || item.status === "running")}
       loading={loading}
-      setupUrl={environmentsUrl}
+      setupUrl={settingsUrl}
       onSelect={(id) => {
         chooseAgent(id);
         close();
@@ -764,14 +764,14 @@ export function ProjectChat({
           {(session?.status === "auth_required" || setupRequired[currentTarget] || (currentTarget && !selectedSession)) && (
             <section className="codex-sign-in" aria-labelledby="environment-setup-title">
               <h2 id="environment-setup-title">Finish setup on the website</h2>
-              <p>Connect Codex and sign in on the environment’s web page. Return here to create chats when it is ready.</p>
-              <a className="button primary" href={environmentsUrl} target="_blank" rel="noreferrer">Add Codex in Settings</a>
+              <p>Add Codex from project Settings, then sign in with ChatGPT in your browser. Return here to create chats when it is ready.</p>
+              <a className="button primary" href={settingsUrl} target="_blank" rel="noreferrer">Add Codex in Settings</a>
             </section>
           )}
           {!sessions.length && !loading && !pendingEnvironment && (
             <a
               className="button primary"
-              href={environmentsUrl}
+              href={settingsUrl}
               target="_blank"
               rel="noreferrer"
             >

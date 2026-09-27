@@ -57,6 +57,7 @@ export default function App() {
       setSection("local-chat");
       return;
     }
+    setLoginTarget(null);
     if (
       destination === "project-chat-session" ||
       destination === "project-chat-environment-codex"
@@ -190,7 +191,7 @@ export default function App() {
       webBaseUrl={auth.baseUrl}
       deepLink={codexLink}
       onDeepLinkHandled={clearCodexLink}
-      onSelectConversation={() => setChatRunBox(null)}
+      onSelectConversation={() => { setChatRunBox(null); setLoginTarget(null); }}
       onOpenTerminal={(projectId, runBoxId) => {
         setChatRunBox({ projectId, runBoxId });
         setSection("local-chat");
@@ -204,6 +205,7 @@ export default function App() {
           busy={chat.busy || signingOut}
           renderHistory={section === "local-chat" ? chat.sidebar : undefined}
           onSectionChange={(next) => {
+            setLoginTarget(null);
             setSection(next);
             if (next === "environments") setEnvironmentsMounted(true);
           }}

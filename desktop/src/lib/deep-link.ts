@@ -4,7 +4,7 @@ export type DeepLinkTarget = {
   codexSessionId?: string;
   /** Run-box job id. Opens the Project chat SSH terminal; never carries host/port. */
   runBoxId?: string;
-  /** With runBoxId: `codex` targets Project chat at that environment; `terminal` (default) attaches SSH. */
+  /** With runBoxId: `codex` targets Project chat at that environment; `terminal` attaches SSH; `codex-login` signs in a prepared session. */
   panel?: DeepLinkPanel;
   /** Legacy task run-box link; opens its SSH terminal now that Tasks is removed. */
   taskRunBoxId?: string;

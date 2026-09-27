@@ -8,6 +8,9 @@ export function CodexBrowserLogin({ target, onComplete, onClose }: { target: Log
   const [closing, setClosing] = useState(false);
   const flow = useRef<ReturnType<typeof beginBrowserLogin> | null>(null);
   useEffect(() => {
+    setMessage("Checking your environment…");
+    setError(null);
+    setClosing(false);
     const operation = beginBrowserLogin(desktopApi(), target, setMessage, onComplete, setError);
     flow.current = operation;
     return () => { void operation.cancel(); };
