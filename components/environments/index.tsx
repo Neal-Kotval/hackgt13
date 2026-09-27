@@ -18,6 +18,7 @@ import "../resources/resources.css";
 import "./environments.css";
 import Link from "next/link";
 import { EnvironmentMemoryChip } from "@/components/environment-detail/card-summary";
+import { progressInfo } from "@/components/environment-detail/types";
 import { MachinePicker, initialPickerValue, pickerRequest, type PickerValue } from "./machine-picker";
 import {
   environmentLabel,
@@ -598,20 +599,24 @@ function EnvironmentCard({
   const canStop = role === "owner" && job.state !== "stopped" && !job.stop_requested_at;
   const ready = job.state === "ready" && !job.stop_requested_at;
   // A failed or stuck-stopping job still holds the provider's single active slot.
-  const canForceStop = role === "owner" && job.state !== "stopped" && !job.force_stop_requested_at &&
+  // Nothing left to force once AWS is already terminating the machine.
+  const canForceStop = role === "owner" && job.state !== "stopped" && !job.force_stop_requested_at && !job.termination_requested_at &&
     (Boolean(job.stop_requested_at) || job.state === "failed" || job.state === "stopping");
   const terminationRequested = Boolean(job.force_stop_requested_at) && job.state !== "stopped";
   const chatUrl = ready && serverUrl
     ? `agentcloud://open?${new URLSearchParams({ projectId, runBoxId: job.id, panel: "codex", serverUrl })}`
     : "";
   const stopped = job.state === "stopped";
+  const progress = progressInfo(job);
   const stopDetail =
     stopped && !job.provider_resource_id
       ? "Stopped before a machine was allocated."
-      : terminationRequested
-        ? "Termination requested. The worker must confirm the provider released this environment before it stops blocking new ones."
-        : copy.detail;
-  const phase = terminationRequested ? "Termination requested" : copy.phase;
+      : progress
+        ? progress.detail
+        : terminationRequested
+          ? "Termination requested. The worker must confirm the provider released this environment before it stops blocking new ones."
+          : copy.detail;
+  const phase = progress ? progress.phase : terminationRequested ? "Termination requested" : copy.phase;
 
   return (
     <li id={`rb-${job.id}`} className="resource-request-card resource-panel environment-card" aria-labelledby={titleId}>

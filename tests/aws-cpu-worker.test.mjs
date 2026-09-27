@@ -293,3 +293,55 @@ test("approval must still match the job's machine before launch", async () => {
   await assert.rejects(runUntilSettled(db, provider), /Approval, owner membership, profile, or deadline invalid/);
   assert.ok(!provider.calls.some((call) => call[0] === "allocate"));
 });
+
+// Fast stop: the environment row is written before preflight, so its existence alone must
+// not imply RunInstances was called. The worker marks the launch only when the provider is
+// about to call RunInstances; a preflight failure then closes on the next cycle instead
+// of waiting the 15-minute quiet window (live: a missing GPU template blocked AWS for 15 min).
+async function stopAndReconcile(db, job, provider) {
+  requestRunBoxStop(db, job.id, "employee-1");
+  const deferred = await workOneAwsCpuJob(db, provider, { workerId: "worker-1", connection, sshSourceCidr: cidr });
+  assert.equal(deferred.state, "stopping");
+  const inventory = { async listManagedInstances() { return []; }, async listManagedVolumes() { return []; } };
+  return reconcileAwsRunBoxes(db, inventory, { workerId: "worker-1", requestStop: requestRunBoxStop });
+}
+
+test("a preflight failure before RunInstances closes on the next cycle", async () => {
+  const { db, job } = setup();
+  migrateRunBoxCleanup(db);
+  const provider = fakeProvider();
+  provider.allocate = async () => { throw new Error("AWS ec2:describe-launch-templates InvalidLaunchTemplateName.NotFoundException"); };
+  await assert.rejects(workOneAwsCpuJob(db, provider, { workerId: "worker-1", connection, sshSourceCidr: cidr }));
+  assert.ok(getAwsCpuEnvironment(db, job.id), "the environment row is recorded before preflight");
+  const result = await stopAndReconcile(db, job, provider);
+  assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
+});
+
+test("a launch that reached RunInstances keeps the quiet window", async () => {
+  const { db, job } = setup();
+  migrateRunBoxCleanup(db);
+  const provider = fakeProvider();
+  provider.allocate = async (_job, options) => { await options.beforeRunInstances(); throw new Error("connection reset during launch"); };
+  await assert.rejects(workOneAwsCpuJob(db, provider, { workerId: "worker-1", connection, sshSourceCidr: cidr }));
+  assert.ok(getAwsCpuEnvironment(db, job.id).launch_attempted_at);
+  const result = await stopAndReconcile(db, job, provider);
+  assert.ok(!result.some((item) => item.status === "stopped"));
+  assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopping");
+});
+
+test("a new environment waits, not fails, while the previous machine is shutting down", async () => {
+  const { db, job } = setup();
+  const provider = fakeProvider();
+  provider.allocate = async () => {
+    const error = new Error("Another demo instance is shutting down");
+    error.previousShuttingDown = true;
+    throw error;
+  };
+  const result = await workOneAwsCpuJob(db, provider, { workerId: "worker-1", connection, sshSourceCidr: cidr });
+  assert.equal(result.retry, true);
+  const row = db.prepare("SELECT state, lease_expires_at FROM run_box_job WHERE id = ?").get(job.id);
+  assert.equal(row.state, "allocating");
+  assert.ok(!row.lease_expires_at || Date.parse(row.lease_expires_at) <= Date.now(), "lease released for the next cycle");
+  assert.match(getAwsCpuEnvironment(db, job.id).last_wait, /previous environment is still shutting down/);
+  assert.equal(getAwsCpuEnvironment(db, job.id).launch_attempted_at, null);
+});
