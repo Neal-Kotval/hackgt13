@@ -68,3 +68,28 @@ test('invalid preferences cannot change the saved cap', () => {
     assert.equal(getEnvironmentSettings(db, 'alice').maxActiveEnvironments, 3);
   } finally { db.close(); }
 });
+
+test('only accepted AWS termination frees capacity before cleanup finishes', () => {
+  const db = setup();
+  try {
+    db.exec("CREATE TABLE organization (id TEXT PRIMARY KEY); INSERT INTO organization VALUES ('org')");
+    setAwsApproval(db, { organizationId: 'org', approved: true, maxRunMinutes: 120, monthlyMinutes: 1200, actorId: 'admin' });
+    const { job } = create(db, { provider: 'aws-ec2' });
+    const now = new Date().toISOString();
+    // A user stop request is not provider acceptance.
+    db.prepare("UPDATE run_box_job SET state = 'stopping', stop_requested_at = ? WHERE id = ?").run(now, job.id);
+    assert.equal(getEnvironmentSettings(db, 'alice').activeEnvironments, 1);
+    assert.throws(() => create(db), /cloud environment limit/);
+    db.prepare('UPDATE run_box_job SET termination_requested_at = ? WHERE id = ?').run(now, job.id);
+    assert.equal(getEnvironmentSettings(db, 'alice').activeEnvironments, 0);
+    // Acceptance on a different state must not bypass the cap.
+    db.prepare("UPDATE run_box_job SET state = 'failed' WHERE id = ?").run(job.id);
+    assert.equal(getEnvironmentSettings(db, 'alice').activeEnvironments, 1);
+    db.prepare("UPDATE run_box_job SET state = 'stopping' WHERE id = ?").run(job.id);
+    const runpod = create(db).job;
+    // Runpod has no accepted-termination contract; even a stray timestamp cannot free it.
+    db.prepare("UPDATE run_box_job SET state = 'stopping', termination_requested_at = ? WHERE id = ?").run(now, runpod.id);
+    assert.equal(getEnvironmentSettings(db, 'alice').activeEnvironments, 1);
+    assert.throws(() => create(db), /cloud environment limit/);
+  } finally { db.close(); }
+});
