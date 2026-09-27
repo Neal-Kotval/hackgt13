@@ -6,6 +6,7 @@ import { EnvironmentsPanel } from "./components/EnvironmentsPanel";
 import { ProjectChatTerminal } from "./components/ProjectChatTerminal";
 import { ProjectChat } from "./components/ProjectChat";
 import { desktopApi } from "./lib/desktop-api";
+import { deepLinkServerError } from "./lib/deep-link";
 import type { AuthStatus, DeepLinkParseResult } from "./lib/types";
 
 export default function App() {
@@ -22,7 +23,22 @@ export default function App() {
   const clearCodexLink = useCallback(() => setCodexLink(null), []);
   const clearTaskLink = useCallback(() => setTaskLink(null), []);
   const clearEnvironmentLink = useCallback(() => setEnvironmentLink(null), []);
-  const routeDeepLink = useCallback((result: DeepLinkParseResult) => {
+  const routeDeepLink = useCallback(async (result: DeepLinkParseResult) => {
+    if (result.ok) {
+      try {
+        const status = await desktopApi().authStatus();
+        const mismatch = deepLinkServerError(result.target, status.baseUrl);
+        if (mismatch) {
+          setSection("tasks");
+          setTaskLink({ok:false,error:mismatch});
+          return;
+        }
+      } catch {
+        setSection("tasks");
+        setTaskLink({ok:false,error:"Could not check the AgentCloud server for this link. Retry after desktop connects."});
+        return;
+      }
+    }
     if (result.ok && result.target.codexSessionId) {setChatRunBox(null);setCodexLink(result);setSection("local-chat");}
     else if (result.ok && result.target.runBoxId) {setCodexLink(result);setChatRunBox({projectId:result.target.projectId,runBoxId:result.target.runBoxId});setSection("local-chat");}
     else {setTaskLink(result);setSection("tasks");}

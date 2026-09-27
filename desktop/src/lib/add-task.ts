@@ -4,6 +4,7 @@ export type AddTaskFormInput = {
   instructions: string;
   agentId: string;
   environmentId?: string;
+  runBoxId?: string;
 };
 
 export type AddTaskPayload = {
@@ -13,6 +14,7 @@ export type AddTaskPayload = {
   owner: string;
   instructions: string;
   environmentId?: string;
+  runBoxId?: string;
 };
 
 /**
@@ -24,6 +26,8 @@ export function buildAddTaskPayload(input: AddTaskFormInput): AddTaskPayload {
   const instructions = input.instructions.trim();
   const owner = input.agentId.trim();
   const environmentId = input.environmentId?.trim() || undefined;
+  const runBoxId = input.runBoxId?.trim() || undefined;
+  if (environmentId && runBoxId) throw new Error("Choose either a run box or a catalog environment.");
   if (!input.projectId.trim()) {
     throw new Error("Choose a project before creating a task.");
   }
@@ -49,5 +53,6 @@ export function buildAddTaskPayload(input: AddTaskFormInput): AddTaskPayload {
     owner,
     instructions,
     ...(environmentId ? { environmentId } : {}),
+    ...(runBoxId ? { runBoxId } : {}),
   };
 }
