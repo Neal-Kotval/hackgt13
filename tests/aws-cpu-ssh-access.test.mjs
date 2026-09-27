@@ -156,7 +156,8 @@ test("HAC-166: the first-version table is migrated to accept desktop requests", 
       CREATE UNIQUE INDEX aws_cpu_ssh_access_active ON aws_cpu_ssh_access(job_id, cidr) WHERE status IN ('pending', 'applied');`);
     requestAwsCpuSshAccess(db, { jobId, cidr: "8.8.8.8/32", employeeId: "employee-1" });
     requestAwsCpuSshAccess(db, { jobId, cidr: "8.8.4.4/32", employeeId: "employee-1", source: "desktop" });
-    assert.deepEqual(listAwsCpuSshAccess(db, jobId).map((row) => row.source), ["create", "desktop"]);
+    // Both rows can share a millisecond timestamp, so the list order is not part of this contract.
+    assert.deepEqual(listAwsCpuSshAccess(db, jobId).map((row) => row.source).sort(), ["create", "desktop"]);
     assert.throws(() => db.prepare(`INSERT INTO aws_cpu_ssh_access (id, job_id, cidr, source, requested_by, status, created_at,
       last_requested_at, updated_at) VALUES ('x', ?, '8.8.8.8/32', 'desktop', 'e', 'pending', 'a', 'a', 'a')`).run(jobId), /UNIQUE/);
   } finally { db.close(); }
