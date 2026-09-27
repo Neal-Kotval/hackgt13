@@ -30,7 +30,10 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   // Isolated from any live worker on this Docker host.
-  const provider = createDockerSandboxProvider({ installId: sandboxInstallId(directory) });
+  // A unique tag forces this test to build the current Dockerfile even when a
+  // developer already has an older agentcloud-sandbox:dev image locally.
+  const image = `agentcloud-sandbox:test-${sandboxInstallId(directory)}`;
+  const provider = createDockerSandboxProvider({ installId: sandboxInstallId(directory), image });
   let jobId;
   try {
     db.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, emailVerified INTEGER NOT NULL);
@@ -74,6 +77,19 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     assert.deepEqual(lines.slice(3, -1), [device.publicKey]);
     assert.equal(lines.at(-1), "no-gpu");
 
+    const tools = await runSandboxSsh({ ...connection, keyFile: device.keyFile },
+      "node --version; npm --version; git --version; codex --version; " +
+      "command -v python3; command -v rg; command -v jq\n");
+    assert.equal(tools.code, 0, tools.stderr);
+    const versions = tools.stdout.trim().split("\n");
+    assert.match(versions[0], /^v22\./);
+    assert.match(versions[1], /^\d+\./);
+    assert.match(versions[2], /^git version /);
+    assert.equal(versions[3], "codex-cli 0.157.1");
+    assert.match(versions[4], /\/python3$/);
+    assert.match(versions[5], /\/rg$/);
+    assert.match(versions[6], /\/jq$/);
+
     // The private host key is neither in the session environment nor readable from sshd's.
     const secrets = await runSandboxSsh({ ...connection, keyFile: device.keyFile },
       "env | grep -c AGENTCLOUD_ || true; cat /proc/1/environ >/dev/null 2>&1 && echo readable || echo unreadable; " +
@@ -108,6 +124,8 @@ test("docker-local sandbox: create, ready, device SSH, denied outsider, stop", {
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopped");
   } finally {
     if (jobId) await provider.remove(jobId).catch(() => {});
+    try { execFileSync("docker", ["image", "rm", image], { stdio: "ignore", timeout: 30_000 }); }
+    catch { /* A failed build leaves no image to remove. */ }
     db.close();
     rmSync(directory, { recursive: true, force: true });
   }
