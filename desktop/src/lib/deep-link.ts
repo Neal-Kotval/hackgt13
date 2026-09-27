@@ -113,9 +113,9 @@ export type DeepLinkDestination =
 export function deepLinkDestination(target: DeepLinkTarget): DeepLinkDestination {
   if (target.codexSessionId) return "project-chat-session";
   if (target.runBoxId) {
-    return target.panel === "codex"
-      ? "project-chat-environment-codex"
-      : "project-chat-environment-terminal";
+    return target.panel === "terminal"
+      ? "project-chat-environment-terminal"
+      : "project-chat-environment-codex";
   }
   return "tasks";
 }

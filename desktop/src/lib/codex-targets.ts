@@ -18,6 +18,8 @@ export type CodexSession = {
   agentId: string;
   status: CodexSessionStatus;
   error: string | null;
+  title?: string;
+  isSetupSession?: boolean;
   target: CodexSessionTarget;
   createdAt?: string;
   updatedAt?: string;
@@ -63,6 +65,8 @@ export function parseCodexSession(value: unknown): CodexSession | null {
     status,
     error: typeof record.error === "string" ? record.error : null,
     target: parseSessionTarget(record.target),
+    title: text(record.title) ?? undefined,
+    isSetupSession: typeof record.isSetupSession === "boolean" ? record.isSetupSession : undefined,
     ...(text(record.createdAt) ? { createdAt: text(record.createdAt)! } : {}),
     ...(text(record.updatedAt) ? { updatedAt: text(record.updatedAt)! } : {}),
   };
