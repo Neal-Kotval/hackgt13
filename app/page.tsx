@@ -5,24 +5,24 @@ import "./marketing.css";
 
 export const metadata: Metadata = {
   title: "alto — let agents soar",
-  description: "A shared workspace for engineering teams building with agents, with persistent agent computers on the way.",
+  description: "Give coding agents a place to work on approved infrastructure. Direct the project, disconnect, and return to the same work.",
 };
 
 const strengths = [
   {
     icon: <HardDrives aria-hidden="true" />,
-    title: "A place for the work",
-    text: "Keep project context, tasks, and environment details together so every agent starts from the same ground truth.",
+    title: "A real place to work",
+    text: "Select a verified environment for your project. Give the agent files, tools, and compute where the work actually runs.",
   },
   {
     icon: <UsersThree aria-hidden="true" />,
-    title: "A team you can direct",
-    text: "Give agents clear ownership, see who is connected, and pass work forward with structured handoffs.",
+    title: "A project you can direct",
+    text: "Keep instructions, ownership, activity, and handoffs connected as more agents contribute.",
   },
   {
     icon: <GitBranch aria-hidden="true" />,
-    title: "A trail you can follow",
-    text: "Follow attributed activity and shared outputs without piecing together what happened across separate tools.",
+    title: "Context you can return to",
+    text: "Reopen the project and its conversation. Follow the recorded work instead of rebuilding context from scattered sessions.",
   },
 ];
 
@@ -43,7 +43,7 @@ export default function MarketingPage() {
       <div className="marketing-hero-copy">
         <p className="marketing-kicker">For engineering teams building with agents</p>
         <h1 id="hero-title">Let agents<br />soar<span>.</span></h1>
-        <p className="marketing-intro">A computer for every agent. One shared workspace for the team. alto is building the foundation for agents to work on real projects together, with clear ownership and handoffs.</p>
+        <p className="marketing-intro">Give coding agents a place to work on infrastructure your team approves. Direct the project from your laptop, disconnect, and come back to the same work.</p>
         <div className="marketing-actions">
           <Link className="marketing-button marketing-button-primary" href="/sign-up">Create an account <ArrowUpRight aria-hidden="true" /></Link>
           <a className="marketing-button marketing-button-secondary" href="#platform">Explore the platform <ArrowRight aria-hidden="true" /></a>
@@ -52,31 +52,31 @@ export default function MarketingPage() {
     </section>
 
     <section className="marketing-showcase" id="platform" aria-labelledby="showcase-title">
-      <div className="marketing-showcase-copy"><p className="marketing-kicker">The alto workspace</p><h2 id="showcase-title">The work moves together.</h2><p>Coordinate the project, direct the agents, and keep every handoff connected. Persistent remote run environments are the next step.</p></div>
-      <div className="marketing-hero-art" aria-label="Diagram showing a person directing two agents toward shared project work" role="img">
-        <div className="marketing-art-top"><span>One shared project</span><span>alto / workspace</span></div>
+      <div className="marketing-showcase-copy"><p className="marketing-kicker">The alto workspace</p><h2 id="showcase-title">Let the work outlast your laptop.</h2><p>Your laptop is the control surface. The agent works in a selected environment, with project context and resources your team has approved.</p></div>
+      <div className="marketing-hero-art" aria-label="Concept diagram showing a laptop directing an agent in a project environment, with approved resources and a place to return to the work" role="img">
+        <div className="marketing-art-top"><span>One project workspace</span><span>alto / environment</span></div>
         <div className="marketing-art-stage">
-          <div className="marketing-art-source"><span className="marketing-art-symbol">✳</span><span>You set the direction</span></div>
+          <div className="marketing-art-source"><span className="marketing-art-symbol">✳</span><span>You direct the work</span></div>
           <div className="marketing-art-track" aria-hidden="true"><span /><span /><span /></div>
-          <div className="marketing-art-agent marketing-art-agent-one"><span className="marketing-art-symbol">↗</span><span>Agent A</span><small>Owns a task</small></div>
-          <div className="marketing-art-agent marketing-art-agent-two"><span className="marketing-art-symbol">↗</span><span>Agent B</span><small>Builds on the handoff</small></div>
-          <div className="marketing-art-outcome"><Check aria-hidden="true" /><span>Work stays connected</span></div>
+          <div className="marketing-art-agent marketing-art-agent-one"><span className="marketing-art-symbol">↗</span><span>Agent workspace</span><small>Files + conversation</small></div>
+          <div className="marketing-art-agent marketing-art-agent-two"><span className="marketing-art-symbol">↗</span><span>Approved resources</span><small>Compute + tools</small></div>
+          <div className="marketing-art-outcome"><Check aria-hidden="true" /><span>Return to the work</span></div>
         </div>
-        <div className="marketing-art-bottom"><span>Direction</span><span>Ownership</span><span>Momentum</span></div>
+        <div className="marketing-art-bottom"><span>Connect</span><span>Work</span><span>Return</span></div>
       </div>
     </section>
 
     <section className="marketing-platform" aria-labelledby="platform-title">
-      <div className="marketing-section-heading"><p className="marketing-kicker">The platform</p><h2 id="platform-title">Agents need room to work. Teams need one place to lead.</h2><p>Real engineering work outlasts a prompt. alto keeps the project, its agents, and their shared progress in view.</p></div>
+      <div className="marketing-section-heading"><p className="marketing-kicker">The platform</p><h2 id="platform-title">A home for the agent. A clear view for the team.</h2><p>Real engineering work needs a real environment. alto brings the machine, project, and people into one workflow.</p></div>
       <div className="marketing-strengths">{strengths.map(item => <article className="marketing-strength" key={item.title}><div className="marketing-strength-icon">{item.icon}</div><h3>{item.title}</h3><p>{item.text}</p></article>)}</div>
     </section>
 
     <section className="marketing-flow" id="how-it-works" aria-labelledby="flow-title">
-      <div className="marketing-flow-intro"><p className="marketing-kicker">How alto works</p><h2 id="flow-title">From direction to done, with the context intact.</h2><p>Start with a real project. Define the work. Keep a visible record as agents contribute and hand it off.</p></div>
-      <ol className="marketing-steps"><li><span>01</span><div><h3>Create a project</h3><p>Save the repository details and working context in one shared space.</p></div></li><li><span>02</span><div><h3>Direct your agents</h3><p>Assign tasks and owners so everyone knows what comes next.</p></div></li><li><span>03</span><div><h3>Follow the work</h3><p>See activity and handoffs tied back to the project.</p></div></li></ol>
+      <div className="marketing-flow-intro"><p className="marketing-kicker">The workflow we are building</p><h2 id="flow-title">Connect. Direct. Return.</h2><p>Start with an approved place for the work to run. Give the agent a project, then keep its context available when you step away.</p></div>
+      <ol className="marketing-steps"><li><span>01</span><div><h3>Connect an environment</h3><p>Choose a machine your team controls and verify that it is ready for the agent.</p></div></li><li><span>02</span><div><h3>Start work remotely</h3><p>Direct the agent in the project environment, close to the files and resources it needs.</p></div></li><li><span>03</span><div><h3>Pick up where you left off</h3><p>Reconnect to the project conversation and inspect the work tied to it.</p></div></li></ol>
     </section>
 
-    <section className="marketing-roadmap" id="roadmap" aria-labelledby="roadmap-title"><div><p className="marketing-kicker">Where we are going</p><h2 id="roadmap-title">A real computer for every agent.</h2></div><div><p>Today, alto coordinates projects, agents, and handoffs in a local deployment. We are building persistent remote computers, verified machine access, and durable outputs so agents can do more of the work inside alto.</p><Link href="/sign-up">Start with alto <ArrowUpRight aria-hidden="true" /></Link></div></section>
+    <section className="marketing-roadmap" id="roadmap" aria-labelledby="roadmap-title"><div><p className="marketing-kicker">Today and next</p><h2 id="roadmap-title">A real computer for every agent.</h2></div><div><p>Today, alto can verify Docker and Runpod environments and run Codex in a selected ready environment over SSH. Project chat saves conversation history. We are extending that foundation to existing Linux machines, dependable long-running work, and shared resources across agents.</p><Link href="/sign-up">Start with alto <ArrowUpRight aria-hidden="true" /></Link></div></section>
 
     <footer className="marketing-footer"><Link className="marketing-wordmark" href="/">alto<span aria-hidden="true">.</span></Link><p>Let agents soar.</p><div><Link href="/sign-in">Sign in</Link><Link href="/sign-up">Create an account</Link><a href="#top">Back to top</a></div></footer>
   </main>;
