@@ -4,11 +4,15 @@ export type DeepLinkTarget = {
   codexSessionId?: string;
   /** Run-box job id. Opens the Project chat SSH terminal; never carries host/port. */
   runBoxId?: string;
+  /** With runBoxId: `codex` targets Project chat at that environment; `terminal` (default) attaches SSH. */
+  panel?: DeepLinkPanel;
   /** Run-box job to preselect in Tasks; distinct from a catalog resource. */
   taskRunBoxId?: string;
   /** Source server identity only. Never used as a request destination. */
   serverUrl?: string;
 };
+
+export type DeepLinkPanel = "codex" | "terminal";
 
 export type DeepLinkParseResult =
   | { ok: true; target: DeepLinkTarget }
@@ -18,7 +22,7 @@ const SCHEME = "agentcloud:";
 
 /**
  * Parse `agentcloud://open?projectId=…&environmentId=…` (environment optional)
- * or `agentcloud://open?projectId=…&runBoxId=…`, or a codexSessionId. Other query values —
+ * or `agentcloud://open?projectId=…&runBoxId=…[&panel=codex|terminal]`, or a codexSessionId. Other query values —
  * including host or port — are ignored; connection details always come from
  * the authenticated connection API.
  */
@@ -58,6 +62,14 @@ export function parseAgentCloudDeepLink(raw: string): DeepLinkParseResult {
   if (runBoxId && !/^[A-Za-z0-9_-]{1,128}$/.test(runBoxId)) {
     return { ok: false, error: "Deep link runBoxId is malformed." };
   }
+  const panelRaw = url.searchParams.get("panel")?.trim().toLowerCase() || undefined;
+  if (panelRaw && panelRaw !== "codex" && panelRaw !== "terminal") {
+    return { ok: false, error: "Deep link panel must be codex or terminal." };
+  }
+  if (panelRaw && !runBoxId) {
+    return { ok: false, error: "Deep link panel needs a runBoxId." };
+  }
+  const panel = panelRaw as DeepLinkPanel | undefined;
   const taskRunBoxId = url.searchParams.get("taskRunBoxId")?.trim() || undefined;
   if (taskRunBoxId && !/^[A-Za-z0-9_-]{1,128}$/.test(taskRunBoxId)) {
     return { ok: false, error: "Deep link taskRunBoxId is malformed." };
@@ -84,10 +96,28 @@ export function parseAgentCloudDeepLink(raw: string): DeepLinkParseResult {
       ...(codexSessionId ? { codexSessionId } : {}),
       ...(environmentId ? { environmentId } : {}),
       ...(runBoxId ? { runBoxId } : {}),
+      ...(panel ? { panel } : {}),
       ...(taskRunBoxId ? { taskRunBoxId } : {}),
       ...(serverUrl ? { serverUrl } : {}),
     },
   };
+}
+
+/** Where a parsed link opens. Pure so routing is unit-testable. */
+export type DeepLinkDestination =
+  | "project-chat-session"
+  | "project-chat-environment-codex"
+  | "project-chat-environment-terminal"
+  | "tasks";
+
+export function deepLinkDestination(target: DeepLinkTarget): DeepLinkDestination {
+  if (target.codexSessionId) return "project-chat-session";
+  if (target.runBoxId) {
+    return target.panel === "codex"
+      ? "project-chat-environment-codex"
+      : "project-chat-environment-terminal";
+  }
+  return "tasks";
 }
 
 export function deepLinkServerError(target: DeepLinkTarget, configuredBaseUrl: string): string | null {
