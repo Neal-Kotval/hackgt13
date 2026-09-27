@@ -259,6 +259,7 @@ export class DesktopAuthClient {
   async fetchHuman(
     path: string,
     init: RequestInit = {},
+    transport: FetchLike = this.fetchImpl,
   ): Promise<Response> {
     const target = new URL(path, `${this.baseUrl}/`);
     if (target.origin !== new URL(this.baseUrl).origin || target.username || target.password) {
@@ -279,7 +280,7 @@ export class DesktopAuthClient {
       headers.set("origin", this.baseUrl);
     }
 
-    const response = await this.fetchImpl(url, { ...init, headers, redirect: "error" });
+    const response = await transport(url, { ...init, headers, redirect: "error" });
     this.applySetCookie(response);
     return response;
   }
