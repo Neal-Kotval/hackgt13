@@ -23,10 +23,8 @@ export type CodexSession = {
   updatedAt?: string;
 };
 
-/** Picker option. `key` is "local" or "runBox:<id>". */
-export type ChatTarget =
-  | { key: "local"; kind: "local"; label: string }
-  | { key: string; kind: "runBox"; runBoxId: string; label: string; available: boolean };
+/** Picker options only describe verified project environments. */
+export type ChatTarget = { key: string; kind: "runBox"; runBoxId: string; label: string; available: boolean };
 
 export const LOCAL_TARGET_KEY = "local";
 export const LOCAL_TARGET_LABEL = "Local Codex box";
@@ -110,12 +108,12 @@ export function sessionTargetLabel(target: CodexSessionTarget): string {
 }
 
 /**
- * Picker options: the local box, then each ready environment of the project
+ * Picker options: each ready environment of the project
  * whose Codex check is ready. A current session's environment that is no
  * longer ready stays listed (unavailable) so the picker never shows a blank.
  */
 export function deriveChatTargets(projectId: string, runBoxes: RunBoxSummary[], current?: CodexSessionTarget | null): ChatTarget[] {
-  const targets: ChatTarget[] = [{ key: LOCAL_TARGET_KEY, kind: "local", label: LOCAL_TARGET_LABEL }];
+  const targets: ChatTarget[] = [];
   for (const job of runBoxes) {
     if (job.projectId && job.projectId !== projectId) continue;
     if (!canTargetCodex(job)) continue;
