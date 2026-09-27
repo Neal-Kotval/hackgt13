@@ -14,7 +14,8 @@ unset SECRET
 : "${AGENTCLOUD_PUBLIC_ORIGIN:?Missing public application origin}"
 export BETTER_AUTH_URL="$AGENTCLOUD_PUBLIC_ORIGIN"
 export AGENTCLOUD_DATA_DIR=/var/lib/agentcloud
-export AGENTCLOUD_MAIL_MODE=local
+# Real delivery when the runtime secret carries SMTP settings (scripts/aws-auth/set-smtp.sh).
+if [[ -n "${SMTP_HOST:-}" ]]; then export AGENTCLOUD_MAIL_MODE=smtp; else export AGENTCLOUD_MAIL_MODE=local; fi
 export NODE_ENV=production
 export NEXT_TELEMETRY_DISABLED=1
 cd /opt/agentcloud/current

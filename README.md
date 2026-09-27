@@ -79,7 +79,7 @@ The launcher explicitly enables `AGENTCLOUD_REMOTE_BACKEND_URL`; ordinary `just 
 
 Shared project memory through Backboard is optional and chosen per environment. A project owner turns Shared memory on or off on that environment's card. When it is on and `BACKBOARD_API_KEY` is set, a Codex turn on that environment recalls the project's saved facts and, after Codex accepts the turn, stores a short note of what was asked. Other environments on the same server stay off. The key stays on the server. If the key is unset, the switch is off, or Backboard fails, the turn is sent unchanged. Computer tools are not connected to run boxes yet. The hosted app reads the key from the staging Secrets Manager value when that value is JSON with `BETTER_AUTH_SECRET` and `BACKBOARD_API_KEY`. A plain string remains the auth secret alone, so sign-in keeps working until that JSON is installed with the matching service start script.
 
-Email defaults to local capture with no Doppler mail keys. For SMTP, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_FROM`, and, if required by the provider, `SMTP_USER` and `SMTP_PASSWORD`. `SMTP_PORT` defaults to 587; set `SMTP_SECURE=true` for implicit TLS, usually on port 465. Keep all secret values and Doppler tokens out of Git. The existing `.env.local` setup remains available.
+Email defaults to local capture with no Doppler mail keys. For SMTP, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_FROM`, and, if required by the provider, `SMTP_USER` and `SMTP_PASSWORD`. `SMTP_PORT` defaults to 587; set `SMTP_SECURE=true` for implicit TLS, usually on port 465. Keep all secret values and Doppler tokens out of Git. The existing `.env.local` setup remains available. On AWS staging, run `AWS_PROFILE=agentcloud-operator bash scripts/aws-auth/set-smtp.sh you@gmail.com`: it prompts for a Google app password without echoing it, stores the SMTP settings in the staging runtime secret, and restarts the web service, which then switches from local capture to SMTP.
 
 ### Doppler MCP for coding assistants
 
@@ -179,6 +179,8 @@ Terminal sessions share the environment's Unix account and files. This is a
 trusted shared workspace, not a private filesystem per teammate. Removing a
 member blocks their app access and removes their key from new SSH connections
 after the worker reconciles it; an existing SSH connection is not terminated.
+See [Sharing a project environment](docs/resource-sharing.md) for worktree,
+compute, port, credential, Backboard, and peer-message coordination.
 
 ### Send a message between Codex agents
 
@@ -192,6 +194,11 @@ A project member can send from a session with
 `{ "toSessionId": "...", "text": "...", "requestId": "<stable unique ID>" }`.
 `GET` on that route lists the recipient's pending messages; add
 `?messageId=<id>` to inspect one message from either endpoint.
+To notify every other agent on the same box, POST to the same route with
+`{ "broadcast": true, "text": "...", "requestId": "<stable UUID>" }` and omit
+`toSessionId`. One canonical session per other agent receives the update.
+Retries with the same request ID keep the original recipient set; new agents
+joining later do not receive an old broadcast.
 
 An existing token-bearing agent can use its own scoped token (kept outside the
 repository). Agents created through Codex setup are tokenless, so this CLI
@@ -201,6 +208,9 @@ route does not authenticate them:
 node cli/agentcloud.mjs peer <projectId> --agent <agentId> \
   --from-session <sourceSessionId> --to-session <recipientSessionId> \
   --text 'Review the API contract' --request-id <stable-unique-id>
+node cli/agentcloud.mjs peer <projectId> --agent <agentId> \
+  --from-session <sourceSessionId> --all true \
+  --text 'API is on port 4000' --request-id <stable-unique-id>
 node cli/agentcloud.mjs peer-status <projectId> --agent <agentId> \
   --from-session <sourceSessionId> --message <messageId>
 ```

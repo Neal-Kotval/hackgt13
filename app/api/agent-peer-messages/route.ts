@@ -29,6 +29,16 @@ export async function POST(request: Request) {
     const source = service.get(String(input.fromSessionId || ''));
     if (source.projectId !== identity.projectId || source.agentId !== identity.agentId)
       throw new InputError('Token cannot send for another project or agent', 403);
+    if (input.broadcast !== undefined && input.broadcast !== true)
+      throw new InputError('Invalid broadcast option', 400);
+    if (input.broadcast === true) {
+      if (input.toSessionId !== undefined) throw new InputError('Choose a recipient or broadcast, not both', 400);
+      const messages = service.broadcastPeerMessage(source.id, {
+        text: input.text, requestId: input.requestId,
+        actor: {id:identity.agentId,name:'Connected agent'},
+      });
+      return Response.json({ messages }, { status: 202 });
+    }
     const message = service.sendPeerMessage(source.id, {
       toSessionId: input.toSessionId,
       text: input.text,
