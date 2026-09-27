@@ -314,6 +314,25 @@ describe("CodexLoginTunnels lifecycle", () => {
     assert.deepEqual(m.events, []);
   });
 
+  it("HAC-166: admits this network before SSH for aws-cpu only", async (t) => {
+    if (!portFree) return t.skip("port 1455 is in use on this machine");
+    const order: string[] = [];
+    const awsBody = JSON.stringify({ ...JSON.parse(connectionBody), profileId: "aws-cpu" });
+    const m = manager({
+      request: async () => new Response(awsBody, { status: 200 }),
+      ensureAccess: async (_runBoxId: string, onPending: () => void) => { order.push("access"); onPending(); },
+      connect: async () => { order.push("ssh"); return fakeForwarder().forwarder; },
+    });
+    await m.tunnels.start(1, m.send, { sessionId: SESSION, runBoxId: "rb-1", authUrl: authUrl(), callbackPort: 1455 });
+    assert.deepEqual(order, ["access", "ssh"]);
+    assert.deepEqual(m.events, [{ type: "access", sessionId: SESSION, state: "pending" }]);
+    m.tunnels.stop(1, SESSION);
+    const other = manager({ ensureAccess: async () => { order.push("unexpected"); } });
+    await other.tunnels.start(1, other.send, { sessionId: SESSION, runBoxId: "rb-1", authUrl: authUrl(), callbackPort: 1455 });
+    other.tunnels.stop(1, SESSION);
+    assert.deepEqual(order, ["access", "ssh"]);
+  });
+
   it("closes after the timeout and tells the renderer", async (t) => {
     if (!portFree) return t.skip("port 1455 is in use on this machine");
     const m = manager({ timeoutMs: 50 });
