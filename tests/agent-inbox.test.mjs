@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { migrateCodexSessions } from '../lib/codex-sessions.mjs';
 import { createAgentInbox } from '../lib/agent-inbox.mjs';
@@ -10,12 +11,12 @@ import { createAgentInbox } from '../lib/agent-inbox.mjs';
 function fixture(db = new Database(':memory:')) {
   migrateCodexSessions(db);
   for (const [id, project, agent, box] of [
-    ['a', 'p', 'alpha', 'box'], ['b', 'p', 'beta', 'box'],
+    ['a', 'p', 'alpha', 'box'], ['b', 'p', 'beta', 'box'], ['b-chat', 'p', 'beta', 'box'], ['c', 'p', 'gamma', 'box'],
     ['same-agent', 'p', 'alpha', 'box'], ['other-box', 'p', 'gamma', 'other'],
     ['local', 'p', 'delta', null], ['other-project', 'q', 'epsilon', 'box'],
   ]) db.prepare(`INSERT INTO codex_session
     (id,project_id,agent_id,created_by,status,created_at,updated_at,run_box_id,chat_request_id)
-    VALUES (?,?,?,'owner','ready','now','now',?,?)`).run(id, project, agent, box, id === 'same-agent' ? id : null);
+    VALUES (?,?,?,'owner','ready','now','now',?,?)`).run(id, project, agent, box, ['same-agent','b-chat'].includes(id) ? id : null);
   return { db, inbox: createAgentInbox(db) };
 }
 const message = (requestId, toSessionId = 'b') => ({
@@ -57,6 +58,24 @@ test('request ID retries return the same message and changed payload conflicts',
     assert.throws(() => inbox.send({...message('retry'), projectId: 'q'}), code('request_conflict'));
     assert.equal(db.prepare('SELECT count(*) AS n FROM agent_inbox_message').get().n, 1);
     assert.throws(() => inbox.send({...message('long'), text: 'x'.repeat(16_385)}), code('invalid_inbox_text'));
+  } finally { db.close(); }
+});
+
+test('box broadcast queues one session per other agent and freezes recipients across retries', () => {
+  const {db, inbox} = fixture();
+  try {
+    const input = {projectId:'p',fromSessionId:'a',text:'Coordinate ports',requestId:randomUUID()};
+    const first = inbox.broadcast(input);
+    assert.deepEqual(first.map(row => row.toSessionId).sort(), ['b','c']);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM agent_inbox_message').get().n, 2);
+    db.prepare(`INSERT INTO codex_session
+      (id,project_id,agent_id,created_by,status,created_at,updated_at,run_box_id)
+      VALUES ('new-agent','p','new','owner','ready','later','later','box')`).run();
+    assert.deepEqual(inbox.broadcast(input).map(row => row.id), first.map(row => row.id));
+    assert.equal(db.prepare('SELECT count(*) AS n FROM agent_inbox_message').get().n, 2);
+    assert.throws(() => inbox.broadcast({...input,text:'Different'}), code('request_conflict'));
+    assert.throws(() => inbox.broadcast({...input,requestId:'bad'}), code('invalid_inbox_request'));
+    assert.throws(() => inbox.broadcast({...input,fromSessionId:'other-box',requestId:randomUUID()}), code('no_recipients'));
   } finally { db.close(); }
 });
 

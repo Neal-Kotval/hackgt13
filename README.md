@@ -194,6 +194,11 @@ A project member can send from a session with
 `{ "toSessionId": "...", "text": "...", "requestId": "<stable unique ID>" }`.
 `GET` on that route lists the recipient's pending messages; add
 `?messageId=<id>` to inspect one message from either endpoint.
+To notify every other agent on the same box, POST to the same route with
+`{ "broadcast": true, "text": "...", "requestId": "<stable UUID>" }` and omit
+`toSessionId`. One canonical session per other agent receives the update.
+Retries with the same request ID keep the original recipient set; new agents
+joining later do not receive an old broadcast.
 
 An existing token-bearing agent can use its own scoped token (kept outside the
 repository). Agents created through Codex setup are tokenless, so this CLI
@@ -203,6 +208,9 @@ route does not authenticate them:
 node cli/agentcloud.mjs peer <projectId> --agent <agentId> \
   --from-session <sourceSessionId> --to-session <recipientSessionId> \
   --text 'Review the API contract' --request-id <stable-unique-id>
+node cli/agentcloud.mjs peer <projectId> --agent <agentId> \
+  --from-session <sourceSessionId> --all true \
+  --text 'API is on port 4000' --request-id <stable-unique-id>
 node cli/agentcloud.mjs peer-status <projectId> --agent <agentId> \
   --from-session <sourceSessionId> --message <messageId>
 ```

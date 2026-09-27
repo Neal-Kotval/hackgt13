@@ -102,6 +102,7 @@ export function ProjectChat({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [broadcastNotice, setBroadcastNotice] = useState<string | null>(null);
   const [ambiguous, setAmbiguous] = useState<Record<string, boolean>>({});
   const blockAutoProject = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -114,6 +115,7 @@ export function ProjectChat({
   const pending = useRef<Record<string, { text: string; requestId: string }>>(
     {},
   );
+  const pendingBroadcast = useRef<Record<string, { text: string; requestId: string }>>({});
   const requestEnvironment = useCallback((runBoxId: string | null) => {
     pendingEnvironmentRef.current = runBoxId;
     setPendingEnvironment(runBoxId);
@@ -531,6 +533,41 @@ export function ProjectChat({
       setBusy(false);
     }
   }
+  async function broadcastMessage() {
+    if (busy || !sessionId || !messageText) return;
+    if (new TextEncoder().encode(messageText).length > 16_384) {
+      setActionError("Keep the update and attached context within 16 KB.");
+      return;
+    }
+    const id = sessionId;
+    const key = draftKey;
+    const text = messageText;
+    const prior = pendingBroadcast.current[id];
+    const message = prior?.text === text
+      ? prior
+      : { text, requestId: crypto.randomUUID() };
+    pendingBroadcast.current[id] = message;
+    setBusy(true);
+    setActionError(null);
+    setBroadcastNotice(null);
+    try {
+      const result = await request<{ messages: unknown[] }>(
+        `/api/codex-sessions/${encodeURIComponent(id)}/peer-messages`,
+        { broadcast: true, ...message },
+      );
+      delete pendingBroadcast.current[id];
+      setBroadcastNotice(`Update queued for ${result.messages.length} other ${result.messages.length === 1 ? "agent" : "agents"}.`);
+      setDrafts((current) => ({
+        ...current,
+        [key]: current[key] === draft ? "" : current[key],
+      }));
+      setAttachments((current) => ({ ...current, [key]: [] }));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Could not notify the other agents.");
+    } finally {
+      setBusy(false);
+    }
+  }
   const agentName = (item: Session) =>
     project?.agents.find((a) => a.id === item.agentId)?.name || "Codex";
   const statusLabel = {
@@ -630,6 +667,9 @@ export function ProjectChat({
   const targetAgents = sessions.filter(
     (item) => targetKey(item.target) === currentTarget,
   );
+  const otherAgentCount = new Set(targetAgents
+    .filter((item) => item.agentId !== selectedSession?.agentId && item.status !== "stopped")
+    .map((item) => item.agentId)).size;
   const environmentName = selectedSession
     ? sessionTargetLabel(selectedSession.target)
     : "Environment";
@@ -844,6 +884,20 @@ export function ProjectChat({
             onSend={() => void act("message")}
             onStop={() => void act("interrupt")}
           />
+          {session && otherAgentCount > 0 && (
+            <div className="project-chat-broadcast">
+              <p>Send this draft as a new Codex turn to the other agents on this environment.</p>
+              <button
+                type="button"
+                className="button ghost"
+                disabled={busy || attaching || !messageText || (session.status !== "ready" && session.status !== "running")}
+                onClick={() => void broadcastMessage()}
+              >
+                Notify {otherAgentCount === 1 ? "agent" : "agents"}
+              </button>
+            </div>
+          )}
+          {broadcastNotice && <p className="project-chat-broadcast-notice" role="status">{broadcastNotice}</p>}
         </div>
       </main>
     </div>

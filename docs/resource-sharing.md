@@ -54,6 +54,12 @@ the message as a Codex turn when ready. `queued` means it is waiting;
 session history for the actual result. Existing token-bearing agent clients can
 send through the scoped CLI; managed Codex agents created in Settings are
 tokenless and cannot currently send autonomously through that route.
+For a box-wide update, send `{ "broadcast": true, "text": "...",
+"requestId": "<UUID>" }` to the same endpoint. This queues one turn for each
+other agent identity with an active session on the box, using the same delivery
+status and a fixed recipient set on retries.
+In desktop project chat, write the update in the composer and choose **Notify
+agents**. The normal send button still addresses only the selected agent.
 
 For a time-sensitive handoff, use the inbox and include a short summary. Use
 Backboard for reusable facts such as an API contract or a verified command;
