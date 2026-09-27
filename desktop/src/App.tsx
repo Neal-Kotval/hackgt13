@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChatProjectPicker } from "./components/ChatProjectPicker";
 import { CodexPanel } from "./components/CodexPanel";
 import { Composer } from "./components/Composer";
 import { Conversation } from "./components/Conversation";
@@ -18,7 +19,7 @@ import type {
 
 /**
  * Draft behavior: each thread keeps its own unsent composer text in memory.
- * Switching threads or Tasks ↔ Local chat preserves drafts until send or
+ * Switching threads or Tasks ↔ Project chat preserves drafts until send or
  * explicit clear. With no thread selected, drafts use a landing key so the
  * first Send can auto-create a chat. Drafts are not persisted across relaunch.
  */
@@ -31,6 +32,7 @@ export default function App() {
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
+  const [chatProjectId, setChatProjectId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -55,6 +57,13 @@ export default function App() {
   const clearDeepLink = useCallback(() => {
     setDeepLink(null);
   }, []);
+
+  const updateChatProjectId = useCallback(
+    (updater: (current: string | null) => string | null) => {
+      setChatProjectId((current) => updater(current));
+    },
+    [],
+  );
 
   const clearEnvironmentsLink = useCallback(() => {
     setEnvironmentsLink(null);
@@ -255,6 +264,7 @@ export default function App() {
       setThreads([]);
       setSelectedId(null);
       setActiveThread(null);
+      setChatProjectId(null);
       setDrafts({});
       setEnvironmentsMounted(false);
       setCodexMounted(false);
@@ -327,6 +337,12 @@ export default function App() {
 
   async function handleSend() {
     if (!draft.trim() || sending) return;
+    if (!chatProjectId) {
+      setError(
+        "Select a project before chatting. Replies come from that project's agent via AgentCloud — not a local OpenAI key.",
+      );
+      return;
+    }
     const api = desktopApi();
     const content = draft.trim();
     const previousDraftKey = selectedId ?? LANDING_DRAFT_KEY;
@@ -376,7 +392,9 @@ export default function App() {
         };
       });
       await refreshThreads();
-      await api.sendAssistant(threadId, userMessage.id);
+      await api.sendAssistant(threadId, userMessage.id, {
+        projectId: chatProjectId,
+      });
       await loadThread(threadId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Send failed");
@@ -505,6 +523,10 @@ export default function App() {
               <h1 title={activeThread?.title}>
                 {activeThread?.title ?? "Project chat"}
               </h1>
+              <ChatProjectPicker
+                selectedId={chatProjectId}
+                onSelect={updateChatProjectId}
+              />
               <span
                 className="chat-storage-note"
                 title="Chat history is saved on this device and does not sync to the web dashboard."

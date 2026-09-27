@@ -644,3 +644,78 @@ export async function agentAction(
     return { project: structuredClone(p), agentId: a.id, ...result };
   });
 }
+
+const DESKTOP_CHAT_CLIENT = "desktop-chat";
+
+/**
+ * Resolve or create the project's desktop chat agent identity.
+ * Never returns a plaintext credential token — chat uses the employee session.
+ */
+export async function ensureProjectChatAgent(
+  projectId: string,
+  agentId?: string,
+): Promise<{ agentId: string; name: string; created: boolean }> {
+  return transaction((disk) => {
+    const p = project(disk, projectId);
+    if (agentId) {
+      const existing = agent(p, agentId);
+      return {
+        agentId: existing.id,
+        name: existing.name,
+        created: false,
+      };
+    }
+    const named = p.agents.find(
+      (row) =>
+        row.client === DESKTOP_CHAT_CLIENT || row.name === DESKTOP_CHAT_CLIENT,
+    );
+    if (named) {
+      return { agentId: named.id, name: named.name, created: false };
+    }
+    const createdId = id();
+    const token = randomBytes(32).toString("base64url");
+    p.agents.push({
+      id: createdId,
+      name: DESKTOP_CHAT_CLIENT,
+      client: DESKTOP_CHAT_CLIENT,
+      role: "Desktop project chat",
+      branch: `agents/${createdId.slice(0, 8)}`,
+      status: "disconnected",
+    });
+    disk.credentials.push({
+      hash: hash(token),
+      projectId: p.id,
+      agentId: createdId,
+    });
+    event(
+      p,
+      "human",
+      `Created ${DESKTOP_CHAT_CLIENT} connection identity for project chat; workspace branch is planned, not provisioned`,
+      "agent",
+    );
+    disk.state.revision++;
+    return {
+      agentId: createdId,
+      name: DESKTOP_CHAT_CLIENT,
+      created: true,
+    };
+  });
+}
+
+/** Attribute a desktop chat turn without storing message contents. */
+export async function recordProjectChatTurn(
+  projectId: string,
+  actor: string,
+  agentName: string,
+): Promise<void> {
+  await transaction((disk) => {
+    const p = project(disk, projectId);
+    event(
+      p,
+      actor,
+      `Desktop chat turn with project agent ${agentName}`,
+      "agent",
+    );
+    disk.state.revision++;
+  });
+}

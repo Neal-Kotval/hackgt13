@@ -791,6 +791,24 @@ pre {
   color: var(--color-subtle);
 }
 
+.chat-project-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+}
+
+.chat-project-picker select.control-select {
+  width: var(--sidebar-width-wide);
+}
+
+.chat-project-picker .brand-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .conversation {
   overflow: auto;
   overscroll-behavior: contain;
