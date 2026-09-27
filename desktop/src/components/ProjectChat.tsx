@@ -22,6 +22,7 @@ import { CodexConversation, type CodexEvent } from "./CodexConversation";
 import "./ProjectChat.css";
 import { ChatProjectPicker } from "./ChatProjectPicker";
 import { ChatHistory } from "./ChatHistory";
+import { ipcErrorMessage } from "../lib/terminal-theme";
 import {
   canOpenTerminal,
   canTargetCodex,
@@ -558,9 +559,8 @@ export function ProjectChat({
         forgetBrowserLogin(id);
         void cancelPendingLogin(id);
       }
-      setActionError(
-        err instanceof Error ? err.message : "Could not start ChatGPT sign-in.",
-      );
+      // Main-process tunnel errors arrive wrapped by Electron's IPC.
+      setActionError(ipcErrorMessage(err, "Could not start ChatGPT sign-in."));
     } finally {
       setBusy(false);
     }
@@ -583,9 +583,7 @@ export function ProjectChat({
     try {
       await desktopApi().openChatGptSignIn(url);
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Could not open the sign-in page.",
-      );
+      setActionError(ipcErrorMessage(err, "Could not open the sign-in page."));
     }
   }
   async function copyCode(code: string) {
