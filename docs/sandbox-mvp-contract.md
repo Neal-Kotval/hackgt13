@@ -19,6 +19,7 @@ Access over SSH is **trusted shell access** to the environment. It is not a file
 | `local-docker-sandbox` | `docker-local` | Linux container with sshd on the machine running the worker; for local development and demos | None. Never label as GPU |
 | `runpod-rtx-4090` | `runpod` | Runpod Secure Cloud Pod | RTX 4090, verified by probe |
 | `aws-g6-demo` | `aws-ec2` | Existing EC2 path (SSM only; no desktop SSH yet) | Verified by probe |
+| `aws-cpu` | `aws-ec2` | EC2 `t3.medium`; direct SSH to its public IPv4 from the requester's /32 only; host key generated on the box and read back over SSM (HAC-125, planned, not yet launched) | None. Never label as GPU |
 
 ## Device SSH keys
 

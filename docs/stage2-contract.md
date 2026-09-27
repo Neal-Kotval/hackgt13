@@ -15,7 +15,7 @@ Decisions:
 | Account | `agentcloud` (non-root), as today |
 | Codex binary | `codex` on `PATH` (`/usr/local/bin/codex` or the npm global bin), version `0.157.1` |
 | Other tools | `git`, `tmux`, `bash`, Node 22 |
-| Workspace (repo checkout) | Docker: `/home/agentcloud/workspace/repo` (or `/home/agentcloud/workspace` when no repo). Runpod: `/home/agentcloud/agentcloud/<jobId>`. Always read `workspacePath` from the API; never hardcode it. |
+| Workspace (repo checkout) | Docker: `/home/agentcloud/workspace/repo` (or `/home/agentcloud/workspace` when no repo). Runpod: `/home/agentcloud/agentcloud/<jobId>`. AWS `aws-cpu`: `/home/agentcloud/agentcloud/<jobId>/repo`. Always read `workspacePath` from the API; never hardcode it. |
 | Codex auth | `~/.codex/auth.json` (0600), created by `codex login --device-auth`; removed at teardown |
 | Terminal session | tmux session named `agentcloud` |
 | AgentCloud scratch | `/tmp/agentcloud-*` and `~/.cache/agentcloud` only |
