@@ -203,3 +203,30 @@ describe("DesktopAuthClient", () => {
   await client.fetchHuman("/api/codex-sessions?projectId=p1", { redirect: "follow" });
   assert.equal(redirect, "error");
 });
+
+describe("DesktopAuthClient base URL", () => {
+  it("does not restore a session saved for a different configured AgentCloud URL", () => {
+    const store = new SessionStore(tempDir(), plainCrypto);
+    store.save({
+      cookieHeader: "better-auth.session_token=local",
+      baseUrl: "http://127.0.0.1:3010",
+      updatedAt: new Date().toISOString(),
+    });
+    const client = new DesktopAuthClient(store, { baseUrl: "https://staging.example.com" });
+    assert.equal(client.getBaseUrl(), "https://staging.example.com");
+    assert.equal(client.hasLocalSession(), false);
+    assert.equal(store.load(), null);
+  });
+
+  it("restores a session saved for the configured AgentCloud URL", () => {
+    const store = new SessionStore(tempDir(), plainCrypto);
+    store.save({
+      cookieHeader: "better-auth.session_token=staging",
+      baseUrl: "https://staging.example.com",
+      updatedAt: new Date().toISOString(),
+    });
+    const client = new DesktopAuthClient(store, { baseUrl: "https://staging.example.com/" });
+    assert.equal(client.getBaseUrl(), "https://staging.example.com");
+    assert.equal(client.hasLocalSession(), true);
+  });
+});
