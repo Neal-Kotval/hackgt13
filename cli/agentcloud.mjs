@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Coordination client. It never launches an agent or executes remote commands.
+import { randomUUID } from 'node:crypto';
 const args = process.argv.slice(2);
 const command = args.shift();
 const projectId = args.shift();
@@ -12,9 +13,9 @@ for (let i = 0; i < args.length; i += 2) {
   options[args[i].slice(2)] = args[i + 1];
 }
 const usage =
-  'Usage: node cli/agentcloud.mjs <connect|context|service|task|handoff> <projectId> --agent <agentId> [options]\nSet AGENTCLOUD_TOKEN. Optional AGENTCLOUD_URL (default http://127.0.0.1:3000).\nservice: --name NAME --url URL\ntask: --task ID --status "in progress"\nhandoff: --to ID --title TITLE --summary TEXT --files path1,path2 --next TEXT\nconnect: --once true for a single heartbeat; otherwise remains connected.';
+  'Usage: node cli/agentcloud.mjs <connect|context|service|task|handoff|peer|peer-status> <projectId> --agent <agentId> [options]\nSet AGENTCLOUD_TOKEN. Optional AGENTCLOUD_URL (default http://127.0.0.1:3000).\nservice: --name NAME --url URL\ntask: --task ID --status "in progress"\nhandoff: --to ID --title TITLE --summary TEXT --files path1,path2 --next TEXT\npeer: --from-session ID --to-session ID --text MESSAGE [--request-id ID]\npeer-status: --from-session ID --message ID\nconnect: --once true for a single heartbeat; otherwise remains connected.';
 if (
-  !["connect", "context", "service", "task", "handoff"].includes(command) ||
+  !["connect", "context", "service", "task", "handoff", "peer", "peer-status"].includes(command) ||
   !projectId ||
   !options.agent
 ) {
@@ -52,13 +53,28 @@ async function send(type) {
       files: (options.files || "").split(",").filter(Boolean),
       next: options.next,
     });
-  const response = await fetch(new URL("/api/agent", base), {
-    method: "POST",
+  if (type === "peer") {
+    if (!options['from-session'] || !options['to-session'] || !options.text) throw Error(usage);
+    Object.assign(payload, {
+      fromSessionId: options['from-session'],
+      toSessionId: options['to-session'],
+      text: options.text,
+      requestId: options['request-id'] || randomUUID(),
+    });
+  }
+  const target = new URL(['peer', 'peer-status'].includes(type) ? '/api/agent-peer-messages' : '/api/agent', base);
+  if (type === 'peer-status') {
+    if (!options['from-session'] || !options.message) throw Error(usage);
+    target.searchParams.set('fromSessionId', options['from-session']);
+    target.searchParams.set('messageId', options.message);
+  }
+  const response = await fetch(target, {
+    method: type === 'peer-status' ? 'GET' : 'POST',
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.AGENTCLOUD_TOKEN}`,
     },
-    body: JSON.stringify(payload),
+    ...(type === 'peer-status' ? {} : {body: JSON.stringify(payload)}),
     signal: AbortSignal.timeout(10000),
   });
   const data = await response.json();

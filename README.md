@@ -122,7 +122,7 @@ Organization names and URL slugs use the same validation on creation and update.
 
 Existing pre-organization projects remain hidden until their recorded owner moves them into an organization using the organization page. Adoption clears previous project assignments except the adopting owner's; organization members need an explicit new project grant. Organization owners and admins can access every project in their organization. `auth:bootstrap` remains an optional administrative helper for two accounts and legacy project memberships; it does not replace verification or organization membership. Supply its `AGENTCLOUD_EMPLOYEE1_EMAIL`, `AGENTCLOUD_EMPLOYEE2_EMAIL`, and corresponding `_PASSWORD` variables privately; never commit credentials. Existing passwords are preserved.
 
-All human state, event, and resource routes require verified cookie sessions and organization/project access. Agent CLI bearer tokens remain separate and work only on `/api/agent`. Sign-out invalidates the session; open event streams recheck sessions and memberships every tick. Sessions last seven days. SQLite stores users, sessions, organizations, invitations, memberships, and AWS organization approvals; JSON retains coordination data. Back up both stores and the secret together. Project creation spans both stores without a transaction, so an interrupted write can require administrative repair. This is not production tenant isolation, enterprise SSO, general resource approval policy, or SSH enforcement.
+All human state, event, and resource routes require verified cookie sessions and organization/project access. Agent CLI bearer tokens remain separate and work on `/api/agent` and the scoped `/api/agent-peer-messages` route. Sign-out invalidates the session; open event streams recheck sessions and memberships every tick. Sessions last seven days. SQLite stores users, sessions, organizations, invitations, memberships, agent peer messages, and AWS organization approvals; JSON retains coordination data. Back up both stores and the secret together. Project creation spans both stores without a transaction, so an interrupted write can require administrative repair. This is not production tenant isolation, enterprise SSO, general resource approval policy, or SSH enforcement.
 
 Set `AGENTCLOUD_PLATFORM_ADMIN_EMAIL` to the exact email of a verified alto account in the server's private environment, then restart the server. Only that account can open `/admin/aws` and call `/api/admin/aws-approvals`. New organizations start without managed AWS access. The operator can approve or revoke access, choose a one- or two-hour maximum run, and reserve 1 to 20 hours of AWS run time per UTC month. Approved AWS decisions reserve their full requested duration, including runs that end early. Revocation or a limit change invalidates queued jobs before EC2 allocation. Local Docker and Runpod decisions are unaffected. This is a compute-time allowance, not a dollar cap: EBS, network, taxes, and AWS billing delay remain outside it. The account-wide AWS budget action and expiry guard remain separate safeguards.
 
@@ -162,6 +162,39 @@ The proposed backend uses one provider-neutral run-box contract: attach an exist
 - **Inference:** save a model, hardware, scope, and lifetime draft without deploying a service.
 
 For a local coordination walkthrough, create a project and two agent identities, connect each CLI with its own credential, assign tasks, register an endpoint you operate, and send a handoff to the second identity. Observe the resulting activity and saved records, then reopen the project. This demonstrates coordination; real remote execution and the GPU demo remain pending.
+
+### Send a message between Codex agents
+
+In Agent settings, sign in to Codex on a ready environment, then select
+**Add another Codex agent**. Each agent has a separate session and, when the
+project has a repository, a separate verified Git worktree on that environment.
+Open either agent's session in the desktop app. The sign-in account is shared
+by agents on the same environment.
+A project member can send from a session with
+`POST /api/codex-sessions/<sourceSessionId>/peer-messages` and JSON
+`{ "toSessionId": "...", "text": "...", "requestId": "<stable unique ID>" }`.
+`GET` on that route lists the recipient's pending messages; add
+`?messageId=<id>` to inspect one message from either endpoint.
+
+An existing token-bearing agent can use its own scoped token (kept outside the
+repository). Agents created through Codex setup are tokenless, so this CLI
+route does not authenticate them:
+
+```sh
+node cli/agentcloud.mjs peer <projectId> --agent <agentId> \
+  --from-session <sourceSessionId> --to-session <recipientSessionId> \
+  --text 'Review the API contract' --request-id <stable-unique-id>
+node cli/agentcloud.mjs peer-status <projectId> --agent <agentId> \
+  --from-session <sourceSessionId> --message <messageId>
+```
+
+The CLI reads `AGENTCLOUD_TOKEN` and `AGENTCLOUD_URL` from its environment and
+requires HTTPS outside loopback. A queued message waits while the recipient is
+busy or disconnected; the backend submits it to Codex when its session is ready.
+`acknowledged` means Codex accepted the turn request, while actual execution is
+shown separately in the recipient's session history. A token is never installed
+on a run box automatically. See [ARCHITECTURE.md](ARCHITECTURE.md) for the
+delivery and isolation limits.
 
 ## Connect a real coordination client
 

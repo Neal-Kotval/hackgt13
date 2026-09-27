@@ -157,6 +157,31 @@ Sign-in is ChatGPT device code inside the environment. Stopping the environment
 closes its sessions. Environments created before this change cannot host a
 session. See [docs/stage3-contract.md](docs/stage3-contract.md).
 
+## Agent worktrees and peer inbox
+
+New remote Codex sessions for projects with a repository prepare a verified Git
+worktree at `<workspace parent>/worktrees/<agentId>` and use `agent/<agentId>` as
+its branch. Sessions for the same agent share that tree; different agents on one
+run box use different trees. Existing sessions keep their recorded workspace
+behavior. Projects without a repository continue in the shared environment
+workspace and do not have Git isolation. The SSH startup command checks the Git
+root, branch, common repository and real paths before starting Codex; a failed
+check leaves the session in error. This is Git edit isolation within trusted
+shell access, not an OS security boundary.
+
+`lib/agent-inbox.mjs` stores ordered, recipient-addressed messages in SQLite.
+Project members can queue a peer message from one Codex session to another with
+`POST /api/codex-sessions/:id/peer-messages`; an agent bearer token can use
+`POST /api/agent-peer-messages` only for its own source identity. Both sessions
+must belong to different agents in the same project and ready run box. The
+backend sends the oldest queued message to the recipient's app-server when its
+thread is ready, then advances after that turn completes. Queued messages survive
+server restart. `delivered` records a delivery attempt, `acknowledged` records
+app-server acceptance of `turn/start`, and the recipient session's turn events
+provide separate evidence of model execution. An uncertain start is never
+replayed automatically. This version supports Codex recipients; Claude and a
+shared-service health check remain future work.
+
 ## Desktop chat redesign (HAC-154)
 
 The current desktop navigation is Project chat and Environments; Tasks and desktop
