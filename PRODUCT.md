@@ -35,7 +35,7 @@ This repository is the web application and a local coordination foundation. New 
 | SSH / hosted compute | Local Docker sandbox and Runpod providers bring an environment to `ready` only after SSH verification against a per-environment pinned host key. Employees reach it with a per-device ed25519 key through the desktop terminal. AWS EC2 CPU environments are in progress (HAC-125); other remote VM execution remains separate work |
 | Run boxes and artifact homes | The Environments page records a request and owner decision in one step and queues a run-box job for a server-owned profile or an imported local container template; a separate worker must allocate and verify it before it is shown as ready. Artifact homes remain planned |
 | Repository import / worktrees | Repository and branch metadata in the app; an isolated local Git provider exists but is not connected to project actions, so no project clone or Git isolation is claimed |
-| Codex / Claude execution | Environments install pinned Codex CLI 0.157.1 and record a per-environment agent check (`agent.codex.state`). Signed-in Codex state is removed at teardown. Agent runs and their events are recorded through `/api/agent-runs` and shown on the Runs page. The desktop Codex panel (HAC-122) is in progress. Separately, an opt-in local Codex app-server in a Docker CPU box backs desktop Project chat ([LOCAL_CODEX.md](LOCAL_CODEX.md)). Claude remains planned |
+| Codex / Claude execution | Environments install pinned Codex CLI 0.157.1 and record a per-environment agent check (`agent.codex.state`). Signed-in Codex state is removed at teardown. Agent runs and their events are recorded through `/api/agent-runs` and shown on the Runs page. Desktop Project chat runs Codex over the selected environment’s SSH connection. Local Docker testing uses the same environment path ([LOCAL_CODEX.md](LOCAL_CODEX.md)). Claude remains planned |
 | Merge / test execution | Planned operations; no live diff, merge, or test execution |
 | Access control | Scope checks on agent API operations. SSH to an environment is **trusted shell access** for the project's current member device keys; a key that was never injected, or was revoked and reconciled by the docker-local or Runpod worker, is denied by sshd. There is no filesystem or command sandbox claim |
 
@@ -118,26 +118,19 @@ Managed GPU purchasing, spend management, generalized resource marketplaces, two
 
 The normal project navigation is Overview, Environments, Runs, and Settings. Overview shows read-only task progress and setup guidance; Environments groups resource requests/approvals with an expandable catalog; Runs contains activity and reported output; Settings contains agent registration and an expandable CLI guide. Organization management is labeled Organizations. Design system, collaboration/stretch pages, and the legacy task board remain directly addressable but are absent from normal navigation. This presentation change preserves records and API contracts; it does not claim desktop integration or remote execution is complete.
 
-## Local Docker Codex integration (HAC-116)
+## Legacy local Codex prototype (HAC-116)
 
-The opt-in local Codex path initializes a real Codex app-server in a Docker CPU
-box from project Settings and lets desktop **Project chat** send turns to the same
-persistent thread. Project and agent conversation selection live in the shared
-sidebar; there is no separate Codex agents tab. Employee membership gates reads and chat; owners control setup and
-lifecycle. SQLite stores bounded attributed session items, while the Docker
-volume retains Codex history and workspace files. This local implementation does
-not satisfy the AWS/GPU execution or public multi-tenant milestones above. See
-[LOCAL_CODEX.md](LOCAL_CODEX.md) for setup, authentication, recovery and limits.
+The standalone app-server test implementation and its persisted Docker volumes
+are retained for compatibility. It is no longer initialized from Settings or used
+by Project chat. The supported test path uses a standard Docker SSH environment;
+see [LOCAL_CODEX.md](LOCAL_CODEX.md).
 
 ## Desktop chat redesign (HAC-154)
 
 The current desktop navigation is Project chat and Environments; Tasks and desktop
-task authoring are removed. Backend task records and APIs remain available. Chat
-uses real project/agent Codex sessions with searchable history, Markdown/code,
-text-context attachments, and per-session in-memory drafts. New chat selects an
-existing agent conversation; separate conversation creation/deletion is not an
-implemented API. Local Docker execution and ready run-box SSH terminals are
-separate contexts. Server redaction remains unchanged, and optional file/handoff
+task authoring are removed. Backend task records and APIs remain available. Chat selects a ready project environment and runs Codex there over SSH.
+Conversation and draft state are retained during navigation; recorded runs remain
+on the server. The environment terminal is an explicit action on the same box. Server redaction remains unchanged, and optional file/handoff
 cards require actual backend data. The visible brand is lowercase `alto`; existing
 technical identifiers and the `agentcloud://` protocol remain compatible.
 
