@@ -323,6 +323,12 @@ turn events. Environment shutdown does not change an already completed outcome.
 An unfinished request without a final result is shown as outcome unavailable,
 not inferred to have succeeded. Empty setup chats do not create runs.
 
+`PATCH /api/chat-runs` accepts `{projectId, sessionId, status}` with status
+`todo`, `in_progress`, `needs_attention`, or `done`. It requires a verified
+project member and same-origin validation. The response and GET history expose
+`workflowStatus`, `workflowUpdatedAt`, and `workflowUpdatedBy`; changes retain
+employee attribution in a separate audit record and never alter model events.
+
 The page refreshes every four seconds and on window focus, offers manual refresh
 and status filtering, and opens the original chat in desktop. Work details stay
 collapsed by default. History is limited to the events retained by the chat
