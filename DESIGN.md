@@ -165,3 +165,8 @@ action, and secondary project settings in the same wrapping action row. External
 actions use directional icons. Button links inherit the web's decoration reset
 and visible keyboard focus. Without a selected project, the fallback says Open
 website rather than implying project-specific settings.
+
+Sign-in keeps the confirmation action to the left of Create an account. Resend
+appears only for an address with a successful confirmation request in the current
+tab, including signup. Unverified-account and expired-link recovery first offers
+Send confirmation email. Changing the address hides another address's resend state.
