@@ -99,3 +99,14 @@ test('queued peer message survives service restart and is delivered on recipient
   assert.equal(resumed.calls.filter(call => call.sessionId === b.id && call.method === 'turn/start').length, 1);
   resumed.service.close(); db.close();
 });
+
+test('a stopped sender cannot claim to send a peer message', async () => {
+  const f = fixture();
+  const {a, b} = await agents(f);
+  await f.service.action(a.id, {action: 'stop'});
+  assert.throws(() => f.service.sendPeerMessage(a.id, {
+    toSessionId: b.id, text: 'After stop', requestId: randomUUID(),
+  }), /Reconnect the sending agent/);
+  assert.equal(f.db.prepare('SELECT count(*) AS n FROM agent_inbox_message').get().n, 0);
+  f.service.close(); f.db.close();
+});
