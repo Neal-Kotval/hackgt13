@@ -172,7 +172,7 @@ function bridgeErrorHtml(detail: string): string {
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>AgentCloud Chat — error</title>
+    <title>alto — error</title>
     <style>
       body {
         margin: 0;
@@ -316,7 +316,7 @@ function attachWindowHandlers(win: BrowserWindow): void {
 
           const text = info.text.trim();
           const stillLoadingOnly =
-            text === "Loading AgentCloud Chat…" || text.length === 0;
+            text === "Loading alto…" || text.length === 0;
           const looksBroken = !info.bridge || stillLoadingOnly;
 
           if (!looksBroken) {
@@ -364,7 +364,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: "#090b0f",
-    title: "AgentCloud Chat",
+    title: "alto",
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),

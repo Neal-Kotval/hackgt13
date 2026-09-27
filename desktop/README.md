@@ -1,68 +1,28 @@
-# AgentCloud desktop
+# alto desktop
 
-Desktop shell for HackGT ([HAC-16](https://linear.app/startup-yc/issue/HAC-16/d1-desktop-ship-codex-like-core-chat) chat scaffold + [HAC-29](https://linear.app/startup-yc/issue/HAC-29/d2-desktop-task-authoring-against-shared-backend-machine-first) task authoring + [HAC-102](https://linear.app/startup-yc/issue/HAC-102/epic-desktop-chat-talks-to-project-agent-not-openai) project-agent chat). Separate from the Next.js coordination app. It does **not** provision run boxes or claim remote GPU execution.
-
-## Information architecture (HAC-41 / HAC-105)
-
-One window, three primary sections:
-
-| Section | Role |
-| --- | --- |
-| **Tasks** | Project/environment picker + task composer against the shared backend (`addTask`). Project chat is separate. |
-| **Environments** | Run boxes for a project (`GET /api/run-boxes`) with server states and an in-app SSH terminal for `ready` environments (HAC-90). |
-| **Project chat** | Conversations with Codex sessions initialized on the website, including live replies, command output, interruption, and reconnect. Does **not** create AgentCloud tasks. |
-
-Machine-first journey: connect/verify a machine in the **web** app → return to desktop **Tasks** to author work against a ready environment → monitor on the web. Project chat is an optional agent conversation beside that flow.
-
-Switching Tasks ↔ Project chat keeps in-memory chat drafts for the session.
-
-## Prerequisites
-
-- Node.js 22 LTS
-- macOS (primary hackathon target)
-- Reachable AgentCloud web app for employee sign-in and chat (local `just dev` or the shared AWS URL)
-- A Codex session initialized and authenticated through project Settings on the website; see [local Codex setup](../LOCAL_CODEX.md).
+The desktop shell provides **Project chat** and **Environments**. The Tasks section and desktop task authoring were removed in HAC-154; existing backend task records and APIs remain intact.
 
 ## Install and launch
 
-From the repository root (preferred):
+Use Node.js 22 and a reachable web app. Run `just desktop-setup`, then `just desktop`. `just desktop-devtools` opens DevTools. Renderer changes hot reload; main-process changes require restarting Electron. The website owns Codex initialization and authentication through project Settings; see [local Codex setup](../LOCAL_CODEX.md).
 
-```sh
-just desktop-setup   # once
-just desktop         # launches Electron with Vite hot reload
-just desktop-verify  # check + test + build
-```
+## Project chat
 
-Other desktop recipes: `just desktop-check`, `just desktop-test`, `just desktop-build`, `just desktop-devtools`.
+- Choose a project and agent using the context controls. **New chat** opens context selection; selecting an agent resumes its server conversation. The current API has one persistent session per project/agent and no separate create/delete conversation operation.
+- Search history with **Cmd/Ctrl+K**. Conversations are grouped by local calendar date. Titles come from actual first messages when loaded, with agent names as fallbacks.
+- Enter sends, Shift+Enter adds a line, and IME composition does not send early. Stop interrupts the selected session. Reconnect resumes stopped sessions.
+- Attach up to eight text files, each under 16 KB. Their contents are included in the message, not uploaded as separate files. Message plus context is limited to 16,000 characters. Drafts and attachments stay in memory per conversation and do not survive relaunch.
+- Assistant Markdown supports highlighted code and copy actions. Command disclosures show the server's redacted summaries. Raw command output, file diffs, and handoffs are not invented; optional rich items render only when supplied by the backend.
+- Retry resends the preceding user message. A lost response retains its request ID; ambiguous turns require explicit **Send as a new turn** recovery. Unrelated unsent drafts are preserved.
+- **Local Docker** describes Codex execution. Ready run boxes labeled **SSH terminal** open a separate terminal; choosing one does not relocate the Codex session.
 
-`just desktop` opens **one** desktop window. After sign-in you land on **Project chat**. **Tasks** is the shared-backend project panel. UI (renderer) edits hot-reload through Vite.
+History is loaded from authenticated server snapshots. Legacy `threads.json` storage and compatibility `/api/chat` transport remain intact but are not displayed or migrated into Codex history. Electron does not hold model API keys.
 
-### Main-process HMR policy
+## Deep links
 
-Editing `electron/main.ts` (or other main-process code) rebuilds `dist-electron/main.js` but **does not** restart Electron automatically. That avoids killing a healthy chat window mid-session. Restart with `just desktop` after main-process changes.
+The existing `agentcloud://` scheme is retained for compatibility. `projectId` and `codexSessionId` select Project chat. `runBoxId` and legacy `taskRunBoxId` open the environment terminal. Legacy `environmentId` links open Environments with a notice because catalog resource IDs are not run-box IDs. Unavailable project/session IDs do not silently select another conversation.
 
-If the renderer process still dies for another reason, the main process reloads the window (or shows an in-window error) instead of leaving a blank `#0f1112` shell.
-
-### DevTools
-
-DevTools stay **closed** by default so demos are a single chat window. To open docked DevTools:
-
-```sh
-just desktop-devtools
-```
-
-Or set `AGENTCLOUD_DESKTOP_DEVTOOLS=1` in `desktop/.env`. DevTools are attached to the chat window (not a detached orphan).
-
-## Project chat loop
-
-1. Sign in with the same Better Auth employee email/password as the web app (web must be running at `AGENTCLOUD_URL`, default `http://127.0.0.1:3000`).
-2. Open **Project chat**, select a project and its agent conversation in the sidebar. **Set up agent** opens that project's website Settings if initialization or sign-in is needed.
-3. Type and press **Enter** to send; **Shift+Enter** inserts a newline. Replies and expandable command output come from the real Codex Docker session.
-4. Use **Stop** while Codex is working, or **Reconnect** for stopped/failed sessions.
-5. Switch conversations or visit **Tasks** and return: each session keeps its unsent draft in memory. Server history reloads on relaunch; unsent drafts do not.
-6. **Sign out** clears the employee session.
-
-Project chat now uses the server's Codex session history. Legacy `threads.json` files and the compatibility `/api/chat` transport remain intact, but this interface does not display or migrate those old threads into Codex. There is no separate Codex agents navigation item.
+An optional `serverUrl` must match the configured authenticated origin. A mismatch shows an error; desktop never sends credentials or requests to the link's origin. Technical environment variables, package IDs, storage paths, and protocol names retain their existing names despite the lowercase alto display brand.
 
 ## Employee authentication (HAC-24)
 
@@ -78,51 +38,6 @@ Desktop reuses the web app’s Better Auth employee accounts and session cookies
 
 Agent CLI tokens remain separate and only work on `/api/agent`.
 
-## Shared backend client (HAC-42)
-
-Desktop calls the Next loopback API from the **main process** (Node `fetch`), not the renderer, so browser Origin/CORS does not block mutations. Session cookies come from the HAC-24 auth jar.
-
-Renderer helpers: `desktop/src/lib/server-api.ts` → `getState()` / `postAction(body)`.
-
-- `GET /api/state` — returns revision + project list (membership-scoped).
-- `POST /api/state` — shared action envelope (e.g. future `addTask`); Origin set to `AGENTCLOUD_URL`.
-- Server down → actionable error (“Start the web app with just…”). Cookies/tokens are never logged.
-
-The **Tasks** panel loads live projects via `getState` (project picker). Empty servers show a connect-on-web CTA; resource statuses are shown as returned (`registered`, `verified`, `not_evaluated`, …) without inventing `ready`.
-
-## Task authoring (HAC-33 / HAC-34 / HAC-64)
-
-On **Tasks**, pick a project, then use **Create task** (title, instructions, agent, optional environment). The environment menu lists ready run-box jobs from `GET /api/run-boxes` and verified catalog resources separately. Submit calls main-process `postAction` → `POST /api/state`:
-
-```json
-{
-  "type": "addTask",
-  "projectId": "…",
-  "title": "…",
-  "owner": "<agentId>",
-  "instructions": "…",
-  "runBoxId": "<ready run-box job id, optional>"
-}
-```
-
-Use either `runBoxId` or `environmentId`, not both. `instructions` and the selected binding round-trip in `GET /api/state`. Binding `runBoxId` requires a ready, same-project run box; binding `environmentId` requires a verified project resource. The server rejects stale or foreign ids.
-
-### Start agent (HAC-35)
-
-The Tasks panel includes a **Start agent** control that selects a created task + verified environment. It stays **disabled** with an explicit reason: “Agent start requires remote runner — not implemented.” Desktop does not call Project chat as a substitute for agent start, and it never marks a task running without server evidence. When a start endpoint lands, wire it here with `taskId` + `environmentId` + agent owner and surface the server decision only.
-
-## Deep links (HAC-54)
-
-Desktop registers the `agentcloud://` URL scheme (dev + packaged). Open Tasks with:
-
-```text
-agentcloud://open?projectId=<id>&environmentId=<verified-resource-id>
-```
-
-`environmentId` is optional. A ready run box opens Tasks and preselects that job with `agentcloud://open?projectId=<id>&taskRunBoxId=<job-id>&serverUrl=<encoded-web-origin>`. The terminal link uses `runBoxId`; the Codex view uses `codexSessionId`. The optional `serverUrl` identifies the website that created any of these links. It must be an HTTPS origin or HTTP loopback origin. If desktop is signed into a different server, it shows the mismatch and asks the employee to sign out, set `AGENTCLOUD_URL`, and sign in again. It never sends cookies or requests to the URL in the link. On cold start or a second-instance handoff, the existing window is focused (no duplicate shell). Unknown or unavailable ids show an error.
-
-For local protocol testing on macOS, start desktop with `just desktop`, then run `open 'agentcloud://open?projectId=<real-project-id>&taskRunBoxId=<ready-job-id>&serverUrl=http%3A%2F%2F127.0.0.1%3A3000'` in another terminal. Use ids from your running server; the app does not seed them.
-
 ## Environments and in-app SSH terminal (HAC-90)
 
 Follows [docs/sandbox-mvp-contract.md](../docs/sandbox-mvp-contract.md).
@@ -130,7 +45,7 @@ Follows [docs/sandbox-mvp-contract.md](../docs/sandbox-mvp-contract.md).
 - **Device key.** After sign-in (and on launch with a valid session) the main process ensures one ed25519 keypair per device (`electron/device-key.ts`). It is generated with Node `crypto`, stored as an OpenSSH private key encrypted with `safeStorage` under `userData/ssh/device-ssh-key.bin`, and registered with `POST /api/ssh-keys { label: <hostname>, publicKey }`. The private key never crosses IPC and is never logged. If OS encryption is unavailable the key is kept in memory for that run only (not written to disk). The Environments view shows the key fingerprint and registration state.
 - **Environments view.** Pick a project; the list shows each run box's server state (queued, allocating, connecting, verifying SSH, ready, stopping, stopped, failed), provider/profile, and a **Trusted shell access** label. **Open terminal** is enabled only when the state is `ready`, the listing includes `ssh`, and no stop was requested. The list polls every 5 s while any job is in flight. Desktop does not create or stop environments.
 - **Terminal.** `terminal:open` fetches `GET /api/run-boxes/:id/connection` with the employee session, then connects with `ssh2` using the API's host, port, and username and the device key. The presented host key must equal `hostPublicKey` exactly (only `ssh-ed25519` is negotiated); otherwise the connection fails with “Host key does not match the pinned key for this environment”. A `403 { code: "no_authorized_key" }` explains that the device key was registered after the environment was created. Sessions are owned by the window that opened them and are closed when it reloads, closes, or the app quits. The xterm theme is read from the design tokens at runtime.
-- **Deep link.** `agentcloud://open?projectId=<id>&runBoxId=<jobId>` opens Project chat and attaches the SSH terminal once the listing reports the job `ready`. Host or port values in the URL are ignored. The `environmentId` form still opens Tasks.
+- **Deep link.** `agentcloud://open?projectId=<id>&runBoxId=<jobId>` opens Project chat and attaches the SSH terminal once the listing reports the job `ready`. Host or port values in the URL are ignored. The legacy `environmentId` form opens Environments with a notice; catalog resource IDs are not run-box IDs.
 - **Access model.** SSH is trusted shell access to the environment. It is not a filesystem or command sandbox.
 - **Limitation.** Keys registered after an environment was allocated are not on that environment; create a new environment.
 
@@ -140,64 +55,10 @@ Follows [docs/sandbox-mvp-contract.md](../docs/sandbox-mvp-contract.md).
 
 Set `AGENTCLOUD_URL=http://127.0.0.1:3010` in `desktop/.env` (or the shell) before `just desktop`. Plain `http` on loopback works because API calls run in the main process. A saved session keeps the origin it signed in against, so sign out and relaunch when switching servers.
 
-## Persistence
+## Verification and design
 
-Threads live under the Electron `userData` chat directory (shown indirectly via the main process; path is available through the desktop bridge `dataDir`). Storage is a single `threads.json` file. Corrupt or missing storage surfaces an error screen instead of crashing in a loop.
+`just desktop-verify` runs TypeScript, token checks, tests, and the production build. `npm run test:chat:browser --prefix desktop` runs isolated headless Playwright checks at 375, 768, and 1440 pixels and writes screenshots under `artifacts/hac-154/`. The fixture is test-only and does not seed application data. Docker SSH tests skip when Docker is unavailable.
 
-Chat JSON never stores API keys or AgentCloud agent tokens. Credentials are read from `desktop/.env` / process env only.
+The renderer consumes `app/tokens.css`, shared fonts, and the web Select primitive. The supplied design reference is preserved in `reference/desktop-project-chat/`; its Tasks navigation is intentionally omitted. Search and history live in the shared sidebar, with a focus-managed drawer on narrow windows. Empty conversations use centered context chips; active conversations use an uncluttered reading column, user bubbles, unboxed assistant turns, and a context toolbar in the composer. Errors and actual execution status remain visible.
 
-## Checks
-
-From the repository root:
-
-```sh
-just desktop-check   # TypeScript
-just desktop-tokens  # design token contract (desktop + web)
-just desktop-test    # local chat store tests
-just desktop-build   # production renderer + electron bundles
-just desktop-verify  # check + tokens + test + build
-```
-
-## Limitations (intentional for D1 + D2.0)
-
-- **Tasks** is a labeled empty state until the composer ([HAC-33](https://linear.app/startup-yc/issue/HAC-33/d23-desktop-task-composer-ui-instructions-agent-environment)) and shared API create path ([HAC-34](https://linear.app/startup-yc/issue/HAC-34/d24-desktop-create-task-via-shared-backend-api)) land.
-- Employee sign-in reuses Better Auth from the running web app ([HAC-24](https://linear.app/startup-yc/issue/HAC-24/d2-desktop-reuse-better-auth-employee-sessions-from-the-web-app)); SSO beyond HAC-1 is out of scope.
-- No AgentCloud project sync, multi-agent handoffs, worktrees, or remote run-box control yet.
-- Assistant path is `ProjectAgentChatAdapter` → `POST /api/chat`; Electron never holds model API keys.
-- Plain-text message rendering only (markdown deferred).
-- Not notarized / packaged for distribution.
-
-## Design tokens
-
-Renderer CSS imports the shared AgentCloud token file from `app/tokens.css`
-(Hanken Grotesk / JetBrains Mono via `/fonts/*`). Vite serves the repo
-`public/` directory as the desktop `publicDir`, so Electron resolves the same
-font URLs as the Next app.
-
-Do not invent a parallel palette in this package. Use semantic tokens only
-(`.button`, `.eyebrow`, `.tag`, compact selects). `just desktop-verify` runs
-`npm run tokens:check`, which scans `desktop/src/**/*.{css,tsx}` alongside web
-surfaces and fails on raw colors, inline styles, or undefined tokens.
-
-
-The desktop shell follows the web navigation treatment: a flush vertical glass
-sidebar, icon navigation, an account card, and a keyboard-accessible drawer on
-narrow windows. Flat dark surfaces, rounded controls, and semantic action colors
-consume the same tokens. Project and task dropdowns reuse the web Radix Select
-primitive directly, including keyboard navigation and accessible names.
-
-## Codex in a local Docker box
-
-**Project chat** connects to sessions initialized on the AgentCloud website. Select the same project and session, send instructions, inspect attributed assistant and Docker command events, and stop generation or reconnect a stopped session. The website owns initialization and authentication setup. `agentcloud://open?projectId=…&codexSessionId=…` selects that session after employee sign-in; session data always comes from the authenticated server, never the link.
-
-This view polls bounded event snapshots and replaces events by stable IDs. Unsent drafts survive navigation during the current app session; failed sends retain text and reuse the request ID when retried unchanged. If a turn start is ambiguous, the draft stays intact and ordinary send is disabled; inspect the recovered history, then explicitly choose **Send as a new turn** only if another execution is intended. Unavailable deep-link projects or sessions never select a different agent automatically. The existing chat composer and conversation layout are the Codex interaction surface. Docker provides a local execution box, not an AWS deployment or GPU verification. Authenticated renderer requests are restricted to the configured server origin and do not follow redirects.
-
-### Project chat presentation
-
-Chat history lives in the shared navigation sidebar (or its drawer on narrow
-windows). New chats open with a centered greeting and composer; conversations use
-a restrained reading column, user bubbles, and unboxed assistant turns. Enter
-sends, Shift+Enter adds a line, and composing text with an IME does not send early.
-Send and Stop have accessible labels. Removed routine message counts and explanatory
-banners do not change execution: Codex history comes from the server, and missing
-configuration and failed turns remain visible. Legacy on-device files are retained.
+This local Docker/SSH client does not prove AWS allocation, GPU execution, or public tenant isolation. Desktop is not notarized or packaged for distribution.
