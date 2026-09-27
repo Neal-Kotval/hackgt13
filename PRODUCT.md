@@ -140,3 +140,12 @@ implemented API. Local Docker execution and ready run-box SSH terminals are
 separate contexts. Server redaction remains unchanged, and optional file/handoff
 cards require actual backend data. The visible brand is lowercase `alto`; existing
 technical identifiers and the `agentcloud://` protocol remain compatible.
+
+## Environment-based Codex interaction
+
+Users give Codex work in desktop Project chat after selecting a ready execution
+environment. Website Environments owns allocation and lifecycle; Settings does
+not create standalone local Codex boxes. Docker is a development provider using
+the same environment, SSH, sign-in and run-recording path as remote hosts. Existing
+legacy app-server data remains retained but is not a product navigation flow.
+See [LOCAL_CODEX.md](LOCAL_CODEX.md) for local environment testing.
