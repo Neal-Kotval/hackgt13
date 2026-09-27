@@ -18,7 +18,7 @@ for (const name of ["store", "http", "resource-profiles"]) {
   const source = await readFile(new URL(`../lib/${name}.ts`, import.meta.url), "utf8");
   await writeFile(path.join(directory, `${name}.js`), transpile(source).replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-const mjs = ["auth", "machine-catalog", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory", "run-box-access", "run-box-metadata"];
+const mjs = ["environment-settings", "auth", "machine-catalog", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory", "run-box-access", "run-box-metadata"];
 for (const name of ["run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
@@ -200,8 +200,8 @@ test("sized AWS machines: the connection API asks the desktop to register its IP
   const projectId = (await store.action({ type: "createProject", name: "GPU SSH", repo: "https://example.com/repo", compute: "Hosted Linux", template: "blank" })).id;
   fixture.grantMembership(owner.id, projectId, "owner");
   jobs.migrateRunBoxJobs(db);
-  // The single-active AWS guard spans projects; close any earlier AWS job from this file.
-  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider = 'aws-ec2'").run();
+  // Cloud capacity spans providers; close earlier cloud fixture jobs.
+  db.prepare("UPDATE run_box_job SET state = 'stopped' WHERE provider IN ('aws-ec2', 'runpod')").run();
   const { job } = jobs.saveRunBoxDecision(db, {
     idempotencyKey: "ssh-connection-gpu", resourceRequestId: "request-ssh-gpu", projectId,
     employeeId: owner.id, organizationId: fixture.organization.id, projectRole: "owner",

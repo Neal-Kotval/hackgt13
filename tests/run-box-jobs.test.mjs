@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { setEnvironmentSettings } from "../lib/environment-settings.mjs";
 import { setAwsApproval } from "../lib/aws-organization-approval.mjs";
 import {
   claimRunBoxJob,
@@ -180,6 +181,7 @@ test("Runpod schema upgrade preserves AWS jobs and dependent foreign keys", () =
   assert.equal(db.prepare("SELECT status FROM run_box_preallocation_cleanup WHERE job_id = 'aws-job'").get().status, "retry");
   assert.deepEqual(db.pragma("foreign_key_check"), []);
   assert.equal(db.pragma("foreign_keys", { simple: true }), 1);
+  setEnvironmentSettings(db, "employee-1", 2);
   const created = saveRunBoxDecision(db, request({ idempotencyKey: "runpod-idem", resourceRequestId: "runpod-request",
     provider: "runpod", profileId: "runpod-rtx-4090" }));
   assert.equal(created.job.profile_id, "runpod-rtx-4090");

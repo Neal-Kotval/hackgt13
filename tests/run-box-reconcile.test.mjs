@@ -301,7 +301,7 @@ test("a stop requested before allocation closes once EC2 shows nothing for the j
   const { db, job } = stoppedWhileQueued();
   try {
     assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "stopping");
-    assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
+    assert.throws(() => nextAwsDecision(db), /active cloud environment limit/);
     const service = provider([]);
     const result = await reconcileAwsRunBoxes(db, service, { workerId: "worker", requestStop });
     assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
@@ -389,7 +389,7 @@ function failedBeforeLaunch(profileId = "aws-cpu") {
 test("an aws-cpu job that failed before RunInstances closes at once when EC2 shows nothing, unblocking new AWS requests", async () => {
   const { db, job } = failedBeforeLaunch();
   try {
-    assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
+    assert.throws(() => nextAwsDecision(db), /active cloud environment limit/);
     // No aws_cpu_environment row: the CPU worker never reached RunInstances, so no quiet window applies.
     db.prepare("UPDATE run_box_job SET lease_expires_at = ? WHERE id = ?").run(new Date(Date.now() - 1_000).toISOString(), job.id);
     const result = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
@@ -452,7 +452,7 @@ for (const profileId of ["aws-cpu-large", "aws-gpu-t4"]) {
     const { db, job } = failedBeforeLaunch(profileId);
     try {
       assert.equal(job.profile_id, profileId);
-      assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
+      assert.throws(() => nextAwsDecision(db), /active cloud environment limit/);
       db.prepare("UPDATE run_box_job SET lease_expires_at = ? WHERE id = ?").run(new Date(Date.now() - 1_000).toISOString(), job.id);
       const result = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
       assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);

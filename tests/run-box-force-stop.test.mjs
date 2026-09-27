@@ -54,7 +54,7 @@ test("a stop requested before any claim closes at once on force stop, with attri
     const { job } = decide(db);
     requestRunBoxStop(db, job.id, "owner-1");
     assert.equal(state(db, job.id).state, "stopping");
-    assert.throws(() => decide(db), /AWS run box is already active/);
+    assert.throws(() => decide(db), /active cloud environment limit/);
     assert.equal(typeof jobs.forceStopRunBoxJob, "function", "owners have no force stop");
     const result = jobs.forceStopRunBoxJob(db, job.id, "owner-2");
     assert.equal(result.outcome, "stopped");
@@ -77,7 +77,7 @@ test("force stop on a failed job with a launched instance requests termination a
     recordRunBoxAllocation(db, job.id, "worker", "aws-ec2", "i-launched");
     transitionRunBoxJob(db, job.id, "failed", "worker", { reason: "CPU bootstrap failed at step codex" });
     expireLease(db, job.id);
-    assert.throws(() => decide(db), /AWS run box is already active/);
+    assert.throws(() => decide(db), /active cloud environment limit/);
 
     const result = jobs.forceStopRunBoxJob(db, job.id, "owner-1");
     assert.equal(result.outcome, "termination-requested");
@@ -85,7 +85,7 @@ test("force stop on a failed job with a launched instance requests termination a
     assert.equal(pending.state, "failed", "a DB flag must not stand in for termination");
     assert.ok(pending.stop_requested_at);
     assert.equal(pending.force_stop_requested_by, "owner-1");
-    assert.throws(() => decide(db), /AWS run box is already active/, "still billable until the provider confirms");
+    assert.throws(() => decide(db), /active cloud environment limit/, "still billable until the provider confirms");
     // Repeating it is harmless and adds no second audit row.
     const rows = db.prepare("SELECT COUNT(*) AS count FROM run_box_transition WHERE job_id = ?").get(job.id).count;
     assert.equal(jobs.forceStopRunBoxJob(db, job.id, "owner-1").outcome, "termination-requested");
