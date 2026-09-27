@@ -27,6 +27,6 @@ export async function POST(request: Request) {
     if(runBoxId !== null && (typeof runBoxId !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(runBoxId))) throw new InputError('Invalid environment.',400);
     if(input.newChat === true && runBoxId === null) throw new InputError('New chats require an environment.',400);
     if(runBoxId === null && !codexEnabled()) throw new InputError('Local Codex boxes are disabled on this server.',503);
-    return Response.json({session:codexService().initialize({projectId:project.id,agentId:agent.id,createdBy:employee.id,projectName:project.name,repoUrl:project.repo,runBoxId,newChat:input.newChat===true,requestId:input.requestId})},{status:202});
+    return Response.json({session:codexService().initialize({projectId:project.id,agentId:agent.id,createdBy:employee.id,projectName:project.name,repoUrl:project.repo,runBoxId,newChat:input.newChat===true,requestId:typeof input.requestId === "string" ? input.requestId : undefined})},{status:202});
   } catch(error) { return codexFailure(error); }
 }

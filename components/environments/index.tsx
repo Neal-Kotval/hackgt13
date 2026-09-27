@@ -5,7 +5,6 @@ import {
   CheckCircle,
   Copy,
   Cube,
-  Desktop,
   Lightning,
   Plus,
   ShieldWarning,
@@ -23,6 +22,7 @@ import {
 } from "@/lib/resource-profiles";
 import "../resources/resources.css";
 import "./environments.css";
+import { CodexEnvironmentSetup } from "./codex-setup";
 
 type JobState =
   | "queued"
@@ -199,8 +199,16 @@ export function Environments({ project }: { project: Project }) {
   const [stopBusy, setStopBusy] = useState("");
   const [serverUrl, setServerUrl] = useState("");
   const formHeading = useRef<HTMLHeadingElement>(null);
+  const focusedEnvironment = useRef(false);
 
   useEffect(() => setServerUrl(window.location.origin), []);
+  useEffect(() => {
+    if (focusedEnvironment.current || !jobs) return;
+    const selected = new URL(window.location.href).searchParams.get("environment");
+    if (!selected || !jobs.some(job => job.id === selected)) return;
+    focusedEnvironment.current = true;
+    document.getElementById(`rb-${selected}`)?.scrollIntoView({ block: "start" });
+  }, [jobs]);
 
   useEffect(() => {
     let active = true;
@@ -471,6 +479,7 @@ export function Environments({ project }: { project: Project }) {
                 job={job}
                 templates={templates}
                 projectId={project.id}
+                agentId={project.agents.find(agent => agent.client === "Codex")?.id}
                 serverUrl={serverUrl}
                 role={role}
                 confirming={confirmingStop === job.id}
@@ -492,6 +501,7 @@ function EnvironmentCard({
   job,
   templates,
   projectId,
+  agentId,
   serverUrl,
   role,
   confirming,
@@ -504,6 +514,7 @@ function EnvironmentCard({
   job: EnvironmentJob;
   templates: ContainerTemplate[];
   projectId: string;
+  agentId?: string;
   serverUrl: string;
   role: Role;
   confirming: boolean;
@@ -613,12 +624,8 @@ function EnvironmentCard({
         )}
       </div>
 
+      {ready && job.ssh && <CodexEnvironmentSetup projectId={projectId} runBoxId={job.id} agentId={agentId} owner={role === "owner"} desktopUrl={chatUrl} />}
       <div className="environment-actions">
-        {chatUrl && (
-          <a className="button primary" href={chatUrl}>
-            <Desktop aria-hidden="true" /> Continue in desktop
-          </a>
-        )}
         {job.ssh && (
           <button className="button" type="button" onClick={() => onCopy(command)}>
             <Copy aria-hidden="true" /> Copy SSH command

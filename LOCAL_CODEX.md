@@ -21,9 +21,14 @@ With Node 22 and Docker available:
 4. In website **Environments**, create a **Local Docker sandbox · CPU only** using
    the existing environment form. A project owner approves allocation; the worker
    must verify SSH and report the actual Codex check before it is usable.
-5. In desktop **Project chat**, choose the project and ready environment. Sign in
-   to Codex through the environment's device flow, then give it work in chat.
-6. Inspect real runs and results on the website. Stop the environment through its
+5. In website **Environments**, choose **Set up Codex**, then **Sign in with
+   ChatGPT** if needed. Enter the displayed code on the linked ChatGPT page.
+   When authorization completes, the website opens desktop; **Open in desktop**
+   remains available if the browser blocks the application handoff.
+6. Desktop selects that environment. Create independent chats with **New chat**,
+   or reopen an existing chat. Native desktop offers existing environments and
+   their chats; setup and sign-in link back to the website.
+7. Inspect real runs and results on the website. Stop the environment through its
    normal lifecycle controls when finished.
 
 The worker clones the configured eligible repository, pins the SSH host key, and

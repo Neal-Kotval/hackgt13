@@ -142,3 +142,15 @@ not create standalone local Codex boxes. Docker is a development provider using
 the same environment, SSH, sign-in and run-recording path as remote hosts. Existing
 legacy app-server data remains retained but is not a product navigation flow.
 See [LOCAL_CODEX.md](LOCAL_CODEX.md) for local environment testing.
+
+## Web environment onboarding and desktop chats (HAC-163)
+
+Website Environments owns environment creation, Codex setup and ChatGPT device
+sign-in. Successful sign-in opens the selected environment in desktop, with an
+explicit handoff link as a fallback. Desktop selects existing environments and
+creates or reopens independent persistent chats within the selection. Unprepared
+environments link back to web setup; desktop does not perform Codex sign-in.
+Chats share the environment filesystem and account, but have separate model
+threads, message history, titles and request IDs. Existing remote chats survive
+the migration. Project owners prepare/authenticate environments; project members
+may create chats in authenticated environments and reconnect those chats.
