@@ -1,11 +1,12 @@
-// Turn the staging Secrets Manager value into shell assignments for service-start.sh.
+// Turn the staging Secrets Manager value into exported shell assignments for service-start.sh,
+// so the npm/next processes it execs inherit them.
 // A plain string remains the Better Auth secret. JSON may also include BACKBOARD_API_KEY.
 import { readFileSync } from "node:fs";
 
 const raw = readFileSync(0, "utf8");
 
 function shellAssign(name, value) {
-  return `${name}='${String(value).replaceAll("'", "'\\''")}'`;
+  return `export ${name}='${String(value).replaceAll("'", "'\\''")}'`;
 }
 
 let auth = raw;

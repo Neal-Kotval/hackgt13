@@ -30,7 +30,9 @@ test("the staging worker unit configures aws-cpu and the app trusts CloudFront's
 test("the hosted start script keeps a plain auth secret and reads Backboard from JSON", () => {
   const load = (secret) => {
     const assignments = execFileSync(process.execPath, ["scripts/aws-auth/runtime-secret.mjs"], { input: secret, encoding: "utf8" });
-    const child = execFileSync("bash", ["-c", 'eval "$1"; printf "%s\\n%s" "${#BETTER_AUTH_SECRET}" "${BACKBOARD_API_KEY-}"', "runtime", assignments], { encoding: "utf8" });
+    // Read the values from a child process: service-start.sh execs npm/next, which only see exported variables.
+    const child = execFileSync("bash", ["-c", 'eval "$1"; exec "$2" -e \'process.stdout.write(`${(process.env.BETTER_AUTH_SECRET || "").length}\\n${process.env.BACKBOARD_API_KEY || ""}`)\'', "runtime", assignments, process.execPath],
+      { encoding: "utf8", env: { PATH: process.env.PATH } });
     const [authLength, board] = child.split("\n");
     return { authLength: Number(authLength), board };
   };
