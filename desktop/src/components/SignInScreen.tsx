@@ -39,7 +39,10 @@ export function SignInScreen({
   return (
     <div className="auth-page">
       <section className="auth-panel" aria-labelledby="desktop-sign-in-title">
-        <p className="eyebrow">agentcloud</p>
+        <p className="eyebrow">
+          agentcloud
+          <span className="brand-cursor" aria-hidden="true" />
+        </p>
         <h1 id="desktop-sign-in-title">Sign in</h1>
         <p>
           Use the same employee account as the web app at{" "}

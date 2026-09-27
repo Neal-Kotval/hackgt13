@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChatProjectPicker } from "./components/ChatProjectPicker";
+import { CodexPanel } from "./components/CodexPanel";
 import { Composer } from "./components/Composer";
 import { Conversation } from "./components/Conversation";
 import { ShellNav, type AppSection } from "./components/ShellNav";
 import { SignInScreen } from "./components/SignInScreen";
 import { ProjectPicker } from "./components/ProjectPicker";
+import { ProjectChatTerminal } from "./components/ProjectChatTerminal";
 import { EnvironmentsPanel } from "./components/EnvironmentsPanel";
 import { ThreadList } from "./components/ThreadList";
 import { desktopApi } from "./lib/desktop-api";
@@ -17,7 +20,7 @@ import type {
 
 /**
  * Draft behavior: each thread keeps its own unsent composer text in memory.
- * Switching threads or Tasks ↔ Local chat preserves drafts until send or
+ * Switching threads or Tasks ↔ Project chat preserves drafts until send or
  * explicit clear. With no thread selected, drafts use a landing key so the
  * first Send can auto-create a chat. Drafts are not persisted across relaunch.
  */
@@ -26,19 +29,29 @@ const LANDING_DRAFT_KEY = "__landing__";
 export default function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [authBootError, setAuthBootError] = useState<string | null>(null);
-  const [section, setSection] = useState<AppSection>("local-chat");
+  const [section, setSection] = useState<AppSection>("codex");
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
+  const [chatProjectId, setChatProjectId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [credentials, setCredentials] = useState<CredentialStatus | null>(null);
+  const [credentials, setCredentials] = useState<CredentialStatus | null>(
+    null,
+  );
+  const [codexLink, setCodexLink] = useState<DeepLinkParseResult | null>(null);
+  const [codexMounted, setCodexMounted] = useState(true);
+  const clearCodexLink = useCallback(() => setCodexLink(null), []);
   const [deepLink, setDeepLink] = useState<DeepLinkParseResult | null>(null);
   const [environmentsLink, setEnvironmentsLink] =
     useState<DeepLinkParseResult | null>(null);
+  const [chatRunBox, setChatRunBox] = useState<{
+    projectId: string;
+    runBoxId: string;
+  } | null>(null);
   // Keep Environments mounted after first visit so open terminals survive tab switches.
   const [environmentsMounted, setEnvironmentsMounted] = useState(false);
   const selectedIdRef = useRef<string | null>(null);
@@ -50,16 +63,30 @@ export default function App() {
     setDeepLink(null);
   }, []);
 
+  const updateChatProjectId = useCallback(
+    (updater: (current: string | null) => string | null) => {
+      setChatProjectId((current) => updater(current));
+    },
+    [],
+  );
+
   const clearEnvironmentsLink = useCallback(() => {
     setEnvironmentsLink(null);
   }, []);
 
-  // runBoxId links open Environments (HAC-90); other links keep the Tasks flow.
+  // A website "Open in desktop" link carries runBoxId. Land on Project chat
+  // and SSH into that environment. Other links keep the Tasks flow.
   const routeDeepLink = useCallback((result: DeepLinkParseResult) => {
+    if (result.ok && result.target.codexSessionId) {
+      setSection("codex"); setCodexMounted(true); setCodexLink(result); return;
+    }
     if (result.ok && result.target.runBoxId) {
-      setSection("environments");
-      setEnvironmentsMounted(true);
-      setEnvironmentsLink(result);
+      setSection("local-chat");
+      setChatProjectId(result.target.projectId);
+      setChatRunBox({
+        projectId: result.target.projectId,
+        runBoxId: result.target.runBoxId,
+      });
       return;
     }
     setSection("tasks");
@@ -67,6 +94,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (section === "codex") setCodexMounted(true);
     if (section === "environments") setEnvironmentsMounted(true);
   }, [section]);
 
@@ -245,8 +273,10 @@ export default function App() {
       setThreads([]);
       setSelectedId(null);
       setActiveThread(null);
+      setChatProjectId(null);
       setDrafts({});
       setEnvironmentsMounted(false);
+      setCodexMounted(false);
       setSection("tasks");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-out failed");
@@ -316,6 +346,12 @@ export default function App() {
 
   async function handleSend() {
     if (!draft.trim() || sending) return;
+    if (!chatProjectId) {
+      setError(
+        "Select a project before chatting. Replies come from that project's agent via AgentCloud — not a local OpenAI key.",
+      );
+      return;
+    }
     const api = desktopApi();
     const content = draft.trim();
     const previousDraftKey = selectedId ?? LANDING_DRAFT_KEY;
@@ -365,7 +401,9 @@ export default function App() {
         };
       });
       await refreshThreads();
-      await api.sendAssistant(threadId, userMessage.id);
+      await api.sendAssistant(threadId, userMessage.id, {
+        projectId: chatProjectId,
+      });
       await loadThread(threadId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Send failed");
@@ -425,7 +463,7 @@ export default function App() {
     );
   }
 
-  if (bootError) {
+  if (bootError && section === "local-chat") {
     return (
       <div className="app-error" role="alert">
         <h1>Chat storage error</h1>
@@ -471,6 +509,7 @@ export default function App() {
         void handleSignOut();
       }}
     >
+      {codexMounted && <div className="section-host" hidden={section !== "codex"}><CodexPanel webBaseUrl={auth.baseUrl} deepLink={codexLink} onDeepLinkHandled={clearCodexLink} /></div>}
       {environmentsMounted ? (
         <div className="section-host" hidden={section !== "environments"}>
           <EnvironmentsPanel
@@ -480,7 +519,7 @@ export default function App() {
           />
         </div>
       ) : null}
-      {section === "environments" ? null : section === "tasks" ? (
+      {section === "environments" || section === "codex" ? null : section === "tasks" ? (
         <ProjectPicker
           webBaseUrl={auth.baseUrl}
           deepLink={deepLink}
@@ -490,16 +529,38 @@ export default function App() {
         <div className="app-shell">
           <main className="main" data-empty={!activeThread?.messages.length}>
             <header className="main-header">
-              <h1 title={activeThread?.title}>
-                {activeThread?.title ?? "Project chat"}
+              <h1 title={chatRunBox ? "Environment terminal" : activeThread?.title}>
+                {chatRunBox
+                  ? "Environment terminal"
+                  : (activeThread?.title ?? "Project chat")}
               </h1>
-              <span
-                className="chat-storage-note"
-                title="Chat history is saved on this device and does not sync to the web dashboard."
-              >
-                Saved on this device
-              </span>
+              {chatRunBox ? (
+                <span className="chat-storage-note">
+                  SSH session for the environment opened from the website.
+                </span>
+              ) : (
+                <>
+                  <ChatProjectPicker
+                    selectedId={chatProjectId}
+                    onSelect={updateChatProjectId}
+                  />
+                  <span
+                    className="chat-storage-note"
+                    title="Chat history is saved on this device and does not sync to the web dashboard."
+                  >
+                    Saved on this device
+                  </span>
+                </>
+              )}
             </header>
+            {chatRunBox ? (
+              <ProjectChatTerminal
+                projectId={chatRunBox.projectId}
+                runBoxId={chatRunBox.runBoxId}
+                onClose={() => setChatRunBox(null)}
+              />
+            ) : (
+              <>
             <Conversation
               key={selectedId ?? LANDING_DRAFT_KEY}
               messages={activeThread?.messages ?? []}
@@ -530,6 +591,8 @@ export default function App() {
                 }}
               />
             </div>
+              </>
+            )}
           </main>
         </div>
       )}

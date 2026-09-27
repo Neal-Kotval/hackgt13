@@ -1,16 +1,19 @@
 import type { ChatMessage, CredentialStatus } from "../src/lib/types.ts";
+import type { LoopbackApiClient } from "./api-client.ts";
 
 export type AssistantDeltaHandler = (chunk: string) => void;
 
 export type StreamAssistantInput = {
+  projectId: string;
+  agentId?: string;
   messages: Array<Pick<ChatMessage, "role" | "content">>;
   signal: AbortSignal;
   onDelta: AssistantDeltaHandler;
 };
 
 /**
- * Isolated assistant boundary. Swap this for a Codex CLI or AgentCloud runner
- * later without rewriting the chat UI.
+ * Isolated assistant boundary. Desktop talks to the AgentCloud project agent
+ * API; model credentials stay on the server.
  */
 export interface AssistantAdapter {
   credentialStatus(): CredentialStatus;
@@ -24,94 +27,47 @@ export class MissingCredentialsError extends Error {
   }
 }
 
-export class OpenAIResponsesAdapter implements AssistantAdapter {
+export class MissingProjectError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MissingProjectError";
+  }
+}
+
+/**
+ * Routes chat through POST /api/chat with the employee session.
+ * Never reads OPENAI_API_KEY in the Electron process.
+ */
+export class ProjectAgentChatAdapter implements AssistantAdapter {
   constructor(
-    private readonly getApiKey: () => string | undefined,
-    private readonly model: string,
+    private readonly api: LoopbackApiClient,
+    private readonly modelHint = "server-configured",
   ) {}
 
   credentialStatus(): CredentialStatus {
-    const key = this.getApiKey()?.trim();
-    if (!key) {
-      return {
-        configured: false,
-        source: "none",
-        model: this.model,
-        message:
-          "Set OPENAI_API_KEY in desktop/.env (see desktop/.env.example), then relaunch. The app will not invent replies.",
-      };
-    }
     return {
       configured: true,
-      source: "env",
-      model: this.model,
-      message: `Using OpenAI model ${this.model} from OPENAI_API_KEY.`,
+      source: "agentcloud",
+      model: this.modelHint,
+      message:
+        "Replies go through the selected project's AgentCloud agent. Model credentials stay on the server.",
     };
   }
 
   async streamReply(input: StreamAssistantInput): Promise<void> {
-    const apiKey = this.getApiKey()?.trim();
-    if (!apiKey) {
-      throw new MissingCredentialsError(
-        "OPENAI_API_KEY is not configured. Add it to desktop/.env and relaunch.",
+    const projectId = input.projectId?.trim();
+    if (!projectId) {
+      throw new MissingProjectError(
+        "Select a project before chatting. Desktop chat talks to that project's agent, not a local OpenAI key.",
       );
     }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: this.model,
-        stream: true,
-        messages: input.messages.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
-      }),
+    await this.api.streamProjectChat({
+      projectId,
+      agentId: input.agentId,
+      messages: input.messages,
       signal: input.signal,
+      onDelta: input.onDelta,
     });
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      const safe = detail.slice(0, 240).replace(apiKey, "[redacted]");
-      throw new Error(
-        `OpenAI request failed (${response.status})${safe ? `: ${safe}` : ""}`,
-      );
-    }
-
-    if (!response.body) {
-      throw new Error("OpenAI response had no body to stream.");
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) continue;
-        const data = trimmed.slice(5).trim();
-        if (data === "[DONE]") return;
-        let parsed: {
-          choices?: Array<{ delta?: { content?: string } }>;
-        };
-        try {
-          parsed = JSON.parse(data) as typeof parsed;
-        } catch {
-          continue;
-        }
-        const chunk = parsed.choices?.[0]?.delta?.content;
-        if (chunk) input.onDelta(chunk);
-      }
-    }
   }
 }

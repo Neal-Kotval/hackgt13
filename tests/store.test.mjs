@@ -1,7 +1,7 @@
 import { prepareAuth } from "./auth-fixture.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm, copyFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import ts from "typescript";
@@ -23,10 +23,11 @@ for (const name of ["store", "http", "resource-profiles"]) {
     .outputText.replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'");
   await writeFile(path.join(temporary, `${name}.js`), output);
 }
+await copyFile(new URL("../lib/run-box-jobs.mjs", import.meta.url), path.join(temporary, "run-box-jobs.mjs"));
+const authFixture = await prepareAuth(temporary);
 const { action, getState, agentAction } = await import(
   path.join(temporary, "store.js")
 );
-const authFixture = await prepareAuth(temporary);
 after(() => rm(temporary, { recursive: true, force: true }));
 test("fresh installation starts empty and remains stable without creating a data file", async () => {
   assert.deepEqual(await getState(), { projects: [], revision: 0 });
@@ -523,4 +524,36 @@ test("addTask persists instructions and verified environmentId", async () => {
   assert.equal(task.title, "Smoke");
   assert.equal(task.instructions, "Run nvidia-smi and paste output");
   assert.equal(task.environmentId, verifiedId);
+});
+
+test("tasks bind only ready run boxes in their own project", async () => {
+  const makeProject = async (name) => {
+    const { id } = await action({ type: "createProject", name, repo: "https://github.com/example/repo", template: "blank", compute: "SSH machine", host: "example.test" });
+    const { agentId } = await action({ type: "addAgent", projectId: id, client: "Codex", role: "worker" });
+    return { id, agentId };
+  };
+  const own = await makeProject("Own run box");
+  const other = await makeProject("Other run box");
+  const db = authFixture.getDatabase();
+  const { migrateRunBoxJobs } = await import(path.join(temporary, "run-box-jobs.mjs"));
+  migrateRunBoxJobs(db);
+  const now = new Date().toISOString();
+  const insertJob = (jobId, projectId, state, stopRequestedAt = null) => {
+    const decisionId = `decision-${jobId}`;
+    db.prepare(`INSERT INTO run_box_decision (id, idempotency_key, request_hash, resource_request_id, project_id, employee_id, organization_id, project_role, provider, max_duration_minutes, outcome, reason, policy_version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(decisionId, `key-${jobId}`, `hash-${jobId}`, `request-${jobId}`, projectId, authFixture.users[0].id, authFixture.organization.id, "owner", "docker-local", 60, "approved", "test", "v1", now);
+    db.prepare(`INSERT INTO run_box_job (id, decision_id, project_id, provider, max_duration_minutes, state, stop_requested_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(jobId, decisionId, projectId, "docker-local", 60, state, stopRequestedAt, now, now);
+  };
+  insertJob("ready-own", own.id, "ready");
+  insertJob("ready-other", other.id, "ready");
+  insertJob("pending-own", own.id, "verifying");
+  insertJob("stopping-own", own.id, "ready", now);
+  const base = { type: "addTask", projectId: own.id, title: "GPU task", owner: own.agentId, instructions: "Run the workload" };
+  for (const [runBoxId, status] of [["ready-other", 404], ["pending-own", 409], ["stopping-own", 409], ["missing", 404]]) {
+    await assert.rejects(action({ ...base, runBoxId }), { status });
+  }
+  await assert.rejects(action({ ...base, runBoxId: 42 }), { status: 400 });
+  await action({ ...base, runBoxId: "ready-own" });
+  const task = (await getState()).projects.find((p) => p.id === own.id).tasks.at(-1);
+  assert.equal(task.runBoxId, "ready-own");
+  assert.equal(task.instructions, "Run the workload");
 });

@@ -55,9 +55,12 @@ For the managed path, EC2 is the first proposed cloud provider. A known SSH GPU 
 | `POST /api/actions` | Alias of the human mutation endpoint |
 | `GET /api/events` | Default SSE messages containing complete state on state changes, including heartbeat expiry; comments keep connection alive |
 | `POST /api/agent` | Bearer-scoped `connect`, `heartbeat`, `context`, `task`, `service`, and `handoff` operations |
+| `POST /api/chat` | Employee session project chat; provisions/binds `desktop-chat` agent identity; streams model tokens server-side (`OPENAI_API_KEY`); never returns model or agent plaintext secrets |
 | `POST /api/resources` | Verified project-member catalog registrations, resource requests, and inference configuration drafts; requests record server-derived employee, organization, and project role at submission, with no allocation or policy approval |
 
 Human mutations accept `{type, projectId, ...fields}` and return `{state, ...result}`. Creating a project returns `id`; creating an agent returns `agentId` and the one-time plaintext `token`. API errors use `{error}` with appropriate 400, 401, 403, 404, or 409 status codes. Internal errors return a generic 500 response.
+
+`addTask` accepts optional `runBoxId` for a project run-box job whose persisted state is `ready` and has no stop request. The server resolves this ID in SQLite and rejects missing, cross-project, or inactive jobs. The legacy verified catalog `environmentId` remains supported; callers choose one binding. This records task intent only and does not start an agent or guarantee the box will remain ready after creation. The route requires project membership before the store validates the binding.
 
 The resource API accepts `registerResource`, `requestResource`, and `saveInferenceDraft`. It validates bounded fields and same-project task, agent, and resource references. New catalog entries are only `registered`; inference configurations are only `draft`. Requests are only `requested` with a `not_evaluated` decision explaining that resource policy is absent. Callers cannot provide approval, allocation, running, or verified state. Older project snapshots load with empty resource arrays. The Runs screen projects existing events and heartbeats; the Graph screen projects persisted relationships. Neither creates execution evidence.
 
@@ -114,3 +117,13 @@ JSON still stores coordination data. There is no cross-store transaction: failed
 `compose.yaml` builds the real backend as a non-root Node 22 development container, with persistent SQLite/JSON state and captured mail in a named volume. Its generated auth secret stays private in that volume, outside Docker image layers and Terraform state. `just dev-docker` connects the local frontend bridge to loopback port 3002. Remote bridge HTTP is accepted only for literal loopback hosts; other upstreams require HTTPS. `infra/local` is an alternative Docker Terraform root, separate from both AWS roots and never automatically applied. The simulator verifies local application flows, not AWS IAM, EC2 allocation, GPU availability, or agent execution.
 
 The separate `docker-local` run-box worker creates a CPU-only SSH container per approved project environment on its Docker host. The default image includes a pinned Codex CLI but does not start a model process. Imported templates are recorded in the local SQLite database after a temporary-container SSH and tool probe; each record pins a Docker image ID, and the worker runs that identity rather than a mutable tag. The web and worker must share the same data directory and Docker host. AWS VM container hosting, image publication to a registry, and remote SSH routing are not implemented by this path.
+
+## Local Docker Codex integration (HAC-116)
+
+The opt-in local Codex path initializes a real Codex app-server in a Docker CPU
+box from project Settings and lets desktop send turns to the same persistent
+thread. Employee membership gates reads and chat; owners control setup and
+lifecycle. SQLite stores bounded attributed session items, while the Docker
+volume retains Codex history and workspace files. This local implementation does
+not satisfy the AWS/GPU execution or public multi-tenant milestones above. See
+[LOCAL_CODEX.md](LOCAL_CODEX.md) for setup, authentication, recovery and limits.

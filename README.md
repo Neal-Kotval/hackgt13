@@ -114,7 +114,9 @@ For real delivery, set `AGENTCLOUD_MAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_PORT` (de
 
 Invitations expire after 48 hours. Reissuing creates a new invitation and cancels the old link; revoked, declined, and expired invitations cannot be accepted. The UI distinguishes locally captured messages from SMTP submissions. Ownership can be assigned separately by an owner; the last owner cannot be removed or demoted.
 
-Existing pre-organization projects remain hidden until their recorded owner moves them into an organization using the organization page. `auth:bootstrap` remains an optional administrative helper for two accounts and legacy project memberships; it does not replace verification or organization membership. Supply its `AGENTCLOUD_EMPLOYEE1_EMAIL`, `AGENTCLOUD_EMPLOYEE2_EMAIL`, and corresponding `_PASSWORD` variables privately; never commit credentials. Existing passwords are preserved.
+Organization names and URL slugs use the same validation on creation and update. Names must be nonempty and at most 100 characters; slugs must be lowercase letters and numbers separated by single hyphens, at most 80 characters. Slugs are stored identifiers, not yet website routes.
+
+Existing pre-organization projects remain hidden until their recorded owner moves them into an organization using the organization page. Adoption clears previous project assignments except the adopting owner's; organization members need an explicit new project grant. Organization owners and admins can access every project in their organization. `auth:bootstrap` remains an optional administrative helper for two accounts and legacy project memberships; it does not replace verification or organization membership. Supply its `AGENTCLOUD_EMPLOYEE1_EMAIL`, `AGENTCLOUD_EMPLOYEE2_EMAIL`, and corresponding `_PASSWORD` variables privately; never commit credentials. Existing passwords are preserved.
 
 All human state, event, and resource routes require verified cookie sessions and organization/project access. Agent CLI bearer tokens remain separate and work only on `/api/agent`. Sign-out invalidates the session; open event streams recheck sessions and memberships every tick. Sessions last seven days. SQLite stores users, sessions, organizations, invitations, and memberships; JSON retains coordination data. Back up both stores and the secret together. Project creation spans both stores without a transaction, so an interrupted write can require administrative repair. This is not production tenant isolation, enterprise SSO, resource approval policy, or SSH enforcement.
 
@@ -143,7 +145,7 @@ The proposed backend uses one provider-neutral run-box contract: attach an exist
 - **Project dashboard:** agent roster, assigned tasks, services, handoffs, and activity.
 - **Agent setup:** create an identity and obtain a scoped connection token.
 - **Review:** inspect and accept handoffs; Changes and Checks describe pending infrastructure.
-- **Desktop:** CLI connection workflow in the web app; a separate Electron shell for Tasks + Local chat lives in [`desktop/`](desktop/) (`just desktop`). See [`desktop/README.md`](desktop/README.md).
+- **Desktop:** CLI connection workflow in the web app; a separate Electron shell for Tasks, Environments, and Project chat lives in [`desktop/`](desktop/) (`just desktop`). See [`desktop/README.md`](desktop/README.md).
 - **Environments:** request a time-limited environment in one step, follow its verified state, copy the SSH command, open it in the desktop app, and stop it.
 - **Resources:** register and inspect intended resource metadata and its unverified availability.
 - **Requests:** save resource requests and inspect the explicit unavailable policy decision.
@@ -216,7 +218,7 @@ The token check enforces the visual-system rules; it does not replace visual ins
 | `app/` | Next.js routes, UI, API handlers, and application styling |
 | `lib/` | Shared types, initial empty state, and persisted coordination state |
 | `cli/` | Node.js agent coordination client |
-| `desktop/` | Electron Tasks + Local chat shell (see desktop/README.md) |
+| `desktop/` | Electron Tasks + Project chat shell (see desktop/README.md) |
 | `scripts/` | Repository checks, including token enforcement |
 | `tests/` | Backend behavior and authorization verification |
 | `reference/` | Original supplied prototype exports |

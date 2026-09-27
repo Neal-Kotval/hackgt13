@@ -109,9 +109,16 @@ test("leaving and rejoining an organization does not restore previous project as
 test("legacy projects require their existing owner to move them into an organization",async()=>{
  const p=await store.action({type:"createProject",name:"Existing work",repo:"https://example.com/repo",compute:"Hosted Linux",template:"blank"});
  db.prepare("INSERT INTO project_membership (user_id,project_id,role) VALUES (?,?,'owner')").run(owner.id,p.id);
+ db.prepare("INSERT INTO project_membership (user_id,project_id,role) VALUES (?,?,'member')").run(outsider.id,p.id);
  await call("organization/set-active",{organizationId:org2.id},outsider.cookie);
  assert.equal((await routes.organizations.POST(request("organizations",{type:"adoptProject",projectId:p.id},outsider.cookie))).status,403);
  assert.equal((await routes.organizations.POST(request("organizations",{type:"adoptProject",projectId:p.id},owner.cookie))).status,200);
+ assert.equal(db.prepare("SELECT role FROM project_membership WHERE user_id=? AND project_id=?").get(owner.id,p.id).role,"owner");
+ assert.equal(db.prepare("SELECT role FROM project_membership WHERE user_id=? AND project_id=?").get(outsider.id,p.id),undefined);
+ await call("organization/set-active",{organizationId:org.id},outsider.cookie);
+ assert.deepEqual((await (await routes.state.GET(request("state",null,outsider.cookie))).json()).projects,[]);
+ assert.equal((await routes.organizations.POST(request("organizations",{type:"setProjectAccess",projectId:p.id,userId:outsider.id,allowed:true},owner.cookie))).status,200);
+ assert.equal((await (await routes.state.GET(request("state",null,outsider.cookie))).json()).projects[0].id,p.id);
  assert.equal((await routes.organizations.POST(request("organizations",{type:"adoptProject",projectId:p.id},owner.cookie))).status,409);
 });
 test("public local-mail configuration keeps authenticated organization reads available",async()=>{
