@@ -361,3 +361,34 @@
   padding: 0 var(--space-2) 0 var(--space-7);
   min-height: var(--space-7);
 }
+
+/* Compact setup actions follow the web's button and panel hierarchy. */
+.chat-setup-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.chat-setup-heading > div { min-width: 0; }
+.chat-setup-heading p { margin-top: var(--space-1); }
+.chat-setup-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--control-height);
+  height: var(--control-height);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+.chat-setup-icon svg { width: var(--icon-lg); height: var(--icon-lg); }
+.codex-sign-in-actions .button svg,
+.chat-settings-actions .button svg { width: var(--icon-sm); height: var(--icon-sm); flex-shrink: 0; }
+.chat-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}

@@ -54,6 +54,11 @@ a {
     border-color var(--duration-fast) var(--ease-standard);
 }
 
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 button {
   cursor: pointer;
   color: inherit;
@@ -64,6 +69,7 @@ button:disabled {
   cursor: not-allowed;
 }
 
+a:focus-visible,
 button:focus-visible,
 textarea:focus-visible,
 input:focus-visible,

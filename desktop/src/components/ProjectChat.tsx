@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowUpRight, GearSix, Robot } from "@phosphor-icons/react";
 import { desktopApi } from "../lib/desktop-api";
 import {
   deriveChatTargets,
@@ -684,7 +685,7 @@ export function ProjectChat({
         ? "Unavailable"
         : match
           ? statusLabel[match.status]
-          : "Setup on web",
+          : "Setup required",
       disabled: unavailable,
     };
   });
@@ -805,7 +806,7 @@ export function ProjectChat({
                       : busy && !sessionId
                         ? "Starting Codex on this environment…"
                         : !sessionId
-                          ? currentTarget ? "This environment is selected. Finish its setup to start chatting." : "Choose an environment to access its chats."
+                          ? currentTarget ? "" : "Choose an environment to access its chats."
                           : "Replies come from this project's agent via alto."}
               </p>
             </div>
@@ -847,28 +848,28 @@ export function ProjectChat({
           {selectedBoxUnavailable && <section className="codex-sign-in" aria-labelledby="environment-unavailable-title">
             <h2 id="environment-unavailable-title">Environment unavailable</h2>
             <p>{codexBlockedReason(selectedBox) ?? "This environment is not ready for Codex yet."}</p>
-            <a className="button primary" href={`${webBaseUrl.replace(/\/$/, "")}/projects/${projectId}/environments?environment=${selectedBox.id}`} target="_blank" rel="noreferrer">View environment</a>
+            <div className="codex-sign-in-actions"><a className="button" href={`${webBaseUrl.replace(/\/$/, "")}/projects/${projectId}/environments?environment=${selectedBox.id}`} target="_blank" rel="noreferrer">View environment <ArrowUpRight aria-hidden="true" /></a></div>
           </section>}
           {!selectedBoxUnavailable && selectedBox && (session?.status === "auth_required" || setupRequired[currentTarget] || (currentTarget && !selectedSession)) && (
             <section className="codex-sign-in" aria-labelledby="environment-setup-title">
-              <h2 id="environment-setup-title">Sign in with ChatGPT</h2>
-              <p>Codex in this environment uses your ChatGPT account. Sign-in opens in your browser, and this app connects it to the environment.</p>
+              <div className="chat-setup-heading"><span className="chat-setup-icon"><Robot aria-hidden="true" /></span><div><h2 id="environment-setup-title">Connect Codex</h2><p>Sign in with ChatGPT to start chatting in this environment.</p></div></div>
               <div className="codex-sign-in-actions">
                 <button className="button primary" type="button" disabled={busy || session?.status === "initializing"} onClick={() => void signInWithChatGpt()}>
-                  {busy ? "Connecting…" : "Sign in with ChatGPT"}
+                  {busy ? "Connecting…" : "Sign in with ChatGPT"}<ArrowUpRight aria-hidden="true" />
                 </button>
+                <a className="button ghost" href={settingsUrl} target="_blank" rel="noreferrer"><GearSix aria-hidden="true" />Project settings</a>
               </div>
             </section>
           )}
-          {!sessions.length && !loading && !pendingEnvironment && (
-            <a
-              className="button primary"
+          {!sessions.length && !loading && !pendingEnvironment && !selectedBox && (
+            <div className="chat-settings-actions"><a
+              className="button ghost"
               href={settingsUrl}
               target="_blank"
               rel="noreferrer"
             >
-              Project settings
-            </a>
+              <GearSix aria-hidden="true" />{projectId ? "Project settings" : "Open website"}<ArrowUpRight aria-hidden="true" />
+            </a></div>
           )}
           {ambiguous[sessionId] && (
             <div className="project-chat-recovery" role="status">
