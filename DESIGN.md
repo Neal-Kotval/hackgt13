@@ -196,3 +196,9 @@ names include a distinguishing identity suffix. These labels describe ownership
 and model session status, not live human presence. Agent notifications provide
 recipient selection and durable incoming/outgoing delivery history in a compact
 disclosure using existing semantic tokens.
+
+Desktop New chat opens an unsaved draft scoped to the selected project, environment,
+and agent. Only the first send creates a persisted chat. Sidebar rows expose Rename
+and Delete through an accessible ellipsis menu, with inline name editing and a
+delete confirmation. Failed history actions remain visible inside the navigation
+drawer; deleting a saved chat preserves its environment and workspace files.

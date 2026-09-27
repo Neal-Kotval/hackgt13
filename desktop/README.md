@@ -181,3 +181,11 @@ Use **Shell** for the selected environment's SSH terminal, or **Chat + shell** o
 wide screens to work alongside the agent. View switches keep the terminal alive;
 **Close terminal** disconnects it. Changing environments or signing out also
 closes its mounted terminal. Normal device-key and pinned-host checks still apply.
+
+### Chat history
+
+New chat opens a local draft; it does not save a chat until the first message is
+sent. Repeated clicks reuse that draft. The chat row's ellipsis menu offers Rename
+and Delete for the creator or a project owner. Stop an active response before
+deleting. Deletion removes saved chat history, not the environment, shared ChatGPT
+sign-in, or workspace files. Environment setup sessions remain protected.
