@@ -12,10 +12,36 @@ try {
     const page=await browser.newPage({viewport:{width,height:900}});
     await page.addInitScript({path:path.join(desktop,'tests/chat-design.fixture.js')});
     await page.addInitScript(()=>{
+      const api = window.agentcloudDesktop;
+      const authStatus = api.authStatus;
+      const getState = api.getState;
+      let releaseAuth;
+      const releaseStates = [];
+      let authCalls = 0;
+      let raceReleased = false;
+      api.authStatus = () => {
+        // StrictMode checks auth twice before it routes the startup link.
+        if (++authCalls <= 2) return authStatus();
+        return new Promise(resolve => { authStatus().then(status => { releaseAuth = () => resolve(status); }); });
+      };
+      api.getState = () => {
+        if (raceReleased) return getState();
+        return new Promise(resolve => { getState().then(state => { releaseStates.push(() => resolve(state)); }); });
+      };
+      window.__releaseStartupRace = () => {
+        if (!releaseAuth || !releaseStates.length) return false;
+        // Route the link and then finish the older, link-less project fetch
+        // in the same React batch, before effect cleanup can cancel it.
+        raceReleased = true;
+        releaseAuth(); releaseStates.forEach(release => release());
+        api.authStatus = authStatus;
+        return true;
+      };
       let pending={ok:true,target:{projectId:'p1',runBoxId:'box-2',panel:'codex'}};
-      window.agentcloudDesktop.takePendingDeepLink=async()=>{const next=pending;pending=null;return next;};
+      api.takePendingDeepLink=async()=>{const next=pending;pending=null;return next;};
     });
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}`);
+    await expect.poll(() => page.evaluate(() => window.__releaseStartupRace())).toBe(true);
     const picker=page.getByRole('combobox',{name:'Environment',exact:true}).first();
     await expect(picker).toContainText('second-workspace');
     await page.evaluate(()=>window.__test.deepLink({ok:true,target:{projectId:'p1',runBoxId:'box-failed',panel:'codex'}}));
