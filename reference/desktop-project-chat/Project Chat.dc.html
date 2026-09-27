@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<style>
+@font-face{font-family:'Hanken Grotesk';font-weight:400 700;font-display:swap;src:url("public/fonts/hanken-grotesk-4.woff2") format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-weight:400 700;font-display:swap;src:url("public/fonts/jetbrains-mono-10.woff2") format('woff2');}
+*,*::before,*::after{box-sizing:border-box;}
+html{color-scheme:dark;}
+body{margin:0;background:#05070a;color:#e6e9ef;font-family:"JetBrains Mono",monospace;font-size:13px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+button,input,textarea{font:inherit;color:inherit;}
+button{cursor:pointer;}
+a{color:#77a7ff;}a:hover{color:#b5d0ff;}
+textarea::placeholder,input::placeholder{color:#adb5c2;}
+h1,h2,h3,p{margin:0;}
+</style>
+</helmet>
+
+<section style="padding:48px 64px 32px;display:flex;flex-direction:column;gap:20px;">
+  <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">
+    <h2 style="font-family:'Hanken Grotesk',sans-serif;font-size:24px;font-weight:600;letter-spacing:-0.03em;">Project chat — redesign</h2>
+    <span style="font-size:12px;color:#9ca5b3;">Same nav + history column. Click threads or the state tabs to switch views; open the tool-step row to expand.</span>
+  </div>
+  <div id="2a" style="display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#77a7ff;color:#090b0f;">2a</span>
+      <div style="display:flex;gap:4px;padding:4px;border-radius:12px;background:#12151b;border:1px solid rgba(230,233,239,0.09);">
+        <sc-for list="{{ viewTabs }}" as="t" hint-placeholder-count="3">
+          <button onClick="{{ t.select }}" style="border:0;border-radius:8px;padding:4px 12px;font-size:12px;background:{{ t.bg }};color:{{ t.color }};">{{ t.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="width:1440px;height:900px;display:grid;grid-template-columns:240px minmax(0,1fr);background:#090b0f;border:1px solid rgba(230,233,239,0.14);border-radius:12px;overflow:hidden;">
+      <aside style="display:flex;flex-direction:column;gap:32px;min-height:0;padding:20px 12px;background:rgba(18,21,27,0.9);border-right:1px solid rgba(230,233,239,0.09);box-shadow:inset 0 1px 0 rgba(230,233,239,0.06),0 8px 32px rgba(0,0,0,0.14);">
+        <div style="padding:0 12px;min-height:40px;display:flex;align-items:center;">
+          <div style="display:flex;align-items:center;gap:8px;font-family:'Hanken Grotesk',sans-serif;font-size:18px;font-weight:600;letter-spacing:-0.03em;">agentcloud<span style="width:0.5em;height:0.82em;background:#77a7ff;"></span></div>
+        </div>
+        <nav style="display:flex;flex-direction:column;gap:4px;">
+          <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="4">
+            <button style="display:flex;align-items:center;gap:12px;min-height:40px;padding:8px 12px;border:0;border-radius:12px;text-align:left;font-size:12px;background:{{ n.bg }};color:{{ n.color }};box-shadow:{{ n.shadow }};" style-hover="background:rgba(230,233,239,0.06);color:#e6e9ef;"><i class="{{ n.icon }}" style="font-size:18px;"></i><span>{{ n.label }}</span></button>
+          </sc-for>
+        </nav>
+
+        <div style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;">
+            <h2 style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:#adb5c2;">Chats</h2>
+            <button onClick="{{ newChat }}" title="New chat" style="width:32px;height:32px;display:grid;place-items:center;border:1px solid rgba(230,233,239,0.14);border-radius:8px;background:#12151b;color:#e6e9ef;" style-hover="background:#252c36;border-color:rgba(230,233,239,0.2);"><i class="ph ph-note-pencil" style="font-size:18px;"></i></button>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;height:32px;margin:0 4px;padding:0 8px 0 12px;border:1px solid rgba(230,233,239,0.08);border-radius:8px;background:#090b0f;color:#9ca5b3;">
+            <i class="ph ph-magnifying-glass" style="font-size:14px;"></i>
+            <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="Search chats" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font-size:12px;color:#e6e9ef;">
+            <span style="font-size:11px;color:#9ca5b3;padding:0 4px;border:1px solid rgba(230,233,239,0.08);border-radius:4px;">⌘K</span>
+          </label>
+          <div style="display:flex;flex-direction:column;gap:16px;overflow:auto;min-height:0;scrollbar-width:none;">
+            <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <div style="padding:0 12px 4px;font-size:11px;color:#9ca5b3;text-transform:uppercase;letter-spacing:0.1em;">{{ g.label }}</div>
+                <sc-for list="{{ g.threads }}" as="th" hint-placeholder-count="2">
+                  <button onClick="{{ th.select }}" style="display:flex;align-items:center;gap:8px;min-height:36px;padding:8px 12px;border:0;border-radius:12px;text-align:left;background:{{ th.bg }};color:{{ th.color }};" style-hover="background:rgba(230,233,239,0.06);color:#e6e9ef;">
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:500;">{{ th.title }}</span>
+                    <sc-if value="{{ th.streaming }}" hint-placeholder-val="{{ false }}">
+                      <span title="Responding" style="width:6px;height:6px;border-radius:999px;background:#ddbd86;flex-shrink:0;"></span>
+                    </sc-if>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-for>
+            <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:8px 12px;color:#9ca5b3;font-size:12px;">No chats match “{{ query }}”</div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:auto;padding:16px 12px 0;border-top:1px solid rgba(230,233,239,0.08);">
+          <div style="display:flex;align-items:center;gap:12px;padding:12px;background:rgba(230,233,239,0.06);border:1px solid rgba(230,233,239,0.09);border-radius:12px;">
+            <span style="display:grid;place-items:center;flex-shrink:0;width:32px;height:32px;border-radius:999px;background:#192d4b;color:#b5d0ff;font-family:'Hanken Grotesk',sans-serif;font-size:12px;font-weight:600;">MR</span>
+            <div style="display:grid;gap:4px;min-width:0;"><strong style="font-family:'Hanken Grotesk',sans-serif;font-size:12px;">Maya Reyes</strong><span style="font-size:11px;color:#adb5c2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">maya@listings.dev</span></div>
+          </div>
+          <button style="display:flex;align-items:center;gap:8px;min-height:40px;padding:8px 16px;border:1px solid transparent;border-radius:8px;background:transparent;color:#adb5c2;font-size:12px;" style-hover="background:#12151b;color:#e6e9ef;"><i class="ph ph-sign-out" style="font-size:18px;"></i>Sign out</button>
+        </div>
+      </aside>
+
+      <main style="display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-width:0;min-height:0;background:#090b0f;">
+        <header style="display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:56px;padding:12px 32px;border-bottom:1px solid rgba(230,233,239,0.08);">
+          <h1 style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Hanken Grotesk',sans-serif;font-size:15px;font-weight:600;letter-spacing:-0.03em;">{{ title }}</h1>
+          <div style="display:flex;align-items:center;gap:16px;flex-shrink:0;">
+            <sc-if value="{{ notEmpty }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;height:32px;border:1px solid rgba(230,233,239,0.14);border-radius:8px;background:#12151b;font-size:12px;">
+                <button style="display:flex;align-items:center;gap:8px;height:100%;padding:0 12px;border:0;background:transparent;color:#e6e9ef;border-radius:8px 0 0 8px;" style-hover="background:rgba(230,233,239,0.06);"><i class="ph ph-folder-simple" style="font-size:14px;color:#adb5c2;"></i>listings-web</button>
+                <span style="width:1px;align-self:stretch;background:rgba(230,233,239,0.08);"></span>
+                <button style="display:flex;align-items:center;gap:8px;height:100%;padding:0 12px;border:0;background:transparent;color:#a3b8d8;" style-hover="background:rgba(230,233,239,0.06);"><i class="ph ph-robot" style="font-size:14px;"></i>desktop-chat</button>
+                <span style="width:1px;align-self:stretch;background:rgba(230,233,239,0.08);"></span>
+                <button style="display:flex;align-items:center;gap:8px;height:100%;padding:0 12px;border:0;background:transparent;color:#e6e9ef;border-radius:0 8px 8px 0;" style-hover="background:rgba(230,233,239,0.06);"><i class="ph ph-hard-drives" style="font-size:14px;color:#adb5c2;"></i>rtx-4090<span style="display:flex;align-items:center;gap:4px;color:#a1c9b3;"><span style="width:6px;height:6px;border-radius:999px;background:#a1c9b3;"></span>Ready</span></button>
+              </div>
+            </sc-if>
+            <span title="Chat history is saved on this device and does not sync to the web dashboard." style="font-size:11px;color:#9ca5b3;">Saved on this device</span>
+          </div>
+        </header>
+
+        <div style="overflow:auto;min-height:0;padding:32px max(32px, calc((100% - 736px) / 2));display:flex;flex-direction:column;gap:32px;justify-content:{{ convJustify }};">
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+              <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;">
+                <button style="display:flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid rgba(230,233,239,0.14);border-radius:8px;background:#12151b;font-size:12px;" style-hover="border-color:rgba(230,233,239,0.2);background:#1c222b;"><i class="ph ph-folder-simple" style="font-size:14px;color:#adb5c2;"></i>listings-web<i class="ph ph-caret-down" style="font-size:12px;color:#9ca5b3;"></i></button>
+                <button style="display:flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid rgba(230,233,239,0.14);border-radius:8px;background:#12151b;font-size:12px;color:#a3b8d8;" style-hover="border-color:rgba(230,233,239,0.2);background:#1c222b;"><i class="ph ph-robot" style="font-size:14px;"></i>desktop-chat<i class="ph ph-caret-down" style="font-size:12px;color:#9ca5b3;"></i></button>
+                <button style="display:flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid rgba(230,233,239,0.14);border-radius:8px;background:#12151b;font-size:12px;" style-hover="border-color:rgba(230,233,239,0.2);background:#1c222b;"><i class="ph ph-hard-drives" style="font-size:14px;color:#adb5c2;"></i>rtx-4090<span style="display:flex;align-items:center;gap:4px;color:#a1c9b3;"><span style="width:6px;height:6px;border-radius:999px;background:#a1c9b3;"></span>Ready</span><i class="ph ph-caret-down" style="font-size:12px;color:#9ca5b3;"></i></button>
+              </div>
+              <p style="font-size:11px;color:#9ca5b3;">Replies come from this project's agent via AgentCloud.</p>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ notEmpty }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#9ca5b3;">
+              <span style="width:6px;height:6px;border-radius:999px;background:#a1c9b3;"></span>
+              <span>Connected to <span style="color:#e6e9ef;">rtx-4090</span> over SSH · trusted shell access</span>
+              <span style="flex:1;height:1px;background:rgba(230,233,239,0.08);"></span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isActive }}" hint-placeholder-val="{{ true }}">
+            <article style="align-self:flex-end;max-width:85%;padding:12px 20px;border-radius:16px;background:#1c222b;">
+              <p style="white-space:pre-wrap;font-size:13px;line-height:1.8;">Add cursor pagination to the listings API and make sure the listings tests still pass.</p>
+            </article>
+
+            <article style="display:flex;flex-direction:column;gap:12px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="display:grid;place-items:center;width:24px;height:24px;border-radius:999px;background:#263141;color:#a3b8d8;"><i class="ph ph-robot" style="font-size:14px;"></i></span>
+                <span style="font-family:'Hanken Grotesk',sans-serif;font-size:12px;font-weight:600;">desktop-chat</span>
+                <span style="font-size:11px;color:#9ca5b3;">on rtx-4090</span>
+              </div>
+
+              <div style="display:flex;flex-direction:column;border:1px solid rgba(230,233,239,0.08);border-radius:12px;background:#12151b;overflow:hidden;align-self:flex-start;min-width:360px;">
+                <button onClick="{{ toggleSteps }}" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:0;background:transparent;font-size:12px;color:#adb5c2;text-align:left;" style-hover="color:#e6e9ef;background:rgba(230,233,239,0.06);">
+                  <i class="ph ph-terminal-window" style="font-size:14px;"></i>
+                  <span style="color:#e6e9ef;">Ran 4 commands</span>
+                  <span style="color:#9ca5b3;">· 38s</span>
+                  <span style="display:inline-flex;align-items:center;gap:4px;padding:0 8px;border:1px solid currentColor;border-radius:4px;font-size:11px;line-height:1.6;color:#a1c9b3;"><i class="ph ph-check" style="font-size:12px;"></i>12 passed</span>
+                  <span style="flex:1;"></span>
+                  <i class="{{ stepsCaret }}" style="font-size:12px;"></i>
+                </button>
+                <sc-if value="{{ stepsOpen }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;border-top:1px solid rgba(230,233,239,0.08);">
+                    <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4">
+                      <div style="display:flex;align-items:center;gap:12px;padding:8px 12px;font-size:12px;border-bottom:1px solid rgba(230,233,239,0.08);">
+                        <span style="color:#9ca5b3;">$</span>
+                        <code style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e6e9ef;">{{ s.cmd }}</code>
+                        <span style="font-size:11px;color:{{ s.tone }};">{{ s.result }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:12px;font-size:13px;line-height:1.8;">
+                <p style="text-wrap:pretty;">Added cursor pagination to <code style="padding:1px 6px;border-radius:4px;background:#1c222b;font-size:12px;">GET /api/listings</code>. The route now accepts <code style="padding:1px 6px;border-radius:4px;background:#1c222b;font-size:12px;">cursor</code> and <code style="padding:1px 6px;border-radius:4px;background:#1c222b;font-size:12px;">limit</code> (default 20, max 100) and returns a <code style="padding:1px 6px;border-radius:4px;background:#1c222b;font-size:12px;">nextCursor</code> when more rows exist.</p>
+                <div style="border:1px solid rgba(230,233,239,0.14);border-radius:12px;background:#12151b;overflow:hidden;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 4px 4px 12px;border-bottom:1px solid rgba(230,233,239,0.08);">
+                    <span style="font-size:11px;color:#9ca5b3;">app/api/listings/route.ts</span>
+                    <button title="Copy code" style="display:flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:#adb5c2;font-size:11px;" style-hover="background:rgba(230,233,239,0.06);color:#e6e9ef;"><i class="ph ph-copy" style="font-size:14px;"></i>Copy</button>
+                  </div>
+                  <pre style="margin:0;padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.6;overflow:auto;color:#e6e9ef;"><span style="color:#9ca5b3;">// Cursor is the last listing id from the previous page.</span>
+<span style="color:#77a7ff;">const</span> limit = Math.min(Number(params.get(<span style="color:#a1c9b3;">"limit"</span>) ?? 20), 100);
+<span style="color:#77a7ff;">const</span> rows = <span style="color:#77a7ff;">await</span> db.listings.findMany({
+  where: cursor ? { id: { gt: cursor } } : {},
+  orderBy: { id: <span style="color:#a1c9b3;">"asc"</span> },
+  take: limit + 1,
+});
+<span style="color:#77a7ff;">const</span> nextCursor = rows.length &gt; limit ? rows[limit - 1].id : <span style="color:#77a7ff;">null</span>;</pre>
+                </div>
+              </div>
+
+              <div style="border:1px solid rgba(230,233,239,0.14);border-radius:12px;overflow:hidden;">
+                <div style="padding:8px 12px;font-size:11px;color:#9ca5b3;text-transform:uppercase;letter-spacing:0.1em;border-bottom:1px solid rgba(230,233,239,0.08);">3 files changed</div>
+                <sc-for list="{{ files }}" as="f" hint-placeholder-count="3">
+                  <button style="display:flex;align-items:center;gap:12px;width:100%;padding:8px 12px;border:0;border-bottom:1px solid rgba(230,233,239,0.08);background:transparent;font-size:12px;text-align:left;" style-hover="background:rgba(230,233,239,0.06);">
+                    <i class="ph ph-file-code" style="font-size:14px;color:#adb5c2;"></i>
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ f.path }}</span>
+                    <span style="color:#a1c9b3;">{{ f.add }}</span>
+                    <span style="color:#e6a098;">{{ f.del }}</span>
+                  </button>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid rgba(230,233,239,0.14);border-radius:12px;background:#12151b;">
+                <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#9ca5b3;">
+                  <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid currentColor;border-radius:4px;color:#a3b8d8;line-height:1.15;"><i class="ph ph-arrow-bend-up-right" style="font-size:12px;"></i>Handoff</span>
+                  <span>to <span style="color:#a3b8d8;">ui-agent</span></span>
+                </div>
+                <h3 style="font-family:'Hanken Grotesk',sans-serif;font-size:15px;font-weight:600;letter-spacing:-0.03em;">Listings API paginated</h3>
+                <p style="font-size:12px;color:#adb5c2;">Endpoint returns <code>nextCursor</code>; contract documented in docs/api.md.</p>
+                <div style="display:flex;gap:8px;font-size:12px;"><span style="color:#9ca5b3;text-transform:uppercase;letter-spacing:0.1em;font-size:11px;">Next</span><span>Build infinite scroll in the listings view</span></div>
+                <div style="display:flex;gap:8px;">
+                  <button style="display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:4px 12px;border:1px solid rgba(230,233,239,0.14);border-radius:8px;background:#12151b;font-size:12px;" style-hover="background:#252c36;border-color:rgba(230,233,239,0.2);">Open in Review<i class="ph ph-arrow-up-right" style="font-size:14px;"></i></button>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:4px;">
+                <button title="Copy response" style="width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:#adb5c2;" style-hover="background:#12151b;color:#e6e9ef;"><i class="ph ph-copy" style="font-size:16px;"></i></button>
+                <button title="Retry" style="width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:#adb5c2;" style-hover="background:#12151b;color:#e6e9ef;"><i class="ph ph-arrow-clockwise" style="font-size:16px;"></i></button>
+              </div>
+            </article>
+          </sc-if>
+
+          <sc-if value="{{ isStreaming }}" hint-placeholder-val="{{ false }}">
+            <article style="align-self:flex-end;max-width:85%;padding:12px 20px;border-radius:16px;background:#1c222b;">
+              <p style="white-space:pre-wrap;font-size:13px;line-height:1.8;">Run the listings benchmark on the GPU box and report p95 latency.</p>
+            </article>
+            <article style="display:flex;flex-direction:column;gap:12px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="display:grid;place-items:center;width:24px;height:24px;border-radius:999px;background:#263141;color:#a3b8d8;"><i class="ph ph-robot" style="font-size:14px;"></i></span>
+                <span style="font-family:'Hanken Grotesk',sans-serif;font-size:12px;font-weight:600;">desktop-chat</span>
+                <span style="font-size:11px;color:#9ca5b3;">on rtx-4090</span>
+              </div>
+              <div style="display:flex;flex-direction:column;border:1px solid rgba(221,189,134,0.35);border-radius:12px;background:#12151b;overflow:hidden;align-self:flex-start;min-width:420px;">
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12px;color:#adb5c2;">
+                  <i class="ph ph-terminal-window" style="font-size:14px;"></i>
+                  <span style="color:#e6e9ef;">Running</span>
+                  <code style="color:#e6e9ef;">python bench.py --n 500</code>
+                  <span style="flex:1;"></span>
+                  <span style="color:#ddbd86;font-size:11px;">step 2 of 3</span>
+                </div>
+                <pre style="margin:0;padding:8px 12px 12px;border-top:1px solid rgba(230,233,239,0.08);background:#090b0f;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.6;color:#adb5c2;">warmup   50/50   done
+requests 312/500
+p50 18.4ms · p95 41.2ms (running)</pre>
+              </div>
+              <p style="font-size:13px;line-height:1.8;text-wrap:pretty;">Benchmark started on rtx-4090 with the paginated endpoint. After 312 of 500 requests, p95 is holding near 41 ms<span style="display:inline-block;width:0.5em;height:0.82em;margin-left:2px;background:#77a7ff;vertical-align:-0.05em;"></span></p>
+              <div style="font-size:12px;color:#ddbd86;">Responding…</div>
+            </article>
+          </sc-if>
+        </div>
+
+        <div style="width:100%;max-width:800px;justify-self:center;padding:0 32px 24px;align-self:{{ composerAlign }};">
+          <form style="display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid rgba(230,233,239,0.14);border-radius:16px;background:#12151b;" style-focus-within="border-color:rgba(230,233,239,0.2);">
+            <sc-if value="{{ showAttachment }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 4px 0 8px;border-radius:8px;background:#1c222b;font-size:12px;"><i class="ph ph-file-code" style="font-size:14px;color:#adb5c2;"></i>listings.test.ts<button title="Remove" style="width:20px;height:20px;display:grid;place-items:center;border:0;border-radius:4px;background:transparent;color:#adb5c2;" style-hover="color:#e6e9ef;background:#252c36;"><i class="ph ph-x" style="font-size:12px;"></i></button></span>
+              </div>
+            </sc-if>
+            <textarea placeholder="{{ placeholder }}" rows="2" style="width:100%;min-height:40px;resize:none;padding:8px;border:0;background:transparent;outline:none;line-height:1.6;font-size:13px;"></textarea>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button type="button" title="Attach files or context" style="width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:#adb5c2;" style-hover="background:rgba(230,233,239,0.06);color:#e6e9ef;"><i class="ph ph-paperclip" style="font-size:18px;"></i></button>
+              <sc-if value="{{ notEmpty }}" hint-placeholder-val="{{ true }}">
+                <span style="width:1px;height:16px;background:rgba(230,233,239,0.14);"></span>
+                <button type="button" style="display:flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:0;border-radius:8px;background:transparent;font-size:12px;color:#adb5c2;" style-hover="background:rgba(230,233,239,0.06);color:#e6e9ef;"><i class="ph ph-folder-simple" style="font-size:14px;"></i>listings-web<i class="ph ph-caret-down" style="font-size:12px;"></i></button>
+                <button type="button" style="display:flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:0;border-radius:8px;background:transparent;font-size:12px;color:#a3b8d8;" style-hover="background:rgba(230,233,239,0.06);"><i class="ph ph-robot" style="font-size:14px;"></i>desktop-chat<i class="ph ph-caret-down" style="font-size:12px;"></i></button>
+                <button type="button" style="display:flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:0;border-radius:8px;background:transparent;font-size:12px;color:#adb5c2;" style-hover="background:rgba(230,233,239,0.06);color:#e6e9ef;"><span style="width:6px;height:6px;border-radius:999px;background:#a1c9b3;margin-right:4px;"></span>rtx-4090<i class="ph ph-caret-down" style="font-size:12px;"></i></button>
+              </sc-if>
+              <span style="flex:1;"></span>
+              <sc-if value="{{ isStreaming }}" hint-placeholder-val="{{ false }}">
+                <button type="button" title="Stop response" style="width:40px;height:40px;display:grid;place-items:center;border:1px solid #e6a098;border-radius:12px;background:#422b2c;color:#e6a098;" style-hover="background:#e6a098;color:#090b0f;"><i class="ph-fill ph-square" style="font-size:16px;"></i></button>
+              </sc-if>
+              <sc-if value="{{ notStreaming }}" hint-placeholder-val="{{ true }}">
+                <button type="button" title="Send message" style="width:40px;height:40px;display:grid;place-items:center;border:1px solid #77a7ff;border-radius:12px;background:#77a7ff;color:#090b0f;" style-hover="background:#b5d0ff;"><i class="ph-bold ph-arrow-up" style="font-size:18px;"></i></button>
+              </sc-if>
+            </div>
+          </form>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<section style="padding:32px 64px 64px;display:flex;flex-direction:column;gap:20px;">
+  <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">
+    <h2 style="font-family:'Hanken Grotesk',sans-serif;font-size:24px;font-weight:600;letter-spacing:-0.03em;">Current (recreated from desktop/src)</h2>
+    <span style="font-size:12px;color:#9ca5b3;">ShellNav · ThreadList · Conversation · Composer · ChatProjectPicker</span>
+  </div>
+  <div id="1a" style="display:flex;flex-direction:column;gap:12px;">
+    <span style="align-self:flex-start;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#1c222b;color:#e6e9ef;border:1px solid rgba(230,233,239,0.14);">1a</span>
+    <div style="width:1440px;height:900px;display:grid;grid-template-columns:240px minmax(0,1fr);background:#090b0f;border:1px solid rgba(230,233,239,0.14);border-radius:12px;overflow:hidden;">
+      <aside style="display:flex;flex-direction:column;gap:32px;min-height:0;padding:20px 12px;background:rgba(18,21,27,0.9);border-right:1px solid rgba(230,233,239,0.09);box-shadow:inset 0 1px 0 rgba(230,233,239,0.06),0 8px 32px rgba(0,0,0,0.14);">
+        <div style="padding:0 12px;min-height:40px;display:flex;align-items:center;">
+          <div style="display:flex;align-items:center;gap:8px;font-family:'Hanken Grotesk',sans-serif;font-size:18px;font-weight:600;letter-spacing:-0.03em;">agentcloud<span style="width:0.5em;height:0.82em;background:#77a7ff;"></span></div>
+        </div>
+        <nav style="display:flex;flex-direction:column;gap:4px;">
+          <sc-for list="{{ navItemsOld }}" as="n" hint-placeholder-count="4">
+            <button style="display:flex;align-items:center;gap:12px;min-height:40px;padding:8px 12px;border:0;border-radius:12px;text-align:left;font-size:12px;background:{{ n.bg }};color:{{ n.color }};box-shadow:{{ n.shadow }};"><i class="{{ n.icon }}" style="font-size:18px;"></i><span>{{ n.label }}</span></button>
+          </sc-for>
+        </nav>
+        <div style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:96px;overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;">
+            <h2 style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:#adb5c2;">Chats</h2>
+            <button style="width:40px;min-height:40px;display:grid;place-items:center;padding:8px;border:1px solid rgba(230,233,239,0.14);border-radius:8px;background:#12151b;"><i class="ph ph-note-pencil" style="font-size:18px;"></i></button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <sc-for list="{{ oldThreads }}" as="th" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;border-radius:12px;background:{{ th.bg }};">
+                <button style="display:flex;align-items:center;min-width:0;min-height:40px;padding:8px 12px;border:0;border-radius:12px;background:transparent;text-align:left;color:{{ th.color }};"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;font-size:12px;">{{ th.title }}</span></button>
+                <span style="width:40px;"></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:auto;padding:16px 12px 0;border-top:1px solid rgba(230,233,239,0.08);">
+          <div style="display:flex;align-items:center;gap:12px;padding:12px;background:rgba(230,233,239,0.06);border:1px solid rgba(230,233,239,0.09);border-radius:12px;">
+            <span style="display:grid;place-items:center;flex-shrink:0;width:32px;height:32px;border-radius:999px;background:#192d4b;color:#b5d0ff;font-family:'Hanken Grotesk',sans-serif;font-size:12px;font-weight:600;">MR</span>
+            <div style="display:grid;gap:4px;min-width:0;"><strong style="font-family:'Hanken Grotesk',sans-serif;font-size:12px;">Maya Reyes</strong><span style="font-size:11px;color:#adb5c2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">maya@listings.dev</span></div>
+          </div>
+          <button style="display:flex;align-items:center;gap:8px;min-height:40px;padding:8px 16px;border:1px solid transparent;border-radius:8px;background:transparent;color:#adb5c2;font-size:12px;"><i class="ph ph-sign-out" style="font-size:18px;"></i>Sign out</button>
+        </div>
+      </aside>
+      <main style="display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-width:0;min-height:0;background:#090b0f;">
+        <header style="display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:56px;padding:16px 32px;">
+          <h1 style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Hanken Grotesk',sans-serif;font-size:15px;font-weight:600;letter-spacing:-0.03em;">Add cursor pagination</h1>
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+            <label style="font-size:13px;">Project</label>
+            <select style="width:220px;font-size:13px;"><option>listings-web</option></select>
+            <p style="color:#adb5c2;font-size:12px;white-space:nowrap;">1 agent on this project.</p>
+          </div>
+          <span style="flex-shrink:0;font-size:11px;color:#9ca5b3;">Saved on this device</span>
+        </header>
+        <div style="overflow:auto;min-height:0;padding:32px max(32px, calc((100% - 736px) / 2));display:flex;flex-direction:column;gap:32px;">
+          <article style="align-self:flex-end;max-width:85%;padding:12px 20px;border-radius:16px;background:#1c222b;"><p style="white-space:pre-wrap;font-size:13px;line-height:1.8;">Add cursor pagination to the listings API and make sure the listings tests still pass.</p></article>
+          <article style="display:flex;flex-direction:column;gap:8px;">
+            <div style="font-family:'Hanken Grotesk',sans-serif;font-size:12px;font-weight:600;color:#adb5c2;">Assistant</div>
+            <p style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.8;">Added cursor pagination to GET /api/listings. The route now accepts `cursor` and `limit` (default 20, max 100) and returns a `nextCursor` when more rows exist.
+
+```ts
+const limit = Math.min(Number(params.get("limit") ?? 20), 100);
+const rows = await db.listings.findMany({ take: limit + 1 });
+```
+
+Changed: app/api/listings/route.ts, lib/listings.ts, tests/listings.test.ts. 12 tests passed.</p>
+          </article>
+        </div>
+        <div style="width:100%;max-width:800px;justify-self:center;padding:0 32px 24px;">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end;padding:12px;border:1px solid rgba(230,233,239,0.14);border-radius:16px;background:#12151b;">
+            <textarea placeholder="Ask anything" style="width:100%;min-height:40px;resize:none;padding:8px;border:0;border-radius:8px;background:transparent;line-height:1.6;outline:none;"></textarea>
+            <button disabled style="width:40px;min-height:40px;display:grid;place-items:center;padding:8px;border:1px solid #77a7ff;border-radius:12px;background:#77a7ff;color:#090b0f;opacity:0.45;"><i class="ph-bold ph-arrow-up" style="font-size:18px;"></i></button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;empty&quot;,&quot;active&quot;,&quot;streaming&quot;],&quot;default&quot;:&quot;active&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;toolSteps&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;collapsed&quot;,&quot;expanded&quot;],&quot;default&quot;:&quot;collapsed&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showAttachment&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { view: null, stepsOpen: null, query: "" };
+  threadsData = [
+    { g: "Today", id: "bench", title: "Benchmark listings on GPU", view: "streaming", streaming: true },
+    { g: "Today", id: "pag", title: "Add cursor pagination", view: "active" },
+    { g: "Yesterday", id: "ssh", title: "Debug SSH host key mismatch", view: "active" },
+    { g: "Yesterday", id: "runpod", title: "Set up Runpod sandbox", view: "active" },
+    { g: "Previous 7 days", id: "life", title: "Explain run-box lifecycle", view: "active" },
+    { g: "Previous 7 days", id: "hand", title: "Draft handoff for api-agent", view: "active" },
+  ];
+  renderVals() {
+    const view = this.state.view ?? this.props.view ?? "active";
+    const stepsOpen = this.state.stepsOpen ?? (this.props.toolSteps === "expanded");
+    const q = this.state.query.trim().toLowerCase();
+    const selectedId = view === "streaming" ? "bench" : view === "active" ? (this.state.sel ?? "pag") : null;
+    const setView = (v, sel) => this.setState({ view: v, sel });
+    const groups = [];
+    this.threadsData.filter(t => !q || t.title.toLowerCase().includes(q)).forEach(t => {
+      let g = groups.find(x => x.label === t.g);
+      if (!g) { g = { label: t.g, threads: [] }; groups.push(g); }
+      const sel = t.id === selectedId;
+      g.threads.push({ ...t, bg: sel ? "rgba(119,167,255,0.12)" : "transparent", color: sel ? "#b5d0ff" : "#adb5c2", select: () => setView(t.view, t.id) });
+    });
+    const nav = (active) => [
+      ["Tasks", "ph ph-list-checks"], ["Environments", "ph ph-hard-drives"], ["Project chat", "ph ph-chat-circle"],
+    ].map(([label, icon]) => {
+      const a = label === active;
+      return { label, icon, bg: a ? "rgba(119,167,255,0.12)" : "transparent", color: a ? "#b5d0ff" : "#adb5c2", shadow: a ? "inset 0 1px 0 rgba(230,233,239,0.06), 0 8px 32px rgba(0,0,0,0.14)" : "none" };
+    });
+    const titles = { empty: "New chat", active: (this.threadsData.find(t => t.id === selectedId) || {}).title || "Add cursor pagination", streaming: "Benchmark listings on GPU" };
+    return {
+      viewTabs: [["empty", "Empty"], ["active", "Active"], ["streaming", "Streaming"]].map(([v, label]) => ({
+        label, bg: v === view ? "#1c222b" : "transparent", color: v === view ? "#e6e9ef" : "#adb5c2", select: () => setView(v, v === "active" ? "pag" : undefined),
+      })),
+      navItems: nav("Project chat"),
+      navItemsOld: nav("Project chat"),
+      groups, noResults: groups.length === 0, query: this.state.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      newChat: () => setView("empty"),
+      title: titles[view],
+      isEmpty: view === "empty", notEmpty: view !== "empty", isActive: view === "active",
+      isStreaming: view === "streaming", notStreaming: view !== "streaming",
+      convJustify: view === "empty" ? "flex-end" : "flex-start",
+      composerAlign: view === "empty" ? "start" : "end",
+      placeholder: view === "empty" ? "Ask desktop-chat to work on listings-web" : "Message desktop-chat",
+      showAttachment: (this.props.showAttachment ?? true) && view === "active",
+      stepsOpen, stepsCaret: stepsOpen ? "ph ph-caret-up" : "ph ph-caret-down",
+      toggleSteps: () => this.setState({ stepsOpen: !stepsOpen }),
+      steps: [
+        { cmd: "git checkout -b listings-pagination", result: "exit 0", tone: "#9ca5b3" },
+        { cmd: "rg -n \"findMany\" app/api/listings", result: "3 matches", tone: "#9ca5b3" },
+        { cmd: "apply_patch app/api/listings/route.ts lib/listings.ts", result: "2 files", tone: "#9ca5b3" },
+        { cmd: "npm test -- listings", result: "12 passed", tone: "#a1c9b3" },
+      ],
+      files: [
+        { path: "app/api/listings/route.ts", add: "+42", del: "−8" },
+        { path: "lib/listings.ts", add: "+17", del: "−3" },
+        { path: "tests/listings.test.ts", add: "+36", del: "−0" },
+      ],
+      oldThreads: this.threadsData.map(t => ({ title: t.title, bg: t.id === "pag" ? "rgba(119,167,255,0.12)" : "transparent", color: t.id === "pag" ? "#b5d0ff" : "#adb5c2" })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -39,8 +39,8 @@ export function SignInScreen({
   return (
     <div className="auth-page">
       <section className="auth-panel" aria-labelledby="desktop-sign-in-title">
-        <p className="eyebrow">
-          agentcloud
+        <p className="eyebrow auth-brand">
+          alto
           <span className="brand-cursor" aria-hidden="true" />
         </p>
         <h1 id="desktop-sign-in-title">Sign in</h1>

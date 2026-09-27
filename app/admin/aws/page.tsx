@@ -12,7 +12,7 @@ export default async function Page() {
   if (remoteBackendURL()) {
     const response = await remoteFetch("/api/employee", requestHeaders);
     if (response.status === 401 || response.status === 403) redirect("/sign-in");
-    if (!response.ok) throw new Error("The shared AgentCloud backend is unavailable. Please try again.");
+    if (!response.ok) throw new Error("The shared alto backend is unavailable. Please try again.");
     const employee = await response.json();
     email = employee.email;
   } else {

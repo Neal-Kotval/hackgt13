@@ -6,7 +6,7 @@ export async function pageAuth(requestHeaders: Headers) {
     const response = await remoteFetch("/api/employee", requestHeaders);
     if (response.status === 401 || response.status === 403)
       return { verified: false, hasActiveOrganization: false, user: null, organizations: [] };
-    if (!response.ok) throw new Error("The shared AgentCloud backend is unavailable. Please try again.");
+    if (!response.ok) throw new Error("The shared alto backend is unavailable. Please try again.");
     const employee = await response.json();
     return { verified: true, hasActiveOrganization: !!employee.activeOrganization,
       user: { name: employee.name, email: employee.email },
