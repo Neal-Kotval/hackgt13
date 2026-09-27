@@ -1,0 +1,7 @@
+.project-chat-sidebar { gap: var(--space-3); }
+.project-chat-sidebar > .field-label { margin-top: var(--space-3); }
+.agent-conversation { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+.agent-conversation-state { color: var(--color-muted); font-size: var(--text-xs); }
+.project-chat-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3); min-width: 0; }
+.project-chat-recovery { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font-size: var(--text-sm); color: var(--color-warning); }
+.project-chat-status .chat-storage-note { white-space: normal; text-align: right; }

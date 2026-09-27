@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Robot, ChatCircle, HardDrives, List, ListChecks, SignOut, X } from "@phosphor-icons/react";
+import { ChatCircle, HardDrives, List, ListChecks, SignOut, X } from "@phosphor-icons/react";
 
-export type AppSection = "tasks" | "environments" | "codex" | "local-chat";
+export type AppSection = "tasks" | "environments" | "local-chat";
 type ShellNavProps = {
   section: AppSection;
   employeeName: string;
@@ -13,7 +13,6 @@ type ShellNavProps = {
   renderHistory?: (closeNavigation: () => void) => ReactNode;
 };
 const sections = [
-  { id: "codex", label: "Codex agents", icon: Robot },
   { id: "tasks", label: "Tasks", icon: ListChecks },
   { id: "environments", label: "Environments", icon: HardDrives },
   { id: "local-chat", label: "Project chat", icon: ChatCircle },
@@ -33,7 +32,7 @@ export function ShellNav({ section, employeeName, employeeEmail, busy, onSection
       if (event.defaultPrevented) return;
       if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
       if (event.key !== "Tab") return;
-      const items = Array.from(sidebar.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []).filter(item => item.getClientRects().length);
+      const items = Array.from(sidebar.current?.querySelectorAll<HTMLElement>("button:not(:disabled), a[href]") ?? []).filter(item => item.getClientRects().length);
       const first = items[0], last = items[items.length - 1];
       if (!sidebar.current?.contains(document.activeElement)) {
         event.preventDefault();
@@ -57,7 +56,7 @@ export function ShellNav({ section, employeeName, employeeEmail, busy, onSection
   }, [open]);
   // A deleted history row can remove the focused control while the drawer is open.
   useEffect(() => {
-    if (!open || busy || sidebar.current?.contains(document.activeElement)) return;
+    if (!open || busy || (document.activeElement && document.activeElement !== document.body && document.activeElement.isConnected)) return;
     const next = sidebar.current?.querySelector<HTMLButtonElement>(".thread-item")
       ?? sidebar.current?.querySelector<HTMLButtonElement>(".shell-close");
     next?.focus();

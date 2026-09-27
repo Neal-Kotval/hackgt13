@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { desktopApi } from "../lib/desktop-api";
 import type { DeepLinkParseResult, ProjectSnapshot } from "../lib/types";
+import { Composer } from "./Composer";
+import { CodexConversation, type CodexEvent } from "./CodexConversation";
+import "./ProjectChat.css";
 import { Select } from "./ui/Select";
 
 type Session = { id: string; projectId: string; agentId: string; status: "initializing" | "auth_required" | "ready" | "running" | "error" | "stopped"; error: string | null };
-type Event = { id: string; kind: "user" | "assistant" | "command" | "status" | "error"; text: string; actorName?: string; updatedAt: string };
+type Event = CodexEvent;
 class CodexRequestError extends Error {
   constructor(message: string, public code?: string) { super(message); }
 }
@@ -15,7 +18,7 @@ async function request<T>(path: string, body?: object): Promise<T> {
   return result as T;
 }
 
-export function CodexPanel({ webBaseUrl, deepLink, onDeepLinkHandled }: { webBaseUrl: string; deepLink: DeepLinkParseResult | null; onDeepLinkHandled: () => void }) {
+export function ProjectChat({ webBaseUrl, deepLink, onDeepLinkHandled, children }: { webBaseUrl: string; deepLink: DeepLinkParseResult | null; onDeepLinkHandled: () => void; children: (chat: {content: ReactNode; sidebar: (close: () => void) => ReactNode; busy: boolean}) => ReactNode }) {
   const [projects, setProjects] = useState<ProjectSnapshot[]>([]);
   const [projectId, setProjectId] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -32,6 +35,7 @@ export function CodexPanel({ webBaseUrl, deepLink, onDeepLinkHandled }: { webBas
   const [retry, setRetry] = useState(0);
   const [linkRevision, setLinkRevision] = useState(0);
   const desiredSession = useRef<string | null>(null);
+  const lastProject = useRef("");
   // Preserve request identity on ambiguous network failures; backend deduplicates retries.
   const pending = useRef<Record<string, { text: string; requestId: string }>>({});
   useEffect(() => {
@@ -57,7 +61,10 @@ export function CodexPanel({ webBaseUrl, deepLink, onDeepLinkHandled }: { webBas
     return () => { cancelled = true; };
   }, [deepLink, onDeepLinkHandled, retry]);
   useEffect(() => {
-    setSessions([]); setSessionId(""); setSnapshot(null);
+    if (lastProject.current !== projectId || desiredSession.current) {
+      setSessions([]); setSessionId(""); setSnapshot(null);
+      lastProject.current = projectId;
+    }
     if (!projectId) { setLoading(false); return; }
     let cancelled = false, timer: ReturnType<typeof setTimeout>;
     setLoading(true); setActionError(null);
@@ -111,22 +118,34 @@ export function CodexPanel({ webBaseUrl, deepLink, onDeepLinkHandled }: { webBas
     }
     finally { setBusy(false); }
   }
-  return <main className="tasks-panel codex-panel">
-    <header className="tasks-panel-header"><div><h1>Codex agents</h1><p className="brand-meta">Talk to the Codex process in your local Docker box. Project chat remains a separate local scratchpad.</p></div></header>
-    <div className="codex-selectors">
-      <Select aria-label="Project" value={projectId} disabled={!projects.length || busy} onChange={e => { blockAutoProject.current = true; desiredSession.current = null; setActionError(null); setProjectId(e.target.value); }}><option value="">Choose project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>
-      <Select aria-label="Codex session" value={sessionId} disabled={!sessions.length || busy} onChange={e => { desiredSession.current = null; setSessionId(e.target.value); setActionError(null); }}><option value="">Choose Codex agent</option>{sessions.map(s => <option key={s.id} value={s.id}>{projects.find(p => p.id === projectId)?.agents.find(a => a.id === s.agentId)?.name || s.agentId} · {s.status.replaceAll("_", " ")}</option>)}</Select>
+  const project = projects.find(p => p.id === projectId);
+  const agentName = (item: Session) => project?.agents.find(a => a.id === item.agentId)?.name || "Codex";
+  const statusLabel = {initializing:"Starting",auth_required:"Sign-in required",ready:"Ready",running:"Working",error:"Needs attention",stopped:"Stopped"};
+  const settingsUrl = projectId ? `${webBaseUrl}/projects/${encodeURIComponent(projectId)}/settings` : webBaseUrl;
+  const messages = snapshot?.events ?? [];
+  const hasConversation = messages.some(event => event.kind === "user" || event.kind === "assistant");
+  const sidebar = (close: () => void) => <aside className="sidebar project-chat-sidebar" aria-label="Project conversations">
+    <div className="sidebar-header"><h2 className="brand">Project</h2></div>
+    <Select aria-label="Project" value={projectId} disabled={!projects.length || busy} onChange={e => { blockAutoProject.current = true; desiredSession.current = null; setActionError(null); setProjectId(e.target.value); }}><option value="">Choose project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>
+    <h3 className="field-label">Conversations</h3>
+    <div className="thread-list" role="list">{sessions.map(item => <div className="thread-row" role="listitem" key={item.id}><button className="thread-item agent-conversation" data-selected={item.id === sessionId} aria-current={item.id === sessionId ? "true" : undefined} disabled={busy} onClick={() => {desiredSession.current=null;setSessionId(item.id);setActionError(null);close();}}><span className="thread-title">{agentName(item)}</span><span className="agent-conversation-state">{statusLabel[item.status]}</span></button></div>)}</div>
+    {!sessions.length && <p className="sidebar-empty">{loading ? "Loading conversations…" : "No agent connected yet"}</p>}
+    <a className="button ghost" href={settingsUrl} target="_blank" rel="noreferrer">Set up agent</a>
+  </aside>;
+  const content = <div className="app-shell"><main className="main" data-empty={!hasConversation}>
+    <header className="main-header"><h1>Project chat</h1><div className="project-chat-status">
+      {session && <span className="chat-storage-note" role="status">{agentName(session)} · {statusLabel[session.status]} · Local Docker</span>}
+      {session && ["error","stopped"].includes(session.status) && <button className="button ghost" disabled={busy} onClick={() => void act("resume")}>Reconnect</button>}
+    </div></header>
+    <CodexConversation key={sessionId || "empty"} events={messages} working={session?.status === "running"} emptyLabel={loading ? "Loading your conversation…" : session ? "Talk to your project’s Codex agent." : enabled ? "Connect a Codex agent in project Settings to begin." : "Local Codex is not enabled on this server."} />
+    <div className="chat-compose-area">
+      {error && <p className="error-banner" role="alert">{error} <button className="button ghost" onClick={() => setRetry(n => n + 1)}>Retry connection</button></p>}
+      {session?.error && <p className="error-banner" role="alert">{session.error}</p>}
+      {session?.status === "auth_required" && <p className="credential-banner">Finish signing in to Codex in <a href={settingsUrl} target="_blank" rel="noreferrer">project Settings</a>.</p>}
+      {!session && !loading && <a className="button primary" href={settingsUrl} target="_blank" rel="noreferrer">Set up agent on website</a>}
+      {ambiguous[sessionId] && <div className="project-chat-recovery" role="status"><p>The previous send could not be confirmed. Check the conversation after reconnecting before sending it again.</p><button className="button warning" disabled={busy || session?.status !== "ready" || !draft.trim()} onClick={() => void act("message", true)}>Send as a new turn</button></div>}
+      <Composer value={draft} disabled={!session || busy} sendDisabled={session?.status !== "ready" || Boolean(ambiguous[sessionId])} sending={session?.status === "running"} error={actionError} onChange={value=>setDrafts(current=>({...current,[sessionId]:value}))} onSend={()=>void act("message")} onStop={()=>void act("interrupt")} />
     </div>
-    {error && <p className="error-banner" role="alert">{error} <button className="button ghost" onClick={() => setRetry(n => n + 1)}>Retry connection</button></p>}
-    {loading ? <p role="status">Loading Codex sessions…</p> : !sessionId && <div className="project-detail"><h2>{enabled ? "Initialize an agent on the website" : "Local Codex is not enabled"}</h2><p>Set up a Codex agent for this project on the website, then return here to send instructions.</p><a className="button primary" href={webBaseUrl} target="_blank" rel="noreferrer">Open AgentCloud website</a></div>}
-    {session && <>
-      <div className="codex-session-status"><span className="field-label">Local Docker · {session.status.replaceAll("_", " ")}</span>{session.status === "running" && <button className="button danger" disabled={busy} onClick={() => void act("interrupt")}>Stop generation</button>}{["error", "stopped"].includes(session.status) && <button className="button primary" disabled={busy} onClick={() => void act("resume")}>Reconnect Codex</button>}</div>
-      {session.error && <p className="error-banner" role="alert">{session.error}</p>}
-      {session.status === "auth_required" && <p className="credential-banner">Codex authentication is required. Complete the setup instructions on the website before sending a message.</p>}
-      <div className="codex-events" aria-label="Codex conversation">{snapshot.events.length ? snapshot.events.map(event => <article className="codex-event" data-kind={event.kind} key={event.id}><strong className="field-label">{event.kind === "command" ? "Command · Local Docker" : event.kind === "assistant" ? "Codex" : event.kind === "user" ? event.actorName || "Project member" : event.kind}</strong><pre>{event.text}</pre></article>) : <p className="brand-meta">No messages yet. Send instructions when Codex is ready.</p>}</div>
-      {ambiguous[sessionId] && <div className="project-detail" role="status"><p>The previous turn could not be confirmed. Inspect the conversation and command history after reconnecting. Sending as a new turn may repeat work if the previous turn ran.</p><button className="button warning" disabled={busy || session.status !== "ready" || !draft.trim()} onClick={() => void act("message", true)}>Send as a new turn</button></div>}
-      <form className="composer" onSubmit={e => { e.preventDefault(); if (session.status === "ready" && draft.trim() && !busy) void act("message"); }}><label className="composer-hint" htmlFor="codex-message">Message Codex · instructions run inside the local Docker box</label><div className="composer-row"><textarea id="codex-message" value={draft} placeholder="Ask Codex to work on your project" onChange={e => setDrafts(current => ({ ...current, [sessionId]: e.target.value }))} /><button className="button primary" disabled={busy || session.status !== "ready" || !draft.trim() || ambiguous[sessionId]}>Send to Codex</button></div></form>
-    </>}
-    {actionError && <p className="error-banner" role="alert">{actionError}</p>}
-  </main>;
+  </main></div>;
+  return children({content,sidebar,busy:busy || session?.status === "running"});
 }
