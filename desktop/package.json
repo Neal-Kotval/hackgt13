@@ -1,6 +1,6 @@
 {
   "name": "agentcloud-desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "alto desktop project chat",
   "main": "dist-electron/main.js",

@@ -174,3 +174,23 @@ to this screen from chat. Creation uses the existing authenticated `createProjec
 action and server organization-admin authorization; errors keep entered values.
 Success selects the returned project. Saving metadata does not clone a repository,
 connect to SSH, provision compute, or start an agent.
+
+## Multiplayer conversation workspace
+
+Desktop chat history is grouped by the conversation creator, with distinct user
+sections, agent labels, execution status and search across people, agents and
+titles. Members may collaborate in the same visible environment; grouping does
+not create private conversations or a new access boundary. Human instructions
+retain their actual authors.
+
+Agent notifications can address one other conversation or all eligible
+independent conversations on that environment, including conversations sharing
+an agent identity. The durable inbox shows queued, delivery-attempted and
+app-server-accepted states; only the recipient conversation's execution events
+show whether work ran. CLI-scoped agent notification remains available.
+
+Chat, recorded file changes, a dedicated SSH Shell mode and a side-by-side
+Chat + shell view share the selected environment. Files contains recorded
+changes from the selected conversation rather than a live repository browser.
+Switching views preserves the shell connection and chat draft; closing the
+terminal ends that connection. SSH remains trusted shell access.

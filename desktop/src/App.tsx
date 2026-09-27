@@ -200,6 +200,7 @@ export default function App() {
     <ProjectChat
       key={auth.user?.id}
       webBaseUrl={auth.baseUrl}
+      viewerId={auth.user?.id}
       deepLink={codexLink}
       onDeepLinkHandled={clearCodexLink}
       onSelectConversation={() => { setChatRunBox(null); setLoginTarget(null); }}
