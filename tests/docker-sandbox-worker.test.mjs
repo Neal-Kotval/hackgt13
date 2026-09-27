@@ -84,6 +84,17 @@ test("revoked device key is removed from a ready sandbox, not just the connectio
   db.close();
 });
 
+test("membership loss removes existing SSH access from a ready sandbox", async () => {
+  const { db, job } = setup();
+  const sandbox = fakeProvider();
+  await workOneDockerSandboxJob(db, sandbox, { workerId: "worker", verify: passingVerify() });
+  db.prepare("UPDATE member SET role = 'member' WHERE userId = 'owner-1'").run();
+  const outcomes = await reconcileDockerSandboxes(db, sandbox);
+  assert.equal(outcomes.find((item) => item.jobId === job.id)?.status, "access-updated");
+  assert.deepEqual(sandbox.containers.get(job.id).authorizedKeys, []);
+  db.close();
+});
+
 function passingVerify(calls = []) {
   return async (job, connection) => {
     calls.push(connection);
