@@ -2,7 +2,7 @@
 
 import { getDatabase } from "../lib/auth.mjs";
 import { migrateRunBoxJobs, requestRunBoxStop, releaseDeadWorkerLeases } from "../lib/run-box-jobs.mjs";
-import { migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
+import { cleanupGate, migrateRunBoxCleanup, reconcileAwsRunBoxes } from "../lib/run-box-reconcile.mjs";
 import { migrateAwsForceClose, processAwsForceCloses } from "../lib/aws-force-close.mjs";
 import { migrateAwsGpuEvidence } from "../lib/aws-gpu-evidence.mjs";
 import { createAwsGpuProvider, scopedWorkerAws } from "../lib/aws-gpu-provider.mjs";
