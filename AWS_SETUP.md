@@ -57,6 +57,12 @@ Status: **planned, not applied, never launched.** Terraform in [infra/aws/cpu.tf
 | Workspace | `/home/agentcloud/agentcloud/<jobId>/repo` (approved repository checkout). |
 | Quoted cost | `t3.medium` $0.0416/h (AWS Price List, 2026-09-26) + public IPv4 $0.005/h + 20 GiB gp3 about $0.0022/h ≈ **$0.049/h**; about $0.10 for a two-hour environment and $0.02 for the 20-minute smoke test, before data transfer and tax. The worker refuses a compute price above $0.10/h. |
 
+### Stuck jobs and force close (HAC-166)
+
+Only one AWS environment may be active, so a job that never closes blocks every AWS request. The worker closes an `aws-cpu` job at once when it has no `aws_cpu_environment` row (written just before RunInstances, so none was ever called), no other worker holds its lease, and nothing in the managed EC2 instance or volume inventory carries its job ID. Jobs with that row, and GPU jobs, keep the 15-minute quiet window. An `aws-cpu` job launches with only the Codex runner key when no member has a desktop device key.
+
+The platform admin sees every non-stopped AWS job on `/admin/aws` (`GET /api/admin/aws-environments`) and can request a force close (`POST /api/admin/aws-environments/:id/force-close`, same origin). The web server has no AWS credentials, so it only records the request. On its next cycle, before reconciliation, the worker checks the managed inventory: with nothing tagged for the job it closes it `stopped` as `admin:<email>` with evidence `admin-force-close:no-ec2-resources`; with a tagged instance or volume, or a recorded instance ID, it requests a normal stop so the standard teardown (cleanup, SSH rule revoke, termination, EBS deletion) runs. The table shows `requested`, `terminating`, `closed`, or `failed`.
+
 ### Desktop SSH path decision
 
 The desktop app connects with ssh2 to `host:port` from `/api/run-boxes/:id/connection`, pins the recorded host key, and authenticates with its device key. It never holds AWS credentials. The product runs locally first, so the worker and the desktop app usually share one public address.
