@@ -160,7 +160,7 @@ function setTask(p: Project, taskId: unknown, value: unknown, actor: string) {
   event(p, actor, `${task.title}: ${task.status}`, "task");
 }
 export async function action(input: Record<string, unknown>) {
-  return transaction((disk) => {
+  return transaction(async (disk) => {
     let result: Record<string, unknown> = {};
     if (input.type === "createProject") {
       const projectId = id();
@@ -220,6 +220,24 @@ export async function action(input: Record<string, unknown>) {
               );
             }
           }
+          const runBoxId = input.runBoxId === undefined || input.runBoxId === ""
+            ? undefined
+            : str(input.runBoxId, "runBoxId", 100);
+          if (runBoxId && environmentId)
+            throw new InputError("Choose one task environment");
+          if (runBoxId) {
+            const [{ getDatabase }, { getRunBoxJob, migrateRunBoxJobs }] = await Promise.all([
+              import("./auth.mjs"),
+              import("./run-box-jobs.mjs"),
+            ]);
+            const db = getDatabase();
+            migrateRunBoxJobs(db);
+            const runBox = getRunBoxJob(db, runBoxId);
+            if (!runBox || runBox.project_id !== p.id)
+              throw new InputError("Run box not found", 404);
+            if (runBox.state !== "ready" || runBox.stop_requested_at)
+              throw new InputError("Run box must be ready before binding a task", 409);
+          }
           p.tasks.push({
             id: id(),
             title: str(input.title, "title", 200),
@@ -228,6 +246,7 @@ export async function action(input: Record<string, unknown>) {
             dependency,
             ...(instructions ? { instructions } : {}),
             ...(environmentId ? { environmentId } : {}),
+            ...(runBoxId ? { runBoxId } : {}),
           });
           event(p, "human", "Created a task", "task");
           break;
