@@ -38,6 +38,7 @@ import {
 import type { State, Project, Agent, Task, Handoff } from "@/lib/types";
 import { ResourceCatalog, ResourceRequests, InferenceDraft } from "./resources";
 import { RunControl } from "./runs/run-control";
+import { Skeleton, SkeletonHeading, SkeletonPanel, SkeletonRegion, SkeletonRows } from "./ui/skeleton";
 import { ResourceGraph } from "./resource-graph";
 import { Environments } from "./environments";
 type Action = Record<string, unknown>;
@@ -79,13 +80,17 @@ function time(value: string) {
         second: "2-digit",
       });
 }
+// Section links remount this route, so keep the last snapshot in the browser to
+// render the next section immediately while the stream reconnects. Server renders
+// never read it, so one visitor's workspace cannot reach another request.
+let workspaceSnapshot: State | null = null;
 export function CloudApp() {
   const pathname = usePathname();
   const router = useRouter();
-  const [state, setState] = useState<State | null>(null);
+  const [state, setState] = useState<State | null>(() => typeof window === "undefined" ? null : workspaceSnapshot);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [online, setOnline] = useState(false);
+  const [online, setOnline] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<"task" | "handoff" | null>(null);
   const [selectedHandoff, setSelectedHandoff] = useState<Handoff | null>(null);
@@ -116,6 +121,9 @@ export function CloudApp() {
     source.onerror = () => setOnline(false);
     return () => source.close();
   }, []);
+  useEffect(() => {
+    if (state) workspaceSnapshot = state;
+  }, [state]);
   useEffect(() => {
     setFilter("all");
   }, [pathname]);
@@ -159,18 +167,25 @@ export function CloudApp() {
   const base = `/projects/${project?.id || id || ""}`;
   if (!state)
     return (
-      <main className="loading">
-        <TerminalWindow {...iconProps} />
-        <h1>
-          alto<span className="cyan-text">_</span>
-        </h1>
-        <p>{error || "Opening your workspace…"}</p>
-        {error && (
-          <button className="button" onClick={() => location.reload()}>
-            Try again
-          </button>
-        )}
-      </main>
+      <>
+        <main className="app-shell" id="workspace-content" tabIndex={-1}>
+          {error ? (
+            <div className="workspace-load-error">
+              <div role="alert" className="alert error">
+                <Warning />
+                {error}
+              </div>
+              <button className="button" onClick={() => location.reload()}>
+                Try again
+              </button>
+            </div>
+          ) : (
+            <WorkspaceSkeleton
+              view={isProjects ? "projects" : isSetup ? "setup" : page === "dashboard" ? "overview" : "section"}
+            />
+          )}
+        </main>
+      </>
     );
   return (
     <>
@@ -191,9 +206,9 @@ export function CloudApp() {
               <span>{page === "dashboard" ? "overview" : page}</span>
             </>
           )}
-          <span className={`connection ${online ? "connected" : ""}`}>
+          <span className={`connection ${online ? "connected" : online === null ? "pending" : ""}`}>
             <span className="status-dot" />
-            {online ? "stream connected" : "reconnecting…"}
+            {online ? "stream connected" : online === null ? "connecting…" : "reconnecting…"}
           </span>
         </div>
         {error && (
@@ -276,6 +291,13 @@ export function CloudApp() {
               </div>
             ) : page === "settings" ? (
               <div className="project-sections">
+                <div className="resource-page-heading settings-heading">
+                  <div>
+                    <p className="resource-eyebrow">Project settings</p>
+                    <h2>Agents &amp; connections</h2>
+                    <p>Give each teammate an agent identity, then connect it from the CLI.</p>
+                  </div>
+                </div>
                 <AgentSetup project={project} action={action} busy={busy} notify={setNotice} />
                 <details className="project-disclosure" id="cli-guide">
                   <summary>CLI connection guide</summary>
@@ -895,6 +917,40 @@ function ActivityFeed({
         <span>Listening for project events</span>
       </div>
     </div>
+  );
+}
+// Mirrors the breadcrumb, heading, and panel geometry of each workspace view.
+function WorkspaceSkeleton({ view }: { view: "projects" | "setup" | "overview" | "section" }) {
+  return (
+    <SkeletonRegion label="Loading workspace">
+      <div className="breadcrumb"><Skeleton width="20" /></div>
+      {view === "projects" ? (
+        <>
+          <SkeletonHeading />
+          <div className="projects-summary"><Skeleton width="20" /></div>
+          <div className="project-list skeleton-project-list"><SkeletonRows count={3} /></div>
+        </>
+      ) : view === "setup" ? (
+        <>
+          <SkeletonHeading action={false} />
+          <SkeletonPanel rows={0} lines={2} action />
+        </>
+      ) : view === "overview" ? (
+        <>
+          <SkeletonHeading />
+          <div className="project-meta"><Skeleton width="50" /></div>
+          <div className="project-sections">
+            <SkeletonPanel rows={2} icon={false} lines={1} action />
+            <SkeletonPanel rows={2} />
+          </div>
+        </>
+      ) : (
+        <div className="project-sections">
+          <SkeletonPanel rows={3} lines={1} />
+          <SkeletonPanel rows={0} lines={1} />
+        </div>
+      )}
+    </SkeletonRegion>
   );
 }
 function Projects({ projects }: { projects: Project[] }) {

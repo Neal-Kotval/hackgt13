@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SignOut, User } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
 import { authClient as client } from "@/lib/auth-client";
+import { Skeleton, SkeletonRegion } from "@/components/ui/skeleton";
 export function SignIn({ signup = false, invite = "", verified = false, verificationError = false }: { signup?: boolean; invite?: string; verified?: boolean; verificationError?: boolean }) {
   const [error, setError] = useState(verificationError ? "This verification link is invalid or expired. Request another email below." : "");
   const [pending, setPending] = useState(false);
@@ -53,12 +54,18 @@ export function SignIn({ signup = false, invite = "", verified = false, verifica
   </section></main>;
 }
 export function EmployeeMenu({ navigation = true }: { navigation?: boolean }) {
-  const { data } = client.useSession();
-  const { data: organizations } = client.useListOrganizations();
+  const { data, isPending } = client.useSession();
+  const { data: organizations, isPending: organizationsPending } = client.useListOrganizations();
   const { data: active } = client.useActiveOrganization();
   const name = data?.user?.name?.trim() || "employee";
   const initials = name.split(/\s+/).slice(0, 2).map(part => Array.from(part)[0]).join("").toLocaleUpperCase();
   const [error, setError] = useState("");
+  // Hold the account layout until identity and organizations resolve so the sidebar does not shift.
+  if (isPending || organizationsPending) return <SkeletonRegion label="Loading account" className="skeleton-account">
+    <Skeleton variant="control" />
+    <div className="account-identity"><Skeleton variant="avatar" /><div className="account-details skeleton-row-text"><Skeleton width="75" /><Skeleton width="90" /></div></div>
+    <Skeleton variant="control" width="50" />
+  </SkeletonRegion>;
   return <>
     {organizations && organizations.length > 0 && <label className="organization-switcher"><span className="visually-hidden"><span>Organization</span></span><Select aria-label="Active organization" value={active?.id || ""} onChange={async e => {
       const result = await client.organization.setActive({ organizationId: e.target.value });

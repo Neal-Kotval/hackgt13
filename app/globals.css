@@ -258,6 +258,9 @@ pre {
 .connection.connected {
   color: var(--color-success);
 }
+.connection.pending {
+  color: var(--color-subtle);
+}
 .status-dot,
 .small-dot {
   display: inline-block;
@@ -1570,25 +1573,11 @@ dialog::backdrop {
   background: var(--color-transparent);
   color: var(--color-danger);
 }
-.loading {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-6);
-  padding: var(--space-6);
-}
-.loading > svg {
-  color: var(--color-accent);
-  width: var(--space-12);
-  height: var(--space-12);
-}
-.loading h1 {
-  font-size: var(--text-3xl);
-}
-.loading p {
-  color: var(--color-muted);
+.workspace-load-error {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+  padding-top: var(--space-8);
 }
 @media (max-width: 768px) {
   .breadcrumb {
@@ -2321,4 +2310,110 @@ select {
 }
 .project-section-title + .standalone {
   margin-top: 0;
+}
+
+/* Spacing pass: consistent panel rhythm across workspace, organization, and settings views. */
+.project-heading + .project-meta {
+  border-top: 0;
+}
+.project-sections > .workspace-card {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+.project-sections > .workspace-card .section-heading {
+  margin-bottom: 0;
+}
+.project-sections > .workspace-card > p {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  max-width: var(--content-narrow);
+}
+.project-sections > .workspace-card > p.muted {
+  color: var(--color-subtle);
+  font-size: var(--text-xs);
+}
+.project-sections > .workspace-card > dl {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0;
+  border-top: var(--border-width) solid var(--color-border);
+}
+.project-sections > .workspace-card > dl > dt,
+.project-sections > .workspace-card > dl > dd {
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+.project-sections > .workspace-card > dl > dd {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+.project-sections > .workspace-card > .button {
+  justify-self: start;
+}
+.project-sections > section:not([class]) > .section-description {
+  margin: var(--space-2) 0 var(--space-5);
+}
+.settings-heading {
+  margin-bottom: var(--space-2);
+}
+
+.organization-page {
+  max-width: var(--page-max);
+  width: 100%;
+  margin: 0;
+  padding: var(--space-8) var(--page-gutter) var(--space-16);
+  align-content: start;
+}
+.organization-page > * {
+  width: 100%;
+  max-width: var(--content-narrow);
+}
+.organization-page > .section-heading {
+  margin-bottom: var(--space-2);
+}
+.organization-panel {
+  gap: var(--space-5);
+  padding: var(--space-6);
+}
+.organization-panel h3 {
+  margin-top: var(--space-3);
+}
+.organization-panel .organization-form {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: var(--space-3);
+}
+.organization-panel .organization-form > .button {
+  align-self: end;
+}
+.organization-panel .organization-form .select-field > .select-trigger,
+.organization-panel .organization-form input {
+  min-height: var(--control-height);
+}
+.organization-panel .organization-form input {
+  height: var(--control-height);
+}
+.organization-panel .organization-list li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.organization-panel > .button.primary {
+  justify-self: start;
+}
+@media (max-width: 768px) {
+  .organization-page {
+    padding: var(--space-6) var(--page-gutter) var(--space-12);
+  }
+  .organization-panel {
+    padding: var(--space-5);
+  }
+  .organization-panel .organization-form {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
 }
