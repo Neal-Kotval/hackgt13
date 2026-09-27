@@ -22,13 +22,13 @@ try {
     await select('Environment','cpu-workspace');await settled();
     const input=page.getByRole('textbox',{name:'Message',exact:true});await input.fill('Keep this draft');
     const before=await page.evaluate(()=>window.__motionCount);
-    await navigation('Environments');await expect(page.getByRole('checkbox',{name:'Hide stopped environments'})).toBeChecked();await settled();
+    await navigation('Environments');await expect(page.getByRole('switch',{name:'Hide stopped environments'})).toHaveAttribute('aria-checked','true');await settled();
     expect(await page.evaluate(()=>window.__motionCount)).toBeGreaterThan(before);
-    await expect(page.getByText(/1 stopped environment hidden/)).toBeVisible();
+    await expect(page.getByText(/1 stopped hidden/)).toBeVisible();
     await expect(page.getByRole('list',{name:'Environments'})).not.toContainText('Stopped example');
     await expect(page.getByRole('list',{name:'Environments'})).toContainText('Stopping example');
     await expect(page.getByRole('list',{name:'Environments'})).toContainText('failed-box');
-    await page.getByRole('checkbox',{name:'Hide stopped environments'}).press('Space');
+    await page.getByRole('switch',{name:'Hide stopped environments'}).press('Space');
     await expect(page.getByRole('list',{name:'Environments'})).toContainText('Stopped example');
     await navigation('Project chat');await expect(input).toHaveValue('Keep this draft');await settled();
     const count=await page.evaluate(()=>window.__motionCount);
@@ -44,9 +44,9 @@ try {
     await select('Project','Second project');await settled();
     await navigation('Environments');await select('Project','Second project');await settled();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await page.reload();await navigation('Environments');await expect(page.getByRole('checkbox',{name:'Hide stopped environments'})).not.toBeChecked();
+    await page.reload();await navigation('Environments');await expect(page.getByRole('switch',{name:'Hide stopped environments'})).toHaveAttribute('aria-checked','false');
     await page.evaluate(()=>window.__test.allStopped=true);await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByRole('checkbox',{name:'Hide stopped environments'}).check();await expect(page.getByRole('heading',{name:'All environments are stopped'})).toBeVisible();
+    await page.getByRole('switch',{name:'Hide stopped environments'}).click();await expect(page.getByRole('heading',{name:'All environments are stopped'})).toBeVisible();
     await page.getByRole('button',{name:'Show stopped environments',exact:true}).click();await expect(page.getByRole('list',{name:'Environments'})).toContainText('Stopped example');
     await page.emulateMedia({reducedMotion:'reduce'});await navigation('Project chat');await expect(page.locator('[data-motion-active]')).toHaveCount(0);await navigation('Environments');await expect(page.locator('[data-motion-active]')).toHaveCount(0);
     expect(errors).toEqual([]);await context.close();
