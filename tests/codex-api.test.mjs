@@ -39,6 +39,8 @@ test('Codex setup is owner-scoped; session reads and messages require project me
  const ctx={params:Promise.resolve({id:'s1'})};
  assert.equal((await detail.GET(request(null,member.cookie),ctx)).status,200);
  assert.equal((await detail.POST(request({action:'login'},member.cookie),ctx)).status,403);
+ assert.equal((await detail.POST(request({action:'login',method:'browser'},member.cookie),ctx)).status,403);
+ assert.equal((await detail.POST(request({action:'cancelLogin'},member.cookie),ctx)).status,403);
  assert.equal((await detail.POST(request({action:'message',text:'hello'},member.cookie),ctx)).status,200);
  const cross=request({action:'message'},owner.cookie);cross.headers.set('origin','https://other.example');
  assert.equal((await detail.POST(cross,ctx)).status,403);
