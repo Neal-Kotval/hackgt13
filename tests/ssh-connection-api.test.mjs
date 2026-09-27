@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import ts from "typescript";
 import { prepareAuth } from "./auth-fixture.mjs";
+import { copyRunBoxAccess } from './run-box-access-fixture.mjs';
 
 const directory = await mkdtemp(path.join(os.tmpdir(), "agentcloud-ssh-connection-api-"));
 process.env.AGENTCLOUD_DATA_DIR = path.join(directory, "data");
@@ -17,10 +18,11 @@ for (const name of ["store", "http", "resource-profiles"]) {
   const source = await readFile(new URL(`../lib/${name}.ts`, import.meta.url), "utf8");
   await writeFile(path.join(directory, `${name}.js`), transpile(source).replace(/from ["']\.\/([\w-]+)["']/g, "from './$1.js'"));
 }
-const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"];
+const mjs = ["auth", "run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory", "run-box-access", "run-box-metadata"];
 for (const name of ["run-box-jobs", "ssh-keys", "run-box-ssh", "agent-check", "container-templates", "aws-organization-approval", "aws-cpu-ssh-access", "backboard", "backboard-memory"])
   await copyFile(new URL(`../lib/${name}.mjs`, import.meta.url), path.join(directory, `${name}.mjs`));
 const fixture = await prepareAuth(directory);
+await copyRunBoxAccess(directory);
 const db = fixture.getDatabase();
 const store = await import(path.join(directory, "store.js"));
 const jobs = await import(path.join(directory, "run-box-jobs.mjs"));
