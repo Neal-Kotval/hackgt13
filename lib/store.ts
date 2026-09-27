@@ -299,6 +299,22 @@ export async function action(input: Record<string, unknown>) {
           result = { token, agentId };
           break;
         }
+        case "rotateAgentToken":
+        case "revokeAgentToken": {
+          const a = agent(p, input.agentId);
+          disk.credentials = disk.credentials.filter(
+            (credential) => credential.projectId !== p.id || credential.agentId !== a.id,
+          );
+          a.status = "disconnected";
+          delete a.lastSeen;
+          if (input.type === "rotateAgentToken") {
+            const token = randomBytes(32).toString("base64url");
+            disk.credentials.push({ hash: hash(token), projectId: p.id, agentId: a.id });
+            result = { agentId: a.id, token };
+          } else result = { agentId: a.id };
+          event(p, "human", `${input.type === "rotateAgentToken" ? "Rotated" : "Revoked"} connection token for ${a.name}`, "agent");
+          break;
+        }
         default:
           throw new InputError("Unsupported action");
       }

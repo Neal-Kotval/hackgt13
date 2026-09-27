@@ -1,4 +1,4 @@
-import { action, getState } from "../../../lib/store";
+import { action, getState, InputError } from "../../../lib/store";
 import { body, failure, sameOrigin } from "../../../lib/http";
 import {
   requireEmployee,
@@ -23,8 +23,13 @@ export async function POST(request: Request) {
     sameOrigin(request);
     const input = await body(request);
     if (input.type === "createProject") requireOrganizationAdmin(employee);
-    if (input.type !== "createProject")
-      requireMembership(employee, input.projectId);
+    if (input.type !== "createProject") {
+      const membership = requireMembership(employee, input.projectId);
+      if (
+        (input.type === "rotateAgentToken" || input.type === "revokeAgentToken") &&
+        membership.role !== "owner"
+      ) throw new InputError("Project owner required", 403);
+    }
     const result = await action(input);
     if (
       input.type === "createProject" &&
