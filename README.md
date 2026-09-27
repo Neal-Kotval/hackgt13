@@ -94,7 +94,7 @@ Doppler also publishes an [experimental MCP server](https://github.com/DopplerHQ
 
 This is the entry under the client's `mcpServers` object. Authenticate locally with `npx @dopplerhq/mcp-server login`, or configure a config-scoped read-only service token in the MCP client's private settings. A token with broader access remains broad even when `--project` and `--config` are specified; those flags only narrow the tools shown by the server. Remove `--read-only` only when the assistant must change Doppler configuration. Never paste token or secret values into prompts, logs, or tracked MCP settings.
 
-Open http://127.0.0.1:3000. For a local production build:
+Open http://127.0.0.1:3000 for the public Alto introduction. Choose **Create an account** to sign up or **Open app** to enter the authenticated workspace at `/projects`. Existing project URLs remain available. For a local production build:
 
 ```sh
 npm run build

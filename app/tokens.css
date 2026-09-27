@@ -233,6 +233,14 @@
   --motion-hover-distance: -3px;
   --motion-drawer-distance: 48px;
 
+  /* Marketing page: one expressive display scale and a legible diagram canvas. */
+  --marketing-display-size: clamp(4.5rem, 9vw, 9rem);
+  --marketing-title-size: clamp(2.5rem, 4vw, 4.5rem);
+  --marketing-visual-height: 33rem;
+  --marketing-visual-height-mobile: 25rem;
+  --marketing-copy-width: 37rem;
+  --marketing-track-angle: 24deg;
+
   /* Layout and component dimensions. */
   --page-max: 90rem;
   --page-gutter: var(--space-8);

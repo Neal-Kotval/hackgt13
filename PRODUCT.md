@@ -21,7 +21,7 @@ The first managed hosting option is planned to be an EC2 GPU run box. An existin
 
 ## Current implementation boundary
 
-This repository is the web application and a local coordination foundation. New installations start empty. Projects, agents, tasks, services, handoffs, and activity appear only when users or connected clients create them; the application contains no seeded project or replay workflow.
+This repository is the web application and a local coordination foundation. The public `/` route introduces Alto and links into the authenticated workspace; it is a sales surface, not evidence of remote execution. New installations start empty. Projects, agents, tasks, services, handoffs, and activity appear only when users or connected clients create them; the application contains no seeded project or replay workflow.
 
 | Capability | Implementation boundary |
 | --- | --- |
