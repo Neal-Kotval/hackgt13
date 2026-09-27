@@ -4,6 +4,10 @@ export type DeepLinkTarget = {
   codexSessionId?: string;
   /** Run-box job id. Opens the Project chat SSH terminal; never carries host/port. */
   runBoxId?: string;
+  /** Run-box job to preselect in Tasks; distinct from a catalog resource. */
+  taskRunBoxId?: string;
+  /** Source server identity only. Never used as a request destination. */
+  serverUrl?: string;
 };
 
 export type DeepLinkParseResult =
@@ -54,9 +58,25 @@ export function parseAgentCloudDeepLink(raw: string): DeepLinkParseResult {
   if (runBoxId && !/^[A-Za-z0-9_-]{1,128}$/.test(runBoxId)) {
     return { ok: false, error: "Deep link runBoxId is malformed." };
   }
+  const taskRunBoxId = url.searchParams.get("taskRunBoxId")?.trim() || undefined;
+  if (taskRunBoxId && !/^[A-Za-z0-9_-]{1,128}$/.test(taskRunBoxId)) {
+    return { ok: false, error: "Deep link taskRunBoxId is malformed." };
+  }
+  const serverUrlRaw = url.searchParams.get("serverUrl")?.trim() || undefined;
+  let serverUrl: string | undefined;
+  if (serverUrlRaw) {
+    try {
+      const source = new URL(serverUrlRaw);
+      const loopback = source.hostname === "localhost" || source.hostname === "127.0.0.1" || source.hostname === "[::1]";
+      if ((source.protocol !== "https:" && !(source.protocol === "http:" && loopback)) || source.username || source.password || source.pathname !== "/" || source.search || source.hash) throw new Error("invalid source");
+      serverUrl = source.origin;
+    } catch {
+      return { ok: false, error: "Deep link serverUrl must be an HTTPS origin or an HTTP loopback origin." };
+    }
+  }
   const codexSessionId = url.searchParams.get("codexSessionId")?.trim() || undefined;
   if (codexSessionId && !/^[A-Za-z0-9_-]{1,128}$/.test(codexSessionId)) return { ok: false, error: "Deep link codexSessionId is malformed." };
-  if (codexSessionId && (runBoxId || environmentId)) return { ok: false, error: "Deep link contains conflicting destinations." };
+  if ([codexSessionId, runBoxId, taskRunBoxId, environmentId].filter(Boolean).length > 1) return { ok: false, error: "Deep link contains conflicting destinations." };
   return {
     ok: true,
     target: {
@@ -64,8 +84,20 @@ export function parseAgentCloudDeepLink(raw: string): DeepLinkParseResult {
       ...(codexSessionId ? { codexSessionId } : {}),
       ...(environmentId ? { environmentId } : {}),
       ...(runBoxId ? { runBoxId } : {}),
+      ...(taskRunBoxId ? { taskRunBoxId } : {}),
+      ...(serverUrl ? { serverUrl } : {}),
     },
   };
+}
+
+export function deepLinkServerError(target: DeepLinkTarget, configuredBaseUrl: string): string | null {
+  if (!target.serverUrl) return null;
+  try {
+    if (new URL(configuredBaseUrl).origin === target.serverUrl) return null;
+  } catch {
+    // Display the configured value so the employee can correct it.
+  }
+  return `This link came from a different AgentCloud server (${target.serverUrl}). Desktop is connected to ${configuredBaseUrl}. Sign out, set AGENTCLOUD_URL to the link's server, then sign in and open the link again.`;
 }
 
 export function findDeepLinkUrl(argv: string[]): string | null {

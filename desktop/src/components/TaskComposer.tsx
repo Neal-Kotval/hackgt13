@@ -1,14 +1,17 @@
 import { Select } from "./ui/Select";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { buildAddTaskPayload } from "../lib/add-task";
 import { describeAgentStartAvailability } from "../lib/agent-start";
 import { postAction } from "../lib/server-api";
 import type { ProjectSnapshot } from "../lib/types";
+import type { RunBoxSummary } from "../lib/run-boxes";
 
 type TaskComposerProps = {
   project: ProjectSnapshot;
   webBaseUrl: string;
   preferredEnvironmentId?: string;
+  preferredRunBoxId?: string;
+  runBoxes: RunBoxSummary[];
   onCreated: () => void | Promise<void>;
 };
 
@@ -16,16 +19,15 @@ export function TaskComposer({
   project,
   webBaseUrl,
   preferredEnvironmentId,
+  preferredRunBoxId,
+  runBoxes,
   onCreated,
 }: TaskComposerProps) {
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [agentId, setAgentId] = useState(project.agents[0]?.id ?? "");
-  const [environmentId, setEnvironmentId] = useState(
-    preferredEnvironmentId ||
-      project.resources.find((resource) => resource.status === "verified")?.id ||
-      project.resources[0]?.id ||
-      "",
+  const [binding, setBinding] = useState(
+    preferredRunBoxId ? `runbox:${preferredRunBoxId}` : preferredEnvironmentId ? `resource:${preferredEnvironmentId}` : "",
   );
   const [startTaskId, setStartTaskId] = useState(
     project.tasks.at(-1)?.id ?? "",
@@ -42,6 +44,12 @@ export function TaskComposer({
   const verifiedEnvironments = project.resources.filter(
     (resource) => resource.status === "verified",
   );
+  const readyRunBoxes = runBoxes.filter((job) => job.projectId === project.id && job.state === "ready" && !job.stopRequested);
+  useEffect(() => {
+    if (binding.startsWith("runbox:") && !readyRunBoxes.some((job) => job.id === binding.slice(7))) {
+      setBinding("");
+    }
+  }, [binding, readyRunBoxes]);
   const canStartLater = verifiedEnvironments.length > 0;
   const startEnvironment = project.resources.find(
     (resource) => resource.id === startEnvironmentId,
@@ -64,7 +72,8 @@ export function TaskComposer({
         title,
         instructions,
         agentId,
-        environmentId,
+        environmentId: binding.startsWith("resource:") ? binding.slice(9) : undefined,
+        runBoxId: binding.startsWith("runbox:") ? binding.slice(7) : undefined,
       });
       const result = await postAction(payload);
       const updated = result.state.projects.find((row) => row.id === project.id);
@@ -75,8 +84,8 @@ export function TaskComposer({
         setStartTaskId(created.id);
         if (created.environmentId) {
           setStartEnvironmentId(created.environmentId);
-        } else if (environmentId) {
-          setStartEnvironmentId(environmentId);
+        } else if (binding.startsWith("resource:")) {
+          setStartEnvironmentId(binding.slice(9));
         }
         setNotice(
           `Created task ${created.id} on the shared backend (revision ${result.state.revision}). Confirm the same id in the web app at ${webBaseUrl}. Start agent stays unavailable until a remote runner exists.`,
@@ -161,24 +170,24 @@ export function TaskComposer({
           <Select
             id="task-environment"
             aria-label="Environment"
-            value={environmentId}
-            onChange={(event) => setEnvironmentId(event.target.value)}
-            disabled={pending || project.resources.length === 0}
+            value={binding}
+            onChange={(event) => setBinding(event.target.value)}
+            disabled={pending}
           >
-            {project.resources.length === 0 ? (
-              <option value="">
-                None registered — connect a machine on the web
+            <option value="">No environment — queue task</option>
+            {readyRunBoxes.map((job) => (
+              <option key={job.id} value={`runbox:${job.id}`}>
+                Run box {job.id} · {job.provider} · ready
               </option>
-            ) : (
-              project.resources.map((resource) => (
-                <option key={resource.id} value={resource.id}>
-                  {resource.name} · {resource.kind} · {resource.status}
-                </option>
-              ))
-            )}
+            ))}
+            {verifiedEnvironments.map((resource) => (
+              <option key={resource.id} value={`resource:${resource.id}`}>
+                Resource {resource.name} · {resource.kind} · verified
+              </option>
+            ))}
           </Select>
         </label>
-        {!canStartLater ? (
+        {readyRunBoxes.length === 0 && !canStartLater ? (
           <p className="credential-banner" role="status">
             No verified environment on this project. You can still create a
             queued task, but Start agent stays unavailable until the web app
@@ -186,7 +195,7 @@ export function TaskComposer({
           </p>
         ) : (
           <p className="brand-meta" role="status">
-            A verified resource is available to bind on create. Starting an
+            A ready run box or verified resource is available to bind on create. Starting an
             agent still requires a remote runner API.
           </p>
         )}

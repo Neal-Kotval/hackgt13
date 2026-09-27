@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { TaskComposer } from "./TaskComposer";
 import type { DeepLinkParseResult } from "../lib/deep-link";
 import { getState } from "../lib/server-api";
+import { desktopApi } from "../lib/desktop-api";
+import type { RunBoxSummary } from "../lib/run-boxes";
 import type { AgentCloudStateSummary, ProjectSnapshot } from "../lib/types";
 
 type ProjectPickerProps = {
@@ -31,6 +33,20 @@ export function ProjectPicker({
     string | undefined
   >();
   const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
+  const [runBoxes, setRunBoxes] = useState<RunBoxSummary[]>([]);
+  const [runBoxError, setRunBoxError] = useState<string | null>(null);
+  const [preferredRunBoxId, setPreferredRunBoxId] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!selectedId) { setRunBoxes([]); return; }
+    let cancelled = false;
+    void desktopApi().listRunBoxes(selectedId).then((jobs) => {
+      if (!cancelled) { setRunBoxes(jobs.filter((job) => job.projectId === selectedId)); setRunBoxError(null); }
+    }).catch((error) => {
+      if (!cancelled) { setRunBoxes([]); setRunBoxError(error instanceof Error ? error.message : "Could not load run boxes."); }
+    });
+    return () => { cancelled = true; };
+  }, [selectedId, load]);
 
   const refresh = useCallback(async () => {
     setLoad({ kind: "loading" });
@@ -77,6 +93,27 @@ export function ProjectPicker({
       onDeepLinkHandled?.();
       return;
     }
+    if (deepLink.target.taskRunBoxId) {
+      setSelectedId(project.id);
+      void desktopApi().listRunBoxes(project.id).then((jobs) => {
+        const job = jobs.find((row) => row.id === deepLink.target.taskRunBoxId && row.projectId === project.id);
+        if (!job || job.state !== "ready" || job.stopRequested) {
+          setDeepLinkError(`Run box ${deepLink.target.taskRunBoxId} is unavailable for tasks on project ${project.name}. Refresh its status on the web, then open the link again.`);
+          setPreferredRunBoxId(undefined);
+        } else {
+          setRunBoxes(jobs.filter((row) => row.projectId === project.id));
+          setPreferredRunBoxId(job.id);
+          setPreferredEnvironmentId(undefined);
+          setDeepLinkError(null);
+        }
+        onDeepLinkHandled?.();
+      }).catch((error) => {
+        setDeepLinkError(error instanceof Error ? error.message : "Could not load the linked run box.");
+        onDeepLinkHandled?.();
+      });
+      return;
+    }
+    setPreferredRunBoxId(undefined);
     if (deepLink.target.environmentId) {
       const resource = project.resources.find(
         (row) => row.id === deepLink.target.environmentId,
@@ -139,6 +176,7 @@ export function ProjectPicker({
           {deepLinkError}
         </p>
       ) : null}
+      {runBoxError ? <p className="error-banner" role="alert">Run boxes: {runBoxError}</p> : null}
 
       {load.kind === "error" ? (
         <div className="app-error" role="alert">
@@ -179,7 +217,12 @@ export function ProjectPicker({
             <Select
               aria-label="Project"
               value={selectedId ?? ""}
-              onChange={(event) => setSelectedId(event.target.value || null)}
+              onChange={(event) => {
+                setSelectedId(event.target.value || null);
+                setPreferredEnvironmentId(undefined);
+                setPreferredRunBoxId(undefined);
+                setDeepLinkError(null);
+              }}
             >
               {load.state.projects.map((project) => (
                 <option key={project.id} value={project.id}>
@@ -198,10 +241,12 @@ export function ProjectPicker({
             <>
               <ProjectDetail project={selected} webBaseUrl={webBaseUrl} />
               <TaskComposer
-                key={`${selected.id}:${preferredEnvironmentId ?? ""}`}
+                key={`${selected.id}:${preferredEnvironmentId ?? ""}:${preferredRunBoxId ?? ""}`}
                 project={selected}
                 webBaseUrl={webBaseUrl}
                 preferredEnvironmentId={preferredEnvironmentId}
+                preferredRunBoxId={preferredRunBoxId}
+                runBoxes={runBoxes}
                 onCreated={() => refresh()}
               />
             </>
@@ -329,6 +374,7 @@ function ProjectDetail({
           secondary: [
             `owner ${task.owner}`,
             task.environmentId ? `env ${task.environmentId}` : null,
+            task.runBoxId ? `run box ${task.runBoxId}` : null,
             task.instructions
               ? `instructions: ${task.instructions.slice(0, 120)}${
                   task.instructions.length > 120 ? "…" : ""
