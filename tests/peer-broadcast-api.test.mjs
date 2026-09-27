@@ -32,6 +32,7 @@ export function codexService(){return {
  get:id=>({id,projectId,agentId:id==='source'?agentId:'other-agent'}),
  broadcastPeerMessage:(id,input)=>{calls.push({id,input});return [{id:'notice'}]},
  sendPeerMessage:()=>{throw Error('Directed path was used')},
+ peerMessageHistory:(id,input)=>{calls.push({id,input});return {messages:[],nextBeforeSequence:null}},
 };}`);
 const human=await compile('../app/api/codex-sessions/[id]/peer-messages/route.ts','human-peer.js');
 const agentRoute=await compile('../app/api/agent-peer-messages/route.ts','agent-peer.js');
@@ -66,4 +67,25 @@ test('scoped agent token cannot broadcast as another agent',async()=>{
  const sent=await agentRoute.POST(request({...input,agentId:first.agentId},{token:first.token}));
  assert.equal(sent.status,202);
  assert.equal(calls.at(-1).input.actor.id,first.agentId);
+});
+
+test('conversation audience is validated for human and agent requests without trusting actor input',async()=>{
+ const input={broadcast:true,audience:'conversations',text:'Notify chats',requestId:'d7b439fa-d7bb-4b5b-b890-70545086876d',actor:{id:'spoofed',name:'Spoofed'}};
+ assert.equal((await human.POST(request(input,{cookie:member.cookie}),context)).status,202);
+ assert.equal(calls.at(-1).input.audience,'conversations');assert.equal(calls.at(-1).input.actor.id,member.id);
+ for(const audience of ['everyone',null,23])assert.equal((await human.POST(request({...input,audience},{cookie:member.cookie}),context)).status,400);
+ assert.equal((await human.POST(request({...input,broadcast:undefined,toSessionId:'target'},{cookie:member.cookie}),context)).status,400);
+ const agentInput={...input,projectId,agentId:first.agentId,fromSessionId:'source'};
+ assert.equal((await agentRoute.POST(request(agentInput,{token:first.token}))).status,202);
+ assert.equal(calls.at(-1).input.audience,'conversations');assert.equal(calls.at(-1).input.actor.id,first.agentId);
+ assert.equal((await agentRoute.POST(request({...agentInput,audience:'everyone'},{token:first.token}))).status,400);
+});
+test('history endpoint requires identity and passes validated view and cursor options',async()=>{
+ const req=(query,cookie)=>new Request(`http://localhost:3000/api/peer?${query}`,{headers:cookie?{cookie}:{}});
+ assert.equal((await human.GET(req('view=history'),context)).status,401);
+ const history=await human.GET(req('view=history&limit=20&beforeSequence=30',member.cookie),context);
+ assert.equal(history.status,200);assert.deepEqual(await history.json(),{messages:[],nextBeforeSequence:null});
+ assert.deepEqual(calls.at(-1).input,{limit:20,beforeSequence:30});
+ assert.equal((await human.GET(req('view=invalid',member.cookie),context)).status,400);
+ assert.equal((await human.GET(req('view=history&messageId=one',member.cookie),context)).status,400);
 });

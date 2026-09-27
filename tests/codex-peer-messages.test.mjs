@@ -128,3 +128,19 @@ test('a stopped sender cannot claim to send a peer message', async () => {
   assert.equal(f.db.prepare('SELECT count(*) AS n FROM agent_inbox_message').get().n, 0);
   f.service.close(); f.db.close();
 });
+
+test('same-agent chats retain human notification attribution and dispatch only redacted text', async () => {
+ const f=fixture();const {a}=await agents(f);
+ const chat=f.service.initialize({projectId:'project',agentId:a.agentId,createdBy:'teammate',runBoxId:'box',newChat:true,requestId:randomUUID()});
+ await tick();
+ assert.equal(f.service.get(chat.id).createdByName,null);
+ const input={toSessionId:chat.id,text:'Please check API_TOKEN=private-value',requestId:randomUUID(),actor:{id:'teammate',name:'Sam'}};
+ const sent=f.service.sendPeerMessage(a.id,input);await tick();
+ const history=f.service.peerMessageHistory(chat.id).messages;
+ assert.equal(history[0].id,sent.id);assert.equal(history[0].direction,'incoming');assert.equal(history[0].actorName,'Sam');
+ const turn=f.calls.find(call=>call.sessionId===chat.id&&call.method==='turn/start');
+ assert(!turn.params.input[0].text.includes('private-value'));assert.match(turn.params.input[0].text,/sent by Sam/);
+ const event=f.service.snapshot(chat.id).events.find(row=>row.kind==='user');
+ assert.equal(event.actorId,'teammate');assert.equal(event.actorName,'Sam');
+ f.service.close();f.db.close();
+});
