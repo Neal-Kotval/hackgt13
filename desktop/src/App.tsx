@@ -57,7 +57,7 @@ export default function App() {
       <div className="section-host" hidden={section !== "local-chat" || Boolean(chatRunBox)}>{chat.content}</div>
       {chatRunBox && <div className="section-host" hidden={section !== "local-chat"}><div className="app-shell"><main className="main">
         <header className="main-header"><h1>Environment terminal</h1></header>
-        <ProjectChatTerminal projectId={chatRunBox.projectId} runBoxId={chatRunBox.runBoxId} onClose={()=>setChatRunBox(null)} />
+        <ProjectChatTerminal key={`${chatRunBox.projectId}:${chatRunBox.runBoxId}`} projectId={chatRunBox.projectId} runBoxId={chatRunBox.runBoxId} onClose={()=>setChatRunBox(null)} />
       </main></div></div>}
       {environmentsMounted && <div className="section-host" hidden={section !== "environments"}><EnvironmentsPanel webBaseUrl={auth.baseUrl} deepLink={environmentLink} onDeepLinkHandled={clearEnvironmentLink} /></div>}
       {section === "tasks" && <ProjectPicker webBaseUrl={auth.baseUrl} deepLink={taskLink} onDeepLinkHandled={clearTaskLink} />}
