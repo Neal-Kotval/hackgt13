@@ -30,7 +30,7 @@ import {
 export const LOGIN_TUNNEL_TIMEOUT_MS = 10 * 60_000;
 export const UNREACHABLE_MESSAGE = "Could not reach the environment over SSH. Check that it is running, then try again.";
 export const FORWARD_REFUSED_MESSAGE =
-  "The environment refused to forward the sign-in callback. Use a device code instead.";
+  "The environment refused to forward the sign-in callback. Check SSH forwarding permissions and retry from project Settings.";
 export const LISTENER_MISSING_MESSAGE =
   "Codex's sign-in listener on the environment is not running. Start sign-in again.";
 export const TIMEOUT_MESSAGE = "ChatGPT sign-in timed out after 10 minutes. Start it again when you're ready.";
@@ -45,7 +45,7 @@ export class LoginTunnelError extends Error {
 }
 
 export function portInUseMessage(port: number): string {
-  return `Port ${port} on this Mac is in use (is another Codex sign-in running?). Close it, or use a device code instead.`;
+  return `Port ${port} on this Mac is in use (is another Codex sign-in running?). Close that sign-in and retry from project Settings.`;
 }
 
 /** Map a local listen error to a fixed message. */

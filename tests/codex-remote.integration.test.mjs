@@ -17,7 +17,7 @@ import { createCodexSessionService, ENVIRONMENT_STOPPED } from "../lib/codex-ses
 
 // Real Docker + real ssh + real `codex app-server` (HAC-153). A docker-local
 // environment is brought to ready by the real worker with the install's runner key,
-// then a remote Codex session initializes over SSH and starts ChatGPT device-code
+// then a remote Codex session initializes over SSH and starts ChatGPT browser
 // sign-in. The sign-in is never completed.
 function dockerAvailable() {
   try { execFileSync("docker", ["info"], { stdio: "ignore", timeout: 20_000 }); return true; }
@@ -82,12 +82,14 @@ test("remote Codex session over SSH on a docker-local environment", {
     assert.equal(sshProcesses(tmpRoot).length, 1, "one ssh transport is open");
     assert.equal(readdirSync(tmpRoot).length, 1, "one private known_hosts directory while connected");
 
-    // Device-code start only. The code is never entered, so no account is signed in.
+    // Start browser OAuth without opening its URL or completing account sign-in.
     const { login } = await service.action(session.id, { action: "login" });
-    assert.match(login.verificationUrl, /^https:\/\/auth\.openai\.com\//);
-    assert.equal(typeof login.userCode, "string");
-    assert.ok(login.userCode.length >= 4);
-    assert.equal(JSON.stringify(service.snapshot(session.id)).includes(login.userCode), false);
+    assert.equal(login.method, "browser");
+    assert.equal([1455, 1457].includes(login.callbackPort), true);
+    assert.equal(new URL(login.authUrl).origin, "https://auth.openai.com");
+    assert.equal(JSON.stringify(service.snapshot(session.id)).includes(login.authUrl), false);
+    await assert.rejects(service.action(session.id, { action: "login", method: "deviceCode" }), error => error.status === 400);
+    assert.equal((await service.action(session.id, {action: "cancelLogin"})).cancelled, true);
 
     await service.action(session.id, { action: "interrupt" });
     await service.action(session.id, { action: "stop" });

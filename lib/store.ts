@@ -694,6 +694,29 @@ export async function agentAction(
   });
 }
 
+/** Managed Codex uses the employee session and ChatGPT login, not a transport token.
+ * Call only after project ownership and environment readiness have been checked.
+ */
+export async function ensureManagedCodexAgent(projectId: string, preferredId?: string) {
+  return transaction((disk) => {
+    const p = project(disk, projectId);
+    const existing = preferredId
+      ? p.agents.find((row) => row.id === preferredId && row.client === "Codex")
+      : p.agents.find((row) => row.client === "Codex");
+    if (preferredId && !existing) throw new InputError("Codex identity not found in this project.", 409);
+    if (existing) return structuredClone(existing);
+    const createdId = id();
+    const created = {
+      id: createdId, name: "Codex", client: "Codex", role: "Project coding agent",
+      branch: `agents/${createdId.slice(0, 8)}`, status: "disconnected" as const,
+    };
+    p.agents.push(created);
+    event(p, "human", "Added Codex identity for environment sign-in; workspace branch is planned, not provisioned", "agent");
+    disk.state.revision++;
+    return structuredClone(created);
+  });
+}
+
 const DESKTOP_CHAT_CLIENT = "desktop-chat";
 
 /**

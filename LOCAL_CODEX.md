@@ -21,9 +21,11 @@ With Node 22 and Docker available:
 4. In website **Environments**, create a **Local Docker sandbox · CPU only** using
    the existing environment form. A project owner approves allocation; the worker
    must verify SSH and report the actual Codex check before it is usable.
-5. In website **Environments**, choose **Set up Codex**, then **Sign in with
-   ChatGPT** if needed. Enter the displayed code on the linked ChatGPT page.
-   When authorization completes, the website opens desktop; **Open in desktop**
+5. After the environment is ready, open website **Settings**, choose **Add Codex**,
+   then **Sign in with ChatGPT** if needed. Desktop connects the environment's
+   callback tunnel and opens standard ChatGPT browser login. No device code or
+   connection token is needed. Keep desktop running and signed into the same
+   website. When authorization completes, open chats in desktop; **Open in desktop**
    remains available if the browser blocks the application handoff.
 6. Desktop selects that environment. Create independent chats with **New chat**,
    or reopen an existing chat. Native desktop offers existing environments and
@@ -67,3 +69,15 @@ container templates. Creating another returns HTTP 409 with instructions to use
 the existing environment or stop it first; it does not record another resource
 request. Stopping must finish before creating its replacement. Replaying the
 original creation key still returns the original decision and environment.
+
+## Settings browser sign-in (HAC-169)
+
+Settings hands desktop only project, environment and session identifiers plus
+the website origin. Desktop verifies the origin and authenticated session target
+before requesting browser login. The OAuth URL comes from the authenticated API,
+never from the deep link. The existing pinned SSH tunnel carries the loopback
+callback to Codex in the selected environment. Login URLs, codes and credentials
+are not logged or stored in activity. Callback-port conflicts and unavailable
+desktop/SSH connections are actionable failures; there is no device-code fallback
+in the environment UI. Legacy CLI token records and authenticated transport APIs
+remain compatible, but new managed Codex identities have no connection token.

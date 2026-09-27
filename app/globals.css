@@ -2358,9 +2358,6 @@ select {
 .project-sections > section:not([class]) > .section-description {
   margin: var(--space-2) 0 var(--space-5);
 }
-.settings-heading {
-  margin-bottom: var(--space-2);
-}
 
 .organization-page {
   max-width: var(--page-max);
