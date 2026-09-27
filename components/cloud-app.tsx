@@ -475,10 +475,7 @@ export function CloudApp() {
         <footer>
           <span>
             <TerminalWindow />
-            alto <span className="muted">/ HackGT build</span>
-            <Link href="/design-system">
-              Design system <ArrowUpRight />
-            </Link>
+            alto <span className="muted">/ workspace</span>
           </span>
           <span className="muted">
             Single-user development environment
