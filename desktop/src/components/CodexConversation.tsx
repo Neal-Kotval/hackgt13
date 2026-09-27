@@ -135,9 +135,21 @@ export function CodexConversation({ events, working, emptyLabel, agentName = "Co
     const gap = Number.parseFloat(getComputedStyle(node).rowGap) || 0;
     following.current = node.scrollHeight - node.scrollTop - node.clientHeight <= gap;
   }
+  // Only a later successful connection resolves transport errors. Execution
+  // failures and errors after the latest readiness event remain visible alerts.
+  const lastReadyIndex = events.reduce((last, event, index) => event.kind === "status" && event.text.startsWith("Codex is ready in the environment workspace ") ? index : last, -1);
+  const recoveredErrors = events.filter((event, index) => index < lastReadyIndex && event.kind === "error" && event.text === "Codex connection to the environment failed. Reconnect to continue.");
+  const recoveredIds = new Set(recoveredErrors.map(event => event.id));
   return <div className="conversation codex-conversation" ref={scroller} onScroll={trackScroll} aria-label="Project conversation" tabIndex={0}>
     {!hasMessages && !working ? emptyContent ?? <div className="main-empty chat-empty" role="status">{emptyLabel ? <p>{emptyLabel}</p> : null}</div> : null}
     {events.map((event, index) => {
+      if (recoveredIds.has(event.id)) {
+        if (event.id !== recoveredErrors[0].id) return null;
+        return <details className="codex-command codex-connection-history" key={event.id}>
+          <summary><Check aria-hidden="true" /><span className="codex-command-title">Previous connection issues ({recoveredErrors.length}) · Resolved</span><CaretDown className="codex-disclosure-icon" aria-hidden="true" /></summary>
+          {recoveredErrors.map(error => <p className="codex-command-output" key={error.id}>{error.text}</p>)}
+        </details>;
+      }
       if (!hasMessages && !working && event.kind === "status") return null;
       if (event.kind === "command") {
         const summary = event.text.split("\n").find(line => line.trim()) || "Command output";
