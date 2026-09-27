@@ -27,8 +27,14 @@ const legacySections: Record<string, string> = {
 
 export function WebsiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  if (["/", "/sign-in", "/sign-up"].includes(pathname)) return children;
+  return <AuthenticatedShell>{children}</AuthenticatedShell>;
+}
+
+function AuthenticatedShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const { data: session } = authClient.useSession();
-  if (["/sign-in", "/sign-up"].includes(pathname) || (!session && (pathname === "/design-system" || pathname.startsWith("/invitations/")))) return children;
+  if (!session && (pathname === "/design-system" || pathname.startsWith("/invitations/"))) return children;
   return <SiteShell>{children}</SiteShell>;
 }
 
