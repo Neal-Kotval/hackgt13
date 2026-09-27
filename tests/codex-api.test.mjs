@@ -20,7 +20,7 @@ await copyRunBoxAccess(dir);
 // Stub only execution; all employee/session/organization checks use real Better Auth.
 await writeFile(path.join(dir,'codex-service.js'),`import {failure} from './http.js'; import {InputError} from './store.js';
 export const codexEnabled=()=>true;export const codexFailure=failure;
-let saved=[];const events=new Map();export function codexService(){return {validateEnvironment:(projectId,runBoxId)=>{if(runBoxId!=='ready-env')throw new InputError('Environment not found or not ready',409);},list:(projectId)=>saved.filter(session=>session.projectId===projectId),initialize:({projectId,agentId,runBoxId,newChat})=>{let session=saved.find(row=>row.projectId===projectId&&row.agentId===agentId&&!newChat);if(session)return session;session={id:saved.length?'s'+(saved.length+1):'s1',projectId,agentId,status:'ready',isSetupSession:!newChat,target:runBoxId?{kind:'runBox',runBoxId}:{kind:'local'}};saved.push(session);return session;},get:(id)=>saved.find(row=>row.id===id),snapshot:(id)=>({session:saved.find(row=>row.id===id),events:events.get(id)||[]}),action:async(id,input)=>{if(input.action==='message'){const entries=events.get(id)||[];entries.push({kind:'user',text:input.text,actorId:input.actor.id,actorName:input.actor.name});events.set(id,entries);}return {session:saved.find(row=>row.id===id)};}};}`);
+let saved=[];const events=new Map();export function codexService(){return {validateEnvironment:(projectId,runBoxId)=>{if(runBoxId!=='ready-env')throw new InputError('Environment not found or not ready',409);},list:(projectId)=>saved.filter(session=>session.projectId===projectId),initialize:({projectId,agentId,runBoxId,newChat,createdBy})=>{let session=saved.find(row=>row.projectId===projectId&&row.agentId===agentId&&!newChat);if(session)return session;session={id:saved.length?'s'+(saved.length+1):'s1',projectId,agentId,createdBy,status:'ready',isSetupSession:!newChat,target:runBoxId?{kind:'runBox',runBoxId}:{kind:'local'}};saved.push(session);return session;},get:(id)=>{const row=saved.find(row=>row.id===id);if(!row)throw new InputError('Not found',404);return row;},delete:async(id)=>{saved=saved.filter(row=>row.id!==id);return {deleted:true,id};},rename:(id,title)=>{const session=saved.find(row=>row.id===id);session.title=title;return {session};},snapshot:(id)=>({session:saved.find(row=>row.id===id),events:events.get(id)||[]}),action:async(id,input)=>{if(input.action==='message'){const entries=events.get(id)||[];entries.push({kind:'user',text:input.text,actorId:input.actor.id,actorName:input.actor.name});events.set(id,entries);}return {session:saved.find(row=>row.id===id)};}};}`);
 const routes=await compile('../app/api/codex-sessions/route.ts','sessions.js');
 const detail=await compile('../app/api/codex-sessions/[id]/route.ts','detail.js');
 const owner=fixture.users[0],member=fixture.users[1];
@@ -121,4 +121,27 @@ test('a second managed agent requires ready same-box setup and is idempotent',as
  assert.equal(agents[1].name,'Codex 2');
  assert.equal(agents[1].setupRequestId,requestId);
  assert.equal(agents[1].branch,`agent/${agents[1].id}`);
+});
+
+test('chat rename and deletion require same-origin authenticated creator or project owner',async()=>{
+ const projectId=(await store.action({type:'createProject',name:'Chat management',repo:'https://example.com/repo',compute:'Hosted Linux',template:'blank'})).id;
+ fixture.grantMembership(owner.id,projectId,'owner');fixture.grantMembership(member.id,projectId,'member');
+ const agentId=(await store.action({type:'addAgent',projectId,name:'Codex',client:'Codex',role:'Developer',branch:'agent/codex'})).agentId;
+ const create=async(cookie)=>(await (await routes.POST(request({projectId,agentId,runBoxId:'ready-env',newChat:true,requestId:'test'},cookie))).json()).session;
+ const own=await create(owner.cookie),other=await create(member.cookie);
+ const mutation=(method,cookie,origin='http://localhost:3000')=>new Request('http://localhost:3000/api/codex-sessions/'+own.id,{method,headers:{origin,'content-type':'application/json',...(cookie?{cookie}:{})},...(method==='PATCH'?{body:JSON.stringify({title:'Renamed'})}:{})});
+ for(const method of ['PATCH','DELETE']){
+   const ctx={params:Promise.resolve({id:own.id})};
+   assert.equal((await detail[method](mutation(method),ctx)).status,401);
+   assert.equal((await detail[method](mutation(method,owner.cookie,'https://other.example'),ctx)).status,403);
+   assert.equal((await detail[method](mutation(method,member.cookie),ctx)).status,403);
+ }
+ assert.equal((await detail.PATCH(mutation('PATCH',member.cookie),{params:Promise.resolve({id:other.id})})).status,200);
+ assert.equal((await detail.PATCH(mutation('PATCH',owner.cookie),{params:Promise.resolve({id:other.id})})).status,200);
+ const creatorDelete=await detail.DELETE(mutation('DELETE',member.cookie),{params:Promise.resolve({id:other.id})});
+ assert.deepEqual(await creatorDelete.json(),{deleted:true,id:other.id});
+ const memberChat=await create(member.cookie);
+ assert.equal((await detail.DELETE(mutation('DELETE',owner.cookie),{params:Promise.resolve({id:memberChat.id})})).status,200);
+ fixture.getDatabase().prepare('DELETE FROM project_membership WHERE user_id=? AND project_id=?').run(member.id,projectId);
+ assert.equal((await detail.DELETE(mutation('DELETE',member.cookie),{params:Promise.resolve({id:own.id})})).status,403);
 });

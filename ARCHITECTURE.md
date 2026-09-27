@@ -287,3 +287,16 @@ in web environment chat and desktop chat, including output and per-file diffs.
 This is recorded execution evidence, separate from the planned project-wide Git
 review and merge workflow. See [LOCAL_CODEX.md](LOCAL_CODEX.md#command-and-file-change-history)
 for retention, streaming, redaction and recovery limits.
+
+## Saved chat management
+
+`PATCH /api/codex-sessions/:id` accepts `{title}` (trimmed, 1–120 characters)
+and returns `{session}`. An explicit title survives later messages and reconnects.
+`DELETE /api/codex-sessions/:id` returns `{deleted:true,id}` and removes an
+independent chat and its local events, turn requests, workflow metadata and inbox
+messages. Environment setup sessions cannot be deleted; an active response must
+be stopped before deleting a chat. Both mutations require a same-origin verified
+employee session, project membership, environment visibility, and either chat
+creator or project owner access. Deletion closes only that chat's transport; it
+does not stop the environment, sign out its shared account, or remove remote
+Codex thread files or the workspace. Missing/deleted chats return 404.
