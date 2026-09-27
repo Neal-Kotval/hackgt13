@@ -297,3 +297,18 @@ On **People & organizations**, choose **New organization** to open the creation 
 Website navigation uses one shared vertical sidebar for projects, organization management, project views, and the design reference. On narrow screens, **Open navigation** opens a keyboard-accessible drawer. Project view links have durable URLs; organization changes refresh the available project links.
 
 After `npm run build`, run `npm run test:motion:browser` to verify Motion entrances, inline-style cleanup, notification positioning, drawer/dropdown behavior, and reduced-motion preferences in headless Chrome at 375, 768, and 1440 pixels. It uses isolated temporary accounts and port 3183.
+
+## Runs from Project chat
+
+Runs shows recent saved work from environment-backed Codex chats. Each recorded
+user message starts a run; completion, failure and interruption come from saved
+turn events. Environment shutdown does not change an already completed outcome.
+An unfinished request without a final result is shown as outcome unavailable,
+not inferred to have succeeded. Empty setup chats do not create runs.
+
+The page refreshes every four seconds and on window focus, offers manual refresh
+and status filtering, and opens the original chat in desktop. Work details stay
+collapsed by default. History is limited to the events retained by the chat
+service (currently 300 per chat); this is not an unlimited execution archive.
+Legacy `/api/agent-runs` records remain stored and accessible through their API,
+but the page no longer relies on that older reporting path or heartbeat panels.
