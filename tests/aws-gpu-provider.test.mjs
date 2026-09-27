@@ -166,3 +166,9 @@ test("scopedWorkerAws uses an existing worker-role session, assumes from staging
   await assert.rejects(scopedWorkerAws({ aws: cli("arn:aws:iam::662660921850:root"), assume: rootAssume }), /root credentials are rejected/);
   await assert.rejects(scopedWorkerAws({ aws: async () => ({ Account: "111111111111", Arn: "x" }), assume }), /another account/);
 });
+
+test("AWS CLI accepts successful tag and DynamoDB mutations with an empty response", async () => {
+  const aws = createAwsCli({ run: async () => ({ stdout: "" }) });
+  assert.deepEqual(await aws("ec2", "create-tags"), {});
+  assert.deepEqual(await aws("dynamodb", "put-item"), {});
+});

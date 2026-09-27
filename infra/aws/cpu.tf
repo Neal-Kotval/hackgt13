@@ -170,6 +170,16 @@ resource "aws_iam_role_policy" "worker_cpu" {
         ]
       },
       {
+        Sid      = "MaintainManagedSshRuleOwners"
+        Effect   = "Allow"
+        Action   = ["ec2:CreateTags", "ec2:DeleteTags"]
+        Resource = "arn:aws:ec2:us-east-1:${var.account_id}:security-group-rule/*"
+        Condition = {
+          StringEquals              = { "ec2:ResourceTag/Project" = "AgentCloudDemo" }
+          "ForAllValues:StringLike" = { "aws:TagKeys" = ["AgentCloudOwner:*", "AgentCloudJobId"] }
+        }
+      },
+      {
         Sid       = "TagSshRulesOnCreateOnly"
         Effect    = "Allow"
         Action    = "ec2:CreateTags"
