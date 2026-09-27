@@ -41,6 +41,7 @@ import { RunControl } from "./runs/run-control";
 import { Skeleton, SkeletonHeading, SkeletonPanel, SkeletonRegion, SkeletonRows } from "./ui/skeleton";
 import { ResourceGraph } from "./resource-graph";
 import { Environments } from "./environments";
+import { OverviewEnvironments, environmentSummary, environmentTag, useProjectEnvironments } from "./environments/project-environments";
 import { AgentSettings } from "./environments/agent-settings";
 type Action = Record<string, unknown>;
 const iconProps = { weight: "duotone" as const };
@@ -282,14 +283,21 @@ export function CloudApp() {
                 <Environments project={project} />
                 {/* The Environments flow above is the primary path. Saved requests and
                     manual approvals stay available here for existing flows. */}
-                <details className="project-disclosure">
-                  <summary>Request history &amp; advanced requests</summary>
-                  <ResourceRequests project={project} onAction={resourceAction} />
-                </details>
-                <details className="project-disclosure">
-                  <summary>Machines &amp; resource catalog</summary>
-                  <p className="section-description">Save the machines and resources your project may use. Registration alone does not connect or verify a machine.</p>
-                  <ResourceCatalog project={project} onAction={resourceAction} />
+                <details className="environment-advanced">
+                  <summary>Advanced: request history and resource catalog</summary>
+                  <section className="environment-advanced-section" aria-labelledby="advanced-requests-title">
+                    <h3 id="advanced-requests-title">Request history &amp; advanced requests</h3>
+                    <p className="section-description">
+                      Saved resources: {(project.resources ?? []).length} · Resource requests: {(project.resourceRequests ?? []).length}.
+                      Saved resources are configuration records; check requests for allocation and verification evidence.
+                    </p>
+                    <ResourceRequests project={project} onAction={resourceAction} />
+                  </section>
+                  <section className="environment-advanced-section" aria-labelledby="advanced-catalog-title">
+                    <h3 id="advanced-catalog-title">Machines &amp; resource catalog</h3>
+                    <p className="section-description">Save the machines and resources your project may use. Registration alone does not connect or verify a machine.</p>
+                    <ResourceCatalog project={project} onAction={resourceAction} />
+                  </section>
                 </details>
               </div>
             ) : page === "settings" || page === "agents" || page === "desktop" ? (
@@ -320,13 +328,7 @@ export function CloudApp() {
                   <div className="project-sections">
                     <section className="workspace-card">
                       <SectionTitle label="Environments" />
-                      <p>Set up the machine your agent will use, then follow its request and approval status.</p>
-                      <dl>
-                        <dt>Saved resources</dt><dd>{(project.resources ?? []).length}</dd>
-                        <dt>Resource requests</dt><dd>{(project.resourceRequests ?? []).length}</dd>
-                      </dl>
-                      <p className="muted">Saved resources are configuration records. Check requests for allocation and verification evidence.</p>
-                      <Link className="button secondary" href={base + "/environments"}>Manage environments <ArrowUpRight /></Link>
+                      <OverviewEnvironments projectId={project.id} base={base} />
                     </section>
                     <section>
                       <SectionTitle label="Task progress" number={project.tasks.length} />
@@ -970,29 +972,7 @@ function Projects({ projects }: { projects: Project[] }) {
       )}
       <div className="project-list">
         {projects.map((p) => (
-          <Link className="project-row" href={"/projects/" + p.id} key={p.id}>
-            <span className="project-glyph">
-              <FolderSimple {...iconProps} />
-            </span>
-            <div>
-              <h2>
-                {p.name}
-                <Tag tone="neutral">setup pending</Tag>
-              </h2>
-              <p>{p.repo.replace(/^https?:\/\//, "")}</p>
-            </div>
-            <div className="project-row-meta">
-              <span>
-                <Users />
-                {p.agents.length} agents
-              </span>
-              <span>
-                <HardDrives />
-                {p.compute}
-              </span>
-            </div>
-            <ArrowUpRight />
-          </Link>
+          <ProjectRow project={p} key={p.id} />
         ))}
       </div>
       <div className="intro-grid">
@@ -1027,6 +1007,35 @@ function Projects({ projects }: { projects: Project[] }) {
         </div>
       </div>
     </>
+  );
+}
+function ProjectRow({ project: p }: { project: Project }) {
+  const { jobs, error } = useProjectEnvironments(p.id, 15_000);
+  const tag = environmentTag(jobs);
+  return (
+    <Link className="project-row" href={"/projects/" + p.id}>
+      <span className="project-glyph">
+        <FolderSimple {...iconProps} />
+      </span>
+      <div>
+        <h2>
+          {p.name}
+          <Tag tone={tag.tone}>{tag.label}</Tag>
+        </h2>
+        <p>{p.repo.replace(/^https?:\/\//, "")}</p>
+      </div>
+      <div className="project-row-meta">
+        <span className="project-environments">
+          <HardDrives />
+          {error ? "Environments unavailable" : jobs ? environmentSummary(jobs) : "Checking environments…"}
+        </span>
+        <span>
+          <Users />
+          {p.agents.length} {p.agents.length === 1 ? "agent" : "agents"}
+        </span>
+      </div>
+      <ArrowUpRight />
+    </Link>
   );
 }
 function Setup({

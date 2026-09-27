@@ -2,7 +2,7 @@ import { getDatabase } from "../../../../../lib/auth.mjs";
 import { requireEmployee, requireMembership, type Employee } from "../../../../../lib/employee";
 import { failure, sameOrigin } from "../../../../../lib/http";
 import { InputError } from "../../../../../lib/store";
-import { AWS_CPU_PROFILE_ID, getRunBoxJob, migrateRunBoxJobs } from "../../../../../lib/run-box-jobs.mjs";
+import { getRunBoxJob, isAwsMachineProfile, migrateRunBoxJobs } from "../../../../../lib/run-box-jobs.mjs";
 import {
   TRUST_CLOUDFRONT_VIEWER_ENV, getAwsCpuSshAccess, requestAwsCpuSshAccess, trustedRequesterCidr,
 } from "../../../../../lib/aws-cpu-ssh-access.mjs";
@@ -32,8 +32,9 @@ async function eligibleJob(context: { params: Promise<{ id: string }> }, employe
   const job = getRunBoxJob(db, id) as Job | undefined;
   if (!job) throw new InputError("Run-box job not found", 404);
   requireMembership(employee, job.project_id);
-  if (job.profile_id !== AWS_CPU_PROFILE_ID)
-    return { db, job, refusal: refuse(409, "not_aws_cpu", "Network access is managed only for AWS CPU environments.") };
+  // Every catalog machine (aws-cpu and the other CPU and GPU sizes) shares the aws-cpu SSH path.
+  if (!isAwsMachineProfile(job.profile_id))
+    return { db, job, refusal: refuse(409, "not_aws_cpu", "Network access is managed only for AWS EC2 environments.") };
   if (!["ready", "verifying"].includes(job.state) || job.stop_requested_at)
     return { db, job, refusal: refuse(409, "not_ready", "Environment is not ready for network access.") };
   if (process.env[TRUST_CLOUDFRONT_VIEWER_ENV] !== "1")

@@ -71,13 +71,17 @@ function awsProvider() {
       codex: `codex-cli ${CODEX_VERSION}`, tmux: "tmux 3.2a", git: "git version 2.47.1", node: "v22.23.3", outputSha256: "b".repeat(64) }; } };
 }
 
-async function readyAwsCpu() {
+async function readyAwsCpu(profileId = "aws-cpu") {
   const db = new Database(":memory:"); tables(db);
   setAwsApproval(db, { organizationId: "org-1", approved: true, maxRunMinutes: 120, monthlyMinutes: 1200, actorId: "platform-admin" });
   const member = ed25519PublicKey();
   registerSshKey(db, "employee-1", { label: "Mac", publicKey: member });
-  const { job } = saveRunBoxDecision(db, decision("aws-ec2", "aws-cpu"));
+  const { job } = saveRunBoxDecision(db, decision("aws-ec2", profileId));
   const provider = awsProvider();
+  if (profileId.startsWith("aws-gpu-")) {
+    const check = provider.checkAgent;
+    provider.checkAgent = async (target) => ({ ...await check(target), gpus: [{ name: "Tesla T4", memoryMiB: 15360 }] });
+  }
   let result;
   for (let cycle = 0; cycle < 5 && result?.state !== "ready"; cycle++)
     result = await workOneAwsCpuJob(db, provider, { workerId: "w", connection, sshSourceCidr: "203.0.113.7/32", runnerKey });
@@ -210,3 +214,26 @@ test("runpod installs the runner key at start and bootstrap and keeps it through
   assert.equal(getRunBoxSshEndpoint(db, job.id).serverFingerprint, runnerKey.fingerprint);
   db.close();
 });
+
+// Sized AWS environments: other catalog machines get the same member key revocation and
+// teardown cleanup as aws-cpu.
+for (const profileId of ["aws-cpu-large", "aws-gpu-t4"]) {
+  test(`${profileId} access reconcile replaces member keys and cleanup reaches the box, like aws-cpu`, async () => {
+    const { db, job } = await readyAwsCpu(profileId);
+    db.prepare("UPDATE employee_ssh_key SET revoked_at = ?").run(new Date().toISOString());
+    let installed;
+    const outcomes = await reconcileAwsCpuSshAccess(db, connection, { runnerKey, checkConnection: () => operatorKey,
+      run: async (_target, script) => {
+        const encoded = script.match(/printf '%s' '([^']*)' \| base64 -d/)[1];
+        installed = Buffer.from(encoded, "base64").toString();
+        return { code: 0, stdout: `${encoded}\n` };
+      } });
+    assert.deepEqual(outcomes.map((item) => [item.jobId, item.status]), [[job.id, "access-updated"]]);
+    assert.equal(installed, `${operatorKey}\n${runnerPublic}\n`);
+    const stored = db.prepare("SELECT * FROM run_box_job WHERE id = ?").get(job.id);
+    const cleanup = createAwsCpuAgentCleanup(db, connection, { run: async () =>
+      ({ code: 0, stdout: CLEANUP_STEPS.map(([step]) => `AGENTCLOUD_CLEANUP ${step} ok`).join("\n") }) });
+    assert.equal((await cleanup(stored)).reached, true);
+    db.close();
+  });
+}

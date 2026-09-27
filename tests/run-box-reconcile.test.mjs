@@ -370,7 +370,7 @@ test("a pre-allocation stop waits for another worker's lease and for a recent la
 // HAC-166 (live on staging, 2026-09-27): an aws-cpu job that failed right after the
 // claim ("No registered device SSH keys…") stayed `failed` with no stop request, and the
 // single-active AWS guard then refused every new AWS environment.
-function failedBeforeLaunch() {
+function failedBeforeLaunch(profileId = "aws-cpu") {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   migrateRunBoxJobs(db);
@@ -379,7 +379,7 @@ function failedBeforeLaunch() {
   const { job } = saveRunBoxDecision(db, {
     idempotencyKey: "failed-prelaunch-1", resourceRequestId: "resource-failed-prelaunch-1", projectId: "project-1",
     employeeId: "employee-1", organizationId: "organization-1", projectRole: "owner",
-    provider: "aws-ec2", profileId: "aws-cpu", maxDurationMinutes: 60, repoUrl: "https://example.com/repo.git",
+    provider: "aws-ec2", profileId, maxDurationMinutes: 60, repoUrl: "https://example.com/repo.git",
   });
   claimRunBoxJob(db, "worker");
   transitionRunBoxJob(db, job.id, "failed", "worker", { reason: "No registered device SSH keys for this project; sign in to the desktop app first" });
@@ -441,5 +441,55 @@ test("a stopped job that failed before any launch never blocks allocation and cl
     const closed = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
     assert.ok(!closed.some((item) => item.status === "retry"), JSON.stringify(closed));
     assert.deepEqual(closed.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
+  } finally { db.close(); }
+});
+
+// Sized AWS environments: every catalog machine takes the aws-cpu worker path, so a job for
+// another size that failed before RunInstances also closes at once, and one with an
+// environment row keeps the quiet window. The single-active AWS guard spans all sizes.
+for (const profileId of ["aws-cpu-large", "aws-gpu-t4"]) {
+  test(`sized machine ${profileId}: never launched closes at once; the guard blocks every size until then`, async () => {
+    const { db, job } = failedBeforeLaunch(profileId);
+    try {
+      assert.equal(job.profile_id, profileId);
+      assert.throws(() => nextAwsDecision(db), /AWS run box is already active/);
+      db.prepare("UPDATE run_box_job SET lease_expires_at = ? WHERE id = ?").run(new Date(Date.now() - 1_000).toISOString(), job.id);
+      const result = await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+      assert.deepEqual(result.map((item) => [item.jobId, item.status]), [[job.id, "stopped"]]);
+      const closed = db.prepare("SELECT * FROM run_box_transition WHERE job_id = ? ORDER BY id DESC LIMIT 1").get(job.id);
+      assert.equal(closed.evidence_ref, `job:no-launch:${job.id}:no-cpu-environment:ec2-inventory-empty`);
+      assert.equal(nextAwsDecision(db).decision.outcome, "approved");
+    } finally { db.close(); }
+  });
+
+  test(`sized machine ${profileId}: an environment row keeps the 15-minute quiet window`, async () => {
+    const { db, job } = failedBeforeLaunch(profileId);
+    try {
+      db.exec("CREATE TABLE aws_cpu_environment (job_id TEXT PRIMARY KEY, ssh_source_cidr TEXT, authorized_keys TEXT, created_at TEXT, updated_at TEXT)");
+      db.prepare("INSERT INTO aws_cpu_environment VALUES (?, '203.0.113.7/32', '[]', ?, ?)").run(job.id, new Date().toISOString(), new Date().toISOString());
+      await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+      assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
+    } finally { db.close(); }
+  });
+}
+
+test("a profile-less g6 GPU job that failed after its claim keeps the quiet window", async () => {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = ON");
+  migrateRunBoxJobs(db);
+  migrateRunBoxCleanup(db);
+  approve(db);
+  const { job } = saveRunBoxDecision(db, {
+    idempotencyKey: "failed-g6", resourceRequestId: "resource-failed-g6", projectId: "project-1",
+    employeeId: "employee-1", organizationId: "organization-1", projectRole: "owner",
+    provider: "aws-ec2", profileId: "g6-l4-small", maxDurationMinutes: 60, repoUrl: "https://example.com/repo.git",
+  });
+  try {
+    assert.equal(job.profile_id, null);
+    claimRunBoxJob(db, "worker");
+    transitionRunBoxJob(db, job.id, "failed", "worker", { reason: "Preflight failed" });
+    db.prepare("UPDATE run_box_job SET lease_expires_at = ? WHERE id = ?").run(new Date(Date.now() - 1_000).toISOString(), job.id);
+    await reconcileAwsRunBoxes(db, provider([]), { workerId: "worker", requestStop });
+    assert.equal(db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(job.id).state, "failed");
   } finally { db.close(); }
 });

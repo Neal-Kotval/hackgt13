@@ -241,3 +241,55 @@ test("HAC-166: the worker authorizes its own /32 and the recorded requester /32 
     provider.calls.findIndex((call) => call[0] === "checkAgent"));
   assert.equal(listAwsCpuSshAccess(db, job.id)[0].status, "applied");
 });
+
+// Sized AWS environments ------------------------------------------------------------
+test("sized machines: the CPU worker claims every catalog machine; the GPU worker claims none of them", async () => {
+  for (const profileId of ["aws-cpu-medium", "aws-cpu-large", "aws-gpu-t4", "aws-gpu-l4", "aws-gpu-a10g"]) {
+    const { db, job } = setup({ profileId });
+    assert.equal(job.profile_id, profileId);
+    let gpuLaunched = false;
+    assert.equal(await workOneAwsGpuJob(db, { async identifyWorker() {}, async allocate() { gpuLaunched = true; } }, { workerId: "gpu-worker" }), null);
+    assert.equal(gpuLaunched, false);
+    const claimed = claimRunBoxJob(db, "cpu-worker", new Date(), 60_000, "aws-ec2", { profileIds: ["aws-cpu", profileId] });
+    assert.equal(claimed.id, job.id);
+  }
+  // The profile-less g6 GPU job is never claimed by the catalog filter.
+  const g6 = setup({ profileId: null });
+  assert.equal(claimRunBoxJob(g6.db, "cpu-worker", new Date(), 60_000, "aws-ec2", { profileIds: ["aws-cpu", "aws-gpu-t4"] }), null);
+  assert.throws(() => claimRunBoxJob(g6.db, "cpu-worker", new Date(), 60_000, "aws-ec2", { profileIds: [] }), /Invalid profile filter/);
+});
+
+test("a GPU machine reaches ready with nvidia-smi evidence recorded; without it the job fails", async () => {
+  const gpu = setup({ profileId: "aws-gpu-t4" });
+  const withGpu = fakeProvider({ agent: (job) => ({ account: "agentcloud", uid: 1001, workspace: `/home/agentcloud/agentcloud/${job.id}/repo`,
+    repo_sha: "a".repeat(40), codex: `codex-cli ${CODEX_VERSION}`, tmux: "tmux 3.2a", git: "git version 2.47.1", node: "v22.23.3",
+    gpus: [{ name: "Tesla T4", memoryMiB: 15360 }], outputSha256: "b".repeat(64) }) });
+  const results = await runUntilSettled(gpu.db, withGpu);
+  assert.equal(results.at(-1).state, "ready");
+  const environment = getAwsCpuEnvironment(gpu.db, gpu.job.id);
+  assert.deepEqual({ name: environment.gpu_name, memory: environment.gpu_memory_mib, count: environment.gpu_count },
+    { name: "Tesla T4", memory: 15360, count: 1 });
+
+  // The real proof parser rejects a GPU job whose check saw no GPU, and the worker fails it.
+  const { parseAgentCheck } = await import("../lib/aws-cpu-provider.mjs");
+  const noGpu = setup({ profileId: "aws-gpu-t4" });
+  const blind = fakeProvider({ agent: (job) => parseAgentCheck(`AGENTCLOUD_EVIDENCE=${JSON.stringify({ account: "agentcloud", uid: 1001,
+    workspace: `/home/agentcloud/agentcloud/${job.id}/repo`, repo_sha: "a".repeat(40), codex: `codex-cli ${CODEX_VERSION}`,
+    tmux: "tmux 3.2a", git: "git version 2.47.1", node: "v22.23.3", gpus: [] })}\n`, job) });
+  await assert.rejects(runUntilSettled(noGpu.db, blind), /nvidia-smi saw no GPU/);
+  assert.equal(noGpu.db.prepare("SELECT state FROM run_box_job WHERE id = ?").get(noGpu.job.id).state, "failed");
+  assert.equal(getAwsCpuEnvironment(noGpu.db, noGpu.job.id).gpu_name, null);
+
+  // A CPU size records no GPU evidence.
+  const cpu = setup({ profileId: "aws-cpu-large" });
+  assert.equal((await runUntilSettled(cpu.db, fakeProvider())).at(-1).state, "ready");
+  assert.equal(getAwsCpuEnvironment(cpu.db, cpu.job.id).gpu_name, null);
+});
+
+test("approval must still match the job's machine before launch", async () => {
+  const { db, job } = setup({ profileId: "aws-cpu-large" });
+  db.prepare("UPDATE run_box_decision SET profile_id = 'aws-cpu' WHERE id = ?").run(job.decision_id);
+  const provider = fakeProvider();
+  await assert.rejects(runUntilSettled(db, provider), /Approval, owner membership, profile, or deadline invalid/);
+  assert.ok(!provider.calls.some((call) => call[0] === "allocate"));
+});
