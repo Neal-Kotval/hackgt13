@@ -1,5 +1,20 @@
 # AgentCloud architecture
 
+## Bundled terminal helper
+
+The macOS desktop distribution includes `alto ssh <environment-id>`. The helper
+uses the app's bundled Electron runtime and connects to the running desktop
+through a local Unix socket. The desktop owns employee authentication, device-key
+registration, network-access refresh, and SSH host-key verification. Session
+cookies and private SSH keys stay inside the desktop process; the helper carries
+terminal input, output, and resize events only. Signing out or quitting closes
+these connections. This is trusted shell access under the same project access
+rules as the desktop terminal, not a command or filesystem sandbox.
+
+The socket is limited to the local OS user. Other processes running as that user
+share this trust boundary. The helper requires the desktop app to be running and
+signed in. See `desktop/README.md` for DMG packaging and command installation.
+
 ## Current executable boundary
 
 AgentCloud is a React / Next.js App Router application with Node.js route handlers, a durable JSON store, an SSE event stream, and a Node CLI. It is a **local organization-aware demo intended to bind to loopback**. Human dashboard/API access requires a Better Auth cookie session and project membership. Do not deploy this build as a public multi-user service.
