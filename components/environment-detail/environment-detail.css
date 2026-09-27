@@ -617,3 +617,20 @@
   display: block;
   line-height: var(--leading-relaxed);
 }
+
+/* Environment detail link on list card titles (components/environments/index.tsx). */
+.environment-open-link {
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-xs);
+}
+
+.environment-open-link:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.environment-open-link:focus-visible {
+  outline: var(--focus-width) solid var(--color-accent);
+  outline-offset: var(--focus-offset);
+}

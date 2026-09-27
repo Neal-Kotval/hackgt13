@@ -267,20 +267,3 @@
 .button.environment-id-copy {
   font-size: var(--text-sm);
 }
-
-/* Environment detail link on each card title (env-detail-page). */
-.environment-open-link {
-  color: inherit;
-  text-decoration: none;
-  border-radius: var(--radius-xs);
-}
-
-.environment-open-link:hover {
-  color: var(--color-accent);
-  text-decoration: underline;
-}
-
-.environment-open-link:focus-visible {
-  outline: var(--focus-width) solid var(--color-accent);
-  outline-offset: var(--focus-offset);
-}
