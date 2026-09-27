@@ -46,8 +46,8 @@ try {
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.reload();await navigation('Environments');await expect(page.getByRole('switch',{name:'Hide stopped environments'})).toHaveAttribute('aria-checked','false');
     await page.evaluate(()=>window.__test.allStopped=true);await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByRole('switch',{name:'Hide stopped environments'}).click();await expect(page.getByRole('heading',{name:'All environments are stopped'})).toBeVisible();
-    await page.getByRole('button',{name:'Show stopped environments',exact:true}).click();await expect(page.getByRole('list',{name:'Environments'})).toContainText('Stopped example');
+    await page.getByRole('switch',{name:'Hide stopped environments'}).click();await expect(page.getByText('No environments available',{exact:true})).toBeVisible();
+    await page.getByRole('switch',{name:'Hide stopped environments'}).click();await expect(page.getByRole('list',{name:'Environments'})).toContainText('Stopped example');
     await page.emulateMedia({reducedMotion:'reduce'});await navigation('Project chat');await expect(page.locator('[data-motion-active]')).toHaveCount(0);await navigation('Environments');await expect(page.locator('[data-motion-active]')).toHaveCount(0);
     expect(errors).toEqual([]);await context.close();
   }
