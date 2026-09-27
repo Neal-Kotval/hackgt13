@@ -4,7 +4,8 @@ REVISION="${1:-}"
 SECRET_ID="${2:-}"
 REGION="${3:-}"
 PUBLIC_URL="${4:-}"
-[[ "$REVISION" =~ ^[a-f0-9]{40}$ && "$SECRET_ID" == arn:aws:secretsmanager:* && "$REGION" =~ ^[a-z0-9-]+$ && "$PUBLIC_URL" =~ ^https://[a-z0-9]+\.cloudfront\.net$ ]] || exit 2
+PLATFORM_ADMIN_EMAIL="${5:-}"
+[[ "$REVISION" =~ ^[a-f0-9]{40}$ && "$SECRET_ID" == arn:aws:secretsmanager:* && "$REGION" =~ ^[a-z0-9-]+$ && "$PUBLIC_URL" =~ ^https://[a-z0-9]+\.cloudfront\.net$ && "$PLATFORM_ADMIN_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || exit 2
 RELEASE="/opt/agentcloud/releases/$REVISION"
 
 systemctl is-active --quiet amazon-ssm-agent || { echo 'Amazon SSM agent is not active.' >&2; exit 1; }
@@ -47,6 +48,7 @@ WorkingDirectory=/opt/agentcloud/current
 Environment=AGENTCLOUD_AUTH_SECRET_ID=$SECRET_ID
 Environment=AWS_DEFAULT_REGION=$REGION
 Environment=AGENTCLOUD_PUBLIC_ORIGIN=$PUBLIC_URL
+Environment=AGENTCLOUD_PLATFORM_ADMIN_EMAIL=$PLATFORM_ADMIN_EMAIL
 Environment=HOME=/var/lib/agentcloud
 ExecStartPre=/usr/local/bin/agentcloud-service-start setup
 ExecStart=/usr/local/bin/agentcloud-service-start start

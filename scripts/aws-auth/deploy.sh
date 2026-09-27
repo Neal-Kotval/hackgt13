@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
+PLATFORM_ADMIN_EMAIL="${AGENTCLOUD_PLATFORM_ADMIN_EMAIL:-}"
+[[ "$PLATFORM_ADMIN_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || {
+  echo 'Set AGENTCLOUD_PLATFORM_ADMIN_EMAIL to the verified platform operator email before staging deploy.' >&2
+  exit 2
+}
 load_staging_outputs
 require_command git
 require_command python3
@@ -28,9 +33,9 @@ CHECKSUM="$(shasum -a 256 "$ARCHIVE" | cut -d ' ' -f1)"
 echo "Uploading committed revision $REVISION to the private staging artifact bucket."
 aws --region "$STAGING_REGION" s3 cp "$ARCHIVE" "s3://$STAGING_BUCKET/releases/app.tar.gz" --only-show-errors
 
-python3 - "$STAGING_BUCKET" "$REVISION" "$CHECKSUM" "$STAGING_SECRET" "$STAGING_REGION" "$STAGING_PUBLIC_URL" "$WORK_DIR/commands.json" <<'PY'
-import json, sys
-bucket, revision, checksum, secret, region, public_url, destination = sys.argv[1:]
+python3 - "$STAGING_BUCKET" "$REVISION" "$CHECKSUM" "$STAGING_SECRET" "$STAGING_REGION" "$STAGING_PUBLIC_URL" "$PLATFORM_ADMIN_EMAIL" "$WORK_DIR/commands.json" <<'PY'
+import json, shlex, sys
+bucket, revision, checksum, secret, region, public_url, admin_email, destination = sys.argv[1:]
 command = (
     "set -e\n"
     "mkdir -p /opt/agentcloud/incoming\n"
@@ -38,7 +43,7 @@ command = (
     f"echo '{checksum}  /opt/agentcloud/incoming/app.tar.gz' | sha256sum -c -\n"
     f"mkdir -p /opt/agentcloud/releases/{revision}\n"
     f"tar -xzf /opt/agentcloud/incoming/app.tar.gz -C /opt/agentcloud/releases/{revision}\n"
-    f"bash /opt/agentcloud/releases/{revision}/scripts/aws-auth/remote-deploy.sh {revision} '{secret}' {region} '{public_url}'\n"
+    f"bash /opt/agentcloud/releases/{revision}/scripts/aws-auth/remote-deploy.sh {revision} '{secret}' {region} '{public_url}' {shlex.quote(admin_email)}\n"
 )
 with open(destination, "w", encoding="utf-8") as file:
     json.dump({"commands": [command]}, file)
